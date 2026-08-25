@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Append one structured entry to the pipeline's JSONL ledger.
+#
+# The ledger is written by the script from structured fields - never as
+# free prose by an LLM. One JSON object per line; entries are append-only
+# so recovery after compaction can trust the file's tail.
+#
+# Values are escaped for JSON (quotes, backslashes, control chars); keys
+# must be bare identifiers. TASK is a task number, or '-' for branch-level
+# entries (gate, final_review, merge).
+#
+# Usage: ledger-append LEDGER_FILE TYPE TASK "SUMMARY" [KEY=VALUE ...]
+# Example:
+#   ledger-append ledger.jsonl review_outcome 3 "SEND_BACK" findings=2 severity=Critical
+set -euo pipefail
+
+if [ $# -lt 4 ]; then
+  echo "usage: ledger-append LEDGER_FILE TYPE TASK \"SUMMARY\" [KEY=VALUE ...]" >&2
+  exit 2
+fi
+
+file=$1
+type=$2
+task=$3
+summary=$4
+
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '%s' "$s"
+}
+
+extras=""
+if [ $# -gt 4 ]; then
+  for kv in "${@:5}"; do
+    case "$kv" in
+      *=*) ;;
+      *) echo "not KEY=VALUE: $kv" >&2; exit 2 ;;
+    esac
+    k=${kv%%=*}
+    v=${kv#*=}
+    extras+=",\"$(json_escape "$k")\":\"$(json_escape "$v")\""
+  done
+fi
+
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+printf '{"ts":"%s","type":"%s","task":"%s","summary":"%s"%s}\n' \
+  "$ts" \
+  "$(json_escape "$type")" \
+  "$(json_escape "$task")" \
+  "$(json_escape "$summary")" \
+  "$extras" >> "$file"
+
+echo "ledgered: $type task=$task $summary"

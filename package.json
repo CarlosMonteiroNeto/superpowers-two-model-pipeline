@@ -1,0 +1,27 @@
+{
+  "name": "superpowers-two-model-pipeline",
+  "version": "6.3.0-fork.1",
+  "description": "Fork of obra/superpowers adding the two-model-sdd-pipeline skill (hybrid orchestrated two-tier SDD) and brainstorming incremental persistence",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git"
+  },
+  "main": ".opencode/plugins/superpowers.js",
+  "keywords": [
+    "pi-package",
+    "skills",
+    "tdd",
+    "debugging",
+    "collaboration",
+    "workflow"
+  ],
+  "pi": {
+    "extensions": [
+      "./.pi/extensions/superpowers.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  }
+}
