@@ -171,9 +171,10 @@ is the whole process.
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
 
-**Incremental persistence:**
+**Incremental persistence (architectural path only):**
 
-- The moment a term, decision, or constraint resolves during the dialogue — at any step, not only at the end — write it immediately to `CONTEXT.md` (repo root) as a glossary entry. Never batch resolved knowledge into the final spec; a session that dies mid-design must not take its resolved vocabulary with it.
+- Applies ONLY to tasks classified as architectural. Bounded tasks and spikes NEVER create `CONTEXT.md` or ADRs — their resolved decisions live in the in-chat design and in the artifact itself. Creating `CONTEXT.md` for a bounded task or spike is a process violation; stop and remove it.
+- On architectural work: the moment a term, decision, or constraint resolves during the dialogue — at any step, not only at the end — write it immediately to `CONTEXT.md` (repo root) as a glossary entry. Never batch resolved knowledge into the final spec; a session that dies mid-design must not take its resolved vocabulary with it.
 - Scope stays separated so the two artifacts never duplicate: `CONTEXT.md` and ADRs hold vocabulary and decisions that persist beyond this branch (project-level); the design spec doc holds what is specific to this feature/branch.
 - A resolved decision becomes an ADR (`docs/superpowers/adr/NNNN-title.md`) only when it passes all three gates simultaneously:
   1. **Reversal cost** — undoing it later would be expensive.
