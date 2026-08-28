@@ -94,6 +94,12 @@ skills/two-model-sdd-pipeline/scripts/:
   ledger-append        append one structured JSONL ledger entry
   review-package       build a review bundle (commits + diff)
 
+Graphify is chained automatically into the gates at the script->LLM
+boundaries: pub-sync indexes each newly added package, red-gate rebuilds
+the project graph after RED is verified, green-gate rebuilds it after a
+commit. The chains are best-effort (a graphify failure never fails a gate)
+and can be disabled with GRAPHIFY_ENABLED=0.
+
 TESTS
 -----
 
