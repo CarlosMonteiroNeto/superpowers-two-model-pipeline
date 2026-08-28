@@ -141,7 +141,24 @@ exception is the software's **UI** (user-facing strings, labels, copy), which
 defaults to the developer's language (pt-br). Rationale: English-only context
 artifacts reduce tokens per artifact and avoid context inflation.
 
-## 11. Repository layout
+## 11. Self-update and repository documentation
+
+The pipeline keeps itself in sync with its GitHub repository:
+
+- The OpenCode plugin loads from a vendored git checkout of the fork
+  (`~/.config/opencode/vendor/superpowers`), decoupled from npm.
+- `check-superpowers` compares the local checkout SHA against `origin/main`
+  (exit 0 up to date, exit 1 behind).
+- `sync-superpowers` fetches + resets to `origin/main`, then runs the pipeline
+  test suite; exit 1 if the new copy fails its tests.
+- At session start the agent runs `check-superpowers`; if behind it syncs and
+  asks the developer to restart OpenCode (skills load at session start).
+- **End-of-session:** if a session changed the pipeline itself (scripts,
+  skills, invariants, phases), update `README.txt` and `README-LLM.md` to
+  reflect the changes and include them in the push. Do not churn docs when
+  behavior did not change.
+
+## 12. Repository layout
 
 ```
 README.txt                        <- this repo's human-facing readme
@@ -153,7 +170,7 @@ skills/two-model-sdd-pipeline/SKILL.md
 skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, review-package
 ```
 
-## 12. How to work with this harness
+## 13. How to work with this harness
 
 1. New dev request -> invoke `brainstorming` before any code.
 2. Flutter/Dart work -> run `flutter-app-pipeline`; on the two-tier gate default
