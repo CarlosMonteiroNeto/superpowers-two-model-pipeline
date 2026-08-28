@@ -148,15 +148,33 @@ The pipeline keeps itself in sync with its GitHub repository:
 - The OpenCode plugin loads from a vendored git checkout of the fork
   (`~/.config/opencode/vendor/superpowers`), decoupled from npm.
 - `check-superpowers` compares the local checkout SHA against `origin/main`
-  (exit 0 up to date, exit 1 behind).
+  (exit 0 up to date, exit 1 behind, exit 2 not installed).
 - `sync-superpowers` fetches + resets to `origin/main`, then runs the pipeline
   test suite; exit 1 if the new copy fails its tests.
-- At session start the agent runs `check-superpowers`; if behind it syncs and
-  asks the developer to restart OpenCode (skills load at session start).
+- `install-superpowers` clones the fork fully when nothing is installed (exit 2
+  = it refused to clobber a non-empty, non-repo path); it verifies with the
+  pipeline test suite.
+- At session start the agent runs `check-superpowers`; if behind it runs
+  `sync-superpowers`, if not installed it runs `install-superpowers`, and in
+  either case asks the developer to restart OpenCode (skills load at session
+  start).
 - **End-of-session:** if a session changed the pipeline itself (scripts,
   skills, invariants, phases), update `README.txt` and `README-LLM.md` to
   reflect the changes and include them in the push. Do not churn docs when
   behavior did not change.
+
+### Tier models (reference OpenCode setup)
+
+On the reference machine the tiers are fixed to the same model with different
+reasoning-effort variants:
+
+| Tier | Agent | Model | Variant |
+|---|---|---|---|
+| Strategic (Controller, Reviewer) | `two-model-controller` | `opencode-go/deepseek-v4-flash` | `high` |
+| Operational (Coder, Strategic Coder) | `two-model-coder` | `opencode-go/deepseek-v4-flash` | `low` |
+
+Variants are defined under `provider.opencode-go.models.deepseek-v4-flash.variants`
+in the OpenCode config.
 
 ## 12. Repository layout
 

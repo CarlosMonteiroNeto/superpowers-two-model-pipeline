@@ -100,6 +100,22 @@ the project graph after RED is verified, green-gate rebuilds it after a
 commit. The chains are best-effort (a graphify failure never fails a gate)
 and can be disabled with GRAPHIFY_ENABLED=0.
 
+KEEPING THE HARNESS IN SYNC
+---------------------------
+
+The OpenCode plugin loads from a vendored git checkout of this repository
+(~/.config/opencode/vendor/superpowers). To keep it current:
+
+  check-superpowers    exit 0 = up to date; 1 = behind; 2 = not installed
+  sync-superpowers     fetch + reset to origin/main + run the pipeline tests
+  install-superpowers  full clone when not installed (refuses to clobber)
+
+The agent runs check-superpowers at session start and, if behind or not
+installed, syncs/installs and asks you to restart OpenCode. On the
+reference setup the two tiers use the same model with different reasoning
+effort: Strategic = deepseek-v4-flash high, Operational = deepseek-v4-flash
+low.
+
 TESTS
 -----
 
