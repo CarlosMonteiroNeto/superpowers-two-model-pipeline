@@ -71,7 +71,11 @@ Flutter-specific additions to the per-task loop:
 2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment). Materializes the brief's RED tests and verifies the expected failure. Exit code is the verdict; a RED test that passes means the brief is defective → back to the Controller.
 3. **Coder rounds** — as in two-model (Operational tier; escalation after 2 rounds).
 4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green → commits and ledger-appends; not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix.
-5. **Graphify invariant — before any LLM reads.** After any download (`pub-sync`) and after every task's changes, run `scripts/graphify-regen` (project graph) and `scripts/graphify-package PACKAGE` (graph of newly downloaded dependencies) BEFORE any LLM touches the affected or downloaded files. The LLM queries the graph for structure and interfaces first; only then does it make targeted reads of the few files it actually needs (the graph exposes structure, not method bodies). This is what keeps entry token/context consumption low.
+5. **Graphify invariant — before any LLM reads.** Enforced automatically at the script→LLM boundaries, where an LLM reads code right after a script changed files:
+   - `pub-sync` chains `graphify-package` for each newly added package;
+   - `red-gate` chains `graphify-regen` after verifying RED (before the Coder reads the materialized tests);
+   - `green-gate` chains `graphify-regen` after committing (before the Reviewer / next task reads).
+   The chains are best-effort — a graphify failure never fails a gate — and can be disabled with `GRAPHIFY_ENABLED=0`. The LLM queries the graph for structure and interfaces first; only then does it make targeted reads of the few files it actually needs (the graph exposes structure, not method bodies). This is what keeps entry token/context consumption low.
 6. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
 
 ## 4. Phase 4 — Project-Wide Review
@@ -91,7 +95,7 @@ Flutter-specific additions to the per-task loop:
 | `graphify-regen [ROOT]` | AI parsing raw file diffs for context |
 | `graphify-package PACKAGE` | AI reading downloaded package source before the graph exists |
 
-All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env overrides (used by tests and unusual setups). AI is reserved for semantic decisions only: which solution fits a task, what to build from scratch, RED-test authoring from a natural-language spec, and code review.
+All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env overrides (used by tests and unusual setups). `pub-sync`, `red-gate` and `green-gate` auto-chain the graphify rebuild at the script→LLM boundaries (non-fatal; disable with `GRAPHIFY_ENABLED=0`). AI is reserved for semantic decisions only: which solution fits a task, what to build from scratch, RED-test authoring from a natural-language spec, and code review.
 
 ## 6. Data Sources for Score Computation (all scriptable, no LLM)
 

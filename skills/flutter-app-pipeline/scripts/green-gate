@@ -12,6 +12,8 @@
 # Reports are written to ${GREEN_GATE_REPORT:-green-gate-report.txt}(.analyze|.format).
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 DART_BIN="${DART_BIN:-dart}"
 GIT_BIN="${GIT_BIN:-git}"
@@ -68,6 +70,12 @@ if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
   fi
 else
   echo "GREEN-GATE: nothing to commit" >&2
+fi
+
+# Graphify chain: the Reviewer / next task (LLM) reads the committed code next,
+# so rebuild the project graph now. Best-effort: never fails the gate.
+if [ "${GRAPHIFY_ENABLED:-1}" != "0" ]; then
+  "$SCRIPT_DIR/graphify-regen" . || echo "GREEN-GATE: warning - graphify-regen failed (continuing)" >&2
 fi
 
 exit 0

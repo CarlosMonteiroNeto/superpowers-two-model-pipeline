@@ -83,16 +83,22 @@ silently inherits the expensive session model.
 | `graphify-package PACKAGE` | Build graph for a downloaded dependency | resolves dir from `.dart_tool/package_config.json` |
 
 All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env
-overrides. Tests live in `skills/flutter-app-pipeline/tests/`, run with
-`run-tests.sh` (`python3 -m unittest discover`).
+overrides. `pub-sync`, `red-gate` and `green-gate` auto-chain the graphify
+rebuild at the script→LLM boundaries (non-fatal; disable with
+`GRAPHIFY_ENABLED=0`). Tests live in `skills/flutter-app-pipeline/tests/`, run
+with `run-tests.sh` (`python3 -m unittest discover`).
 
 ## 7. Ordering invariants (do not violate)
 
-- **Graphify-before-LLM:** after any download (`pub-sync`) and after every
-  task's changes, run `graphify-regen` (+ `graphify-package` for new
-  dependencies) BEFORE any LLM reads the affected or downloaded files. Query the
-  graph for structure/interfaces first; only then make targeted reads of the few
-  files actually needed (the graph exposes structure, not method bodies).
+- **Graphify-before-LLM:** enforced automatically at the script→LLM boundaries.
+  `pub-sync` chains `graphify-package` for each newly added package; `red-gate`
+  chains `graphify-regen` after verifying RED (before the Coder reads the
+  materialized tests); `green-gate` chains `graphify-regen` after committing
+  (before the Reviewer / next task reads). The chains are best-effort — a
+  graphify failure never fails a gate — and can be disabled with
+  `GRAPHIFY_ENABLED=0`. Query the graph for structure/interfaces first; only
+  then make targeted reads of the few files actually needed (the graph exposes
+  structure, not method bodies).
 - **Gates are exit codes:** never judge "did the test fail for the expected
   reason" or "are tests green" by reading output — run the gate script and read
   its exit code.

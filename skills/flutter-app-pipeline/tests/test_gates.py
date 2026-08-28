@@ -175,6 +175,48 @@ class TestGreenGate(GateTestBase):
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self._log(repo), before)
 
+    def test_chains_graphify_regen_after_commit(self):
+        """After a green commit, the project graph is rebuilt before the next
+        LLM (Reviewer / next task) reads the code."""
+        repo = self._git_repo()
+        (repo / "lib" / "app.dart").write_text("void main() { print('chained'); }\n", encoding="utf-8")
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = run_script(
+            "green-gate", ["-m", "Task 1: chained"],
+            cwd=repo,
+            env_extra={**self.env, "STUB_LOG": str(log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("--update" in c for c in calls), calls)
+
+    def test_no_commit_does_not_chain_graphify(self):
+        """--no-commit (Phase 4 revalidation) changes nothing, so it must not
+        rebuild the graph."""
+        repo = self._git_repo()
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = run_script(
+            "green-gate", ["--no-commit"],
+            cwd=repo,
+            env_extra={**self.env, "STUB_LOG": str(log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = log.read_text(encoding="utf-8") if log.exists() else ""
+        self.assertEqual(calls, "")
+
+    def test_graphify_failure_is_non_fatal(self):
+        """A graphify failure must never fail a green gate: tests+analyze are
+        the verdict; the graph rebuild is best-effort."""
+        repo = self._git_repo()
+        (repo / "lib" / "app.dart").write_text("void main() { print('nonfatal'); }\n", encoding="utf-8")
+        r = run_script(
+            "green-gate", ["-m", "Task 1: nonfatal"],
+            cwd=repo,
+            env_extra={**self.env, "STUB_GRAPHIFY_EXIT": "1", "STUB_LOG": str(pathlib.Path(self._tmp) / "g.log")},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("Task 1: nonfatal", self._log(repo))
+
 
 class TestRedGate(GateTestBase):
     def setUp(self):
@@ -220,6 +262,40 @@ class TestRedGate(GateTestBase):
         r = run_script("red-gate", [str(self.ws), "99"], cwd=self.ws, env_extra=self.env)
         self.assertEqual(r.returncode, 2)
 
+    def test_chains_graphify_regen_after_red_verified(self):
+        """After RED is verified, the graph is rebuilt so the Coder (LLM)
+        reads the freshly materialized test files through the graph."""
+        brief = self._brief()
+        brief.write_text(
+            f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
+            encoding="utf-8",
+        )
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra={**self.env, "STUB_TEST_EXIT": "1", "STUB_LOG": str(log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("--update" in c for c in calls), calls)
+
+    def test_red_gate_respects_graphify_enabled(self):
+        brief = self._brief()
+        brief.write_text(
+            f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
+            encoding="utf-8",
+        )
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra={**self.env, "STUB_TEST_EXIT": "1", "STUB_LOG": str(log), "GRAPHIFY_ENABLED": "0"},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = log.read_text(encoding="utf-8") if log.exists() else ""
+        self.assertEqual(calls, "")
+
 
 class TestPubSync(GateTestBase):
     def test_resolution_ok_exits_zero(self):
@@ -230,6 +306,32 @@ class TestPubSync(GateTestBase):
         r = run_script("pub-sync", [], cwd=self._tmp, env_extra={**self.env, "STUB_DRYRUN_EXIT": "1"})
         self.assertNotEqual(r.returncode, 0)
         self.assertTrue(pathlib.Path(self._tmp, "pub-sync-report.txt").exists())
+
+    def test_chains_graphify_package_for_added_packages(self):
+        """pub-sync knows which packages were added; it must index each one
+        before returning. The chain is best-effort: graphify-package fails
+        without a package_config.json, and pub-sync must still succeed."""
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = run_script(
+            "pub-sync", ["pkg_a", "pkg_b"],
+            cwd=self._tmp,
+            env_extra={**self.env, "STUB_LOG": str(log), "STUB_DRYRUN_EXIT": "0"},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = r.stdout + r.stderr
+        self.assertIn("PUB-SYNC: warning", out)
+        self.assertIn("pkg_a", out)
+        self.assertIn("pkg_b", out)
+
+    def test_pub_sync_respects_graphify_enabled(self):
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = run_script(
+            "pub-sync", ["pkg_a"],
+            cwd=self._tmp,
+            env_extra={**self.env, "STUB_LOG": str(log), "STUB_DRYRUN_EXIT": "0", "GRAPHIFY_ENABLED": "0"},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("PUB-SYNC: warning", r.stdout + r.stderr)
 
 
 class TestGraphifyRegen(GateTestBase):

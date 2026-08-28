@@ -12,6 +12,8 @@
 #             2 = usage / missing brief / bad entry.
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 if [ $# -ne 2 ]; then
   echo "usage: red-gate WORKSPACE TASK" >&2
   exit 2
@@ -50,4 +52,11 @@ if "$FLUTTER_BIN" test "${targets[@]}" > "$ws/red-gate-report.txt" 2>&1; then
 fi
 
 echo "RED-GATE: RED verified (expected failure)"
+
+# Graphify chain: the Coder (LLM) reads the freshly materialized test files
+# next, so rebuild the project graph now. Best-effort: never fails the gate.
+if [ "${GRAPHIFY_ENABLED:-1}" != "0" ]; then
+  "$SCRIPT_DIR/graphify-regen" . || echo "RED-GATE: warning - graphify-regen failed (continuing)" >&2
+fi
+
 exit 0
