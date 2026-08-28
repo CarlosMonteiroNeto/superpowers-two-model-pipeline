@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Deterministic RED confirmation: materialize the brief's RED test files into
+# the working tree and verify they FAIL. A RED test that passes before
+# implementation means the brief is defective (exit 1) -> back to the Controller.
+#
+# Brief convention (task-N-brief.md) RED-TESTS block, one mapping per line:
+#   RED-TESTS:
+#   <workspace>/task-N-test.dart -> test/task_N_test.dart
+#
+# Usage: red-gate WORKSPACE TASK
+# Exit codes: 0 = RED verified (expected failure), 1 = defective brief,
+#             2 = usage / missing brief / bad entry.
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+  echo "usage: red-gate WORKSPACE TASK" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+brief="$ws/task-$task-brief.md"
+FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
+
+[ -f "$brief" ] || { echo "RED-GATE: no brief: $brief" >&2; exit 2; }
+
+targets=()
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  src=${line%% -> *}
+  dst=${line#* -> }
+  if [ -z "$src" ] || [ -z "$dst" ]; then
+    echo "RED-GATE: bad RED-TESTS entry: $line" >&2
+    exit 2
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst" || { echo "RED-GATE: cannot materialize $src -> $dst" >&2; exit 2; }
+  echo "RED-GATE: materialized $src -> $dst"
+  targets+=("$dst")
+done < <(sed -n '/^RED-TESTS:/,$p' "$brief" | sed -n '2,$p' | grep -v '^```')
+
+if [ "${#targets[@]}" -eq 0 ]; then
+  echo "RED-GATE: no RED-TESTS entries in brief" >&2
+  exit 2
+fi
+
+if "$FLUTTER_BIN" test "${targets[@]}" > "$ws/red-gate-report.txt" 2>&1; then
+  echo "RED-GATE: RED tests PASSED before implementation - brief defective (see $ws/red-gate-report.txt)" >&2
+  exit 1
+fi
+
+echo "RED-GATE: RED verified (expected failure)"
+exit 0

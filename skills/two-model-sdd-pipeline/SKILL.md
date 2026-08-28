@@ -10,6 +10,11 @@ orchestrator owns state and dispatch; every LLM call is an isolated,
 stateless invocation fed exactly the context it needs. No agent holds a
 continuous session across the branch.
 
+**Layering:** this is the generic orchestration engine. Flutter/Dart projects
+use `flutter-app-pipeline` on top of it — that skill adds the package research
+and Quality Score phase, the deterministic Flutter scripts, and the
+Graphify-before-LLM rule, and delegates the per-task loop back to this skill.
+
 **Why this exists:** native SDD keeps one controller conversation alive for
 the whole branch and lets each implementer resume itself mid-loop. That
 couples quality to context endurance. Here the controller session is a

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Deterministic dependency download + lockfile resolution. No LLM.
+#
+# Usage: pub-sync [PACKAGE ...]
+#   with packages -> `flutter pub add <pkg>` (downloads what Phase 2 decided)
+#   without        -> `flutter pub get` (resolves + writes pubspec.lock)
+# Then verifies future resolution via `flutter pub upgrade --dry-run`.
+#
+# Exit codes: 0 = resolved, lockfile consistent; 1 = version conflicts
+# (report written to ${PUB_SYNC_REPORT:-pub-sync-report.txt}).
+set -euo pipefail
+
+FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
+REPORT="${PUB_SYNC_REPORT:-pub-sync-report.txt}"
+
+if [ $# -gt 0 ]; then
+  "$FLUTTER_BIN" pub add "$@"
+else
+  "$FLUTTER_BIN" pub get
+fi
+
+if ! "$FLUTTER_BIN" pub upgrade --dry-run > "$REPORT" 2>&1; then
+  echo "PUB-SYNC: version resolution conflicts (see $REPORT)" >&2
+  exit 1
+fi
+
+echo "PUB-SYNC: dependencies resolved, lockfile consistent"
+exit 0

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Regenerate the project's Graphify graph deterministically.
+# Run after every download (pub-sync) and after every task's changes, BEFORE
+# any LLM reads the affected or downloaded files.
+#
+# Usage: graphify-regen [ROOT]
+set -euo pipefail
+
+root=$(realpath "${1:-.}")
+GRAPHIFY_BIN="${GRAPHIFY_BIN:-graphify}"
+
+"$GRAPHIFY_BIN" "$root" --update
+echo "GRAPHIFY-REGEN: graph updated"
+exit 0

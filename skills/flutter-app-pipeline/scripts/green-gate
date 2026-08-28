@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Deterministic green approval: full suite + analyze + format check, then commit.
+# The gate's verdict is an exit code, never an LLM judgment.
+#
+# Usage: green-gate [--no-commit] [-m MESSAGE] [-l LEDGER]
+#   --no-commit   validate only (Phase 4 / final review); never commits
+#   -m MESSAGE    commit message (default "green")
+#   -l LEDGER     optional JSONL ledger; appends a `commit` entry when committing
+#
+# Exit codes: 0 = all gates passed (and committed unless --no-commit),
+#             1 = tests failed, 2 = analyze found issues, 3 = format drift.
+# Reports are written to ${GREEN_GATE_REPORT:-green-gate-report.txt}(.analyze|.format).
+set -euo pipefail
+
+FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
+DART_BIN="${DART_BIN:-dart}"
+GIT_BIN="${GIT_BIN:-git}"
+REPORT="${GREEN_GATE_REPORT:-green-gate-report.txt}"
+
+no_commit=0
+message="green"
+ledger=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-commit) no_commit=1 ;;
+    -m|--message) message=${2:-}; shift ;;
+    -l|--ledger) ledger=${2:-}; shift ;;
+    *) echo "unexpected argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# 1. full test suite
+if ! "$FLUTTER_BIN" test > "$REPORT" 2>&1; then
+  echo "GREEN-GATE: tests FAILED (see $REPORT)" >&2
+  exit 1
+fi
+
+# 2. static analysis
+if ! "$FLUTTER_BIN" analyze > "$REPORT.analyze" 2>&1; then
+  echo "GREEN-GATE: analyze found issues (see $REPORT.analyze)" >&2
+  exit 2
+fi
+
+# 3. format check
+if ! "$DART_BIN" format --output=none --set-exit-if-changed . > "$REPORT.format" 2>&1; then
+  echo "GREEN-GATE: formatting drift (see $REPORT.format)" >&2
+  exit 3
+fi
+
+echo "GREEN-GATE: all gates passed"
+
+if [ "$no_commit" = "1" ]; then
+  echo "GREEN-GATE: --no-commit, not committing"
+  exit 0
+fi
+
+"$GIT_BIN" add -A
+if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
+  sha=$("$GIT_BIN" rev-parse --short HEAD)
+  echo "GREEN-GATE: committed $sha"
+  if [ -n "$ledger" ]; then
+    dir=$(dirname "$ledger")
+    if [ -x "$dir/ledger-append" ]; then
+      "$dir/ledger-append" "$ledger" commit - "green $sha" "commits=$sha"
+    fi
+  fi
+else
+  echo "GREEN-GATE: nothing to commit" >&2
+fi
+
+exit 0
