@@ -34,12 +34,17 @@ PRINCIPLES
 ----------
 
 - LLMs reason; scripts decide. Mechanical steps (download, dependency
-  resolution, test execution, lint, commit, graph rebuild) are chained
-  into deterministic scripts whose verdict is an exit code.
+  resolution, test execution, lint, commit, graph rebuild, task routing)
+  are chained into deterministic scripts whose verdict is an exit code or
+  a stdout action line.
 - Stateless LLM calls with curated context; the ledger + git are the
   source of truth.
 - Graphify-before-LLM: newly downloaded or changed code is indexed into a
   knowledge graph before any LLM reads it, minimizing token consumption.
+- No approval after decisions: approval happens at the gate (once per
+  branch) and at solution selection; from Phase 2c onward the branch runs
+  to completion without check-ins. The ledger is the compaction-safe state
+  checkpoint.
 - All responses and internal artifacts are in English; only the software
   UI uses the developer's language.
 
@@ -73,9 +78,11 @@ Start a session and describe the work. For a Flutter/Dart app, the
 flutter-app-pipeline runs end to end: requirements (brainstorming +
 grill-with-docs), research + pkg-score for every candidate package,
 selection with you, writing-plans tasks, then the two-model TDD loop, then
-a project-wide review. On the two-tier gate, pick the Strategic and
-Operational models and the test/analyze commands (flutter test,
-flutter analyze) - once per branch. Non-Flutter work follows the standard
+a project-wide review. On the two-tier gate, default to YES: the tiers are
+pre-configured locally (two-model-controller / two-model-coder), so only
+the test/analyze commands are asked - once per branch. Ask about tiers
+only when the pipeline is not installed. After selection, the branch runs
+without further approval check-ins. Non-Flutter work follows the standard
 superpowers flow without the Flutter layer.
 
 DETERMINISTIC SCRIPTS (no AI involvement)
@@ -84,21 +91,31 @@ DETERMINISTIC SCRIPTS (no AI involvement)
 skills/flutter-app-pipeline/scripts/:
   pkg-score            corrected Quality Score for a pub.dev package
   pub-sync             download + lockfile + version-conflict report
-  red-gate             materialize RED tests and verify expected failure
+  red-gate             materialize RED tests and verify the failure is
+                       the EXPECTED-RED reason (not just any failure)
   green-gate           chain test + analyze + format + commit (one script)
   graphify-regen       rebuild the project knowledge graph
+                       (invokes `graphify update <root>` - the real CLI form)
   graphify-package     build the graph for a downloaded dependency
+                       (invokes `graphify update <pkg_dir>`)
 
 skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace
   ledger-append        append one structured JSONL ledger entry
   review-package       build a review bundle (commits + diff)
+  route-next           deterministic router: reads the ledger and emits
+                       the next action (BRIEF / RED / CODER / ESCALATE /
+                       STRATEGIC / REVIEW / FIX / NEXT / FINAL_REVIEW)
 
 Graphify is chained automatically into the gates at the script->LLM
 boundaries: pub-sync indexes each newly added package, red-gate rebuilds
 the project graph after RED is verified, green-gate rebuilds it after a
 commit. The chains are best-effort (a graphify failure never fails a gate)
 and can be disabled with GRAPHIFY_ENABLED=0.
+
+Routing is scripted too: after every ledgered outcome the Orchestrator
+runs `route-next` and executes the action it emits - the LLM never decides
+"review passed -> next task" or "failed -> fix round" by reasoning.
 
 KEEPING THE HARNESS IN SYNC
 ---------------------------
@@ -119,9 +136,10 @@ low.
 TESTS
 -----
 
-The deterministic scripts have a python unittest suite:
+The deterministic scripts have python unittest suites:
 
     skills/flutter-app-pipeline/tests/run-tests.sh
+    skills/two-model-sdd-pipeline/tests/run-tests.sh
 
 REPOSITORY LAYOUT
 -----------------

@@ -48,8 +48,21 @@ Subagent (general-purpose):
        project's existing test conventions and file layout. If the task
        needs several test files, provide each in full.
     4. **Expected RED failure** - the error/message the suite shows before
-       implementation exists.
+       implementation exists. State the expected reason as a short verbatim
+       substring (a few words, not a paragraph) that the failing output
+       must contain.
     5. **Out of scope** - what this task must NOT do (YAGNI fence).
+
+    The brief's RED-TESTS block MUST be followed by an EXPECTED-RED block
+    (the red-gate verifies the failure reason against it):
+
+    ```
+    RED-TESTS:
+    <workspace>/task-N-test.dart -> test/task_N_test.dart
+
+    EXPECTED-RED:
+    <verbatim substring the failing output must contain>
+    ```
 
     Rules:
     - English only, regardless of the developer's language. (Exception:
@@ -59,6 +72,12 @@ Subagent (general-purpose):
       correct, conventional, complete.
     - If an interface you need does not exist yet, define it in the brief's
       Exact Values section as a binding contract.
+    - **Query the project graph for structure and interfaces first.** When
+      a Graphify graph exists (project root `graphify-out/graph.json` or
+      the workspace's graph output), run `graphify explain "Node"` /
+      `graphify path "A" "B"` to discover the signatures and dependencies
+      the task touches before writing the brief. Never read whole files to
+      find a signature; read only the file(s) the graph points you to.
 
     Return ONLY the brief markdown, no preamble, no closing commentary.
 ```

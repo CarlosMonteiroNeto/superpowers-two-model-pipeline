@@ -24,20 +24,50 @@ prevents both context exhaustion and context-pollution-driven review bias.
 
 ## 0. Pre-Pipeline Gate
 
-Before `brainstorming` starts, ask the user exactly these questions:
+Before `brainstorming` starts:
 
-1. Should this branch use this pipeline at all?
-2. Which model is the **Strategic tier** (expensive) and which is the
-   **Operational tier** (cheap)? Same API, different model selection.
-3. What command runs the test suite, and what command runs static analysis
-   (e.g. `flutter analyze`)? Needed because the Orchestrator — not the
-   workers — executes both.
+- The tiers are **pre-configured locally** (e.g. `~/.config/opencode/agent/`
+  defines `two-model-controller` as Strategic and `two-model-coder` as
+  Operational). When they exist, do **not** ask which model maps to which
+  tier — the gate is: "use this pipeline? (default YES) + test command +
+  analyze command", asked once per branch.
+- Ask about tier models **only when the local pipeline is not installed**
+  (no pre-configured tier agents found). Then ask:
+  1. Should this branch use this pipeline at all?
+  2. Which model is the **Strategic tier** (expensive) and which is the
+     **Operational tier** (cheap)? Same API, different model selection.
+  3. What command runs the test suite, and what command runs static analysis
+     (e.g. `flutter analyze`)? Needed because the Orchestrator — not the
+     workers — executes both.
 
 If declined, fall back to native superpowers:subagent-driven-development
 behavior. Do not run both pipelines on one branch.
 
 Record the answers in the ledger (`gate` entry) — every later dispatch
 depends on them, and they must survive compaction.
+
+## Approval Policy (no approval gates after decisions)
+
+- Approval happens only at: the gate (once per branch), Phase 2a findings,
+  and Phase 2b solution selection (Flutter layer).
+- **After those decisions the branch runs to completion without approval
+  check-ins** — the per-task loop, fix rounds, escalation, and final review
+  are continuous. "Should I continue?" prompts waste the human partner's
+  time; the ledger and `route-next` carry the state.
+- Deterministic routing: after each review outcome, run
+  `scripts/route-next WORKSPACE TASK [TOTAL_TASKS]` — it emits the next
+  action (`BRIEF` / `RED` / `CODER N ROUND` / `ESCALATE` / `STRATEGIC` /
+  `REVIEW` / `FIX` / `NEXT` / `FINAL_REVIEW`). The Orchestrator executes the
+  emitted action; it never decides "APPROVED → next task" by reasoning.
+
+## State Checkpoint (compaction)
+
+- The ledger is the compression: every decision is written incrementally by
+  `scripts/ledger-append` at the moment it happens. There is no separate
+  "compress now" step — stateless dispatches plus the ledger make the branch
+  safe under harness auto-compaction at any point.
+- After compaction, re-read the ledger and `git log`; resume at the first
+  task without a `task_complete` line, routing via `route-next`.
 
 ## Core Principles
 
@@ -236,6 +266,11 @@ constraints and dependencies. Create one todo per task.
 
 For each task in order:
 
+0. **Route.** Run `scripts/route-next <workspace> TASK [TOTAL_TASKS]` and
+   execute its emitted action. The router, not the LLM, decides the
+   transition after every ledgered outcome (including after reviews:
+   APPROVED → NEXT, SEND_BACK → FIX, ESCALATE → STRATEGIC).
+
 1. **JIT brief.** Dispatch the Controller (template:
    [controller-brief-prompt.md](controller-brief-prompt.md)) with the task's
    plan entry, the interfaces earlier tasks established, and global
@@ -248,6 +283,10 @@ For each task in order:
    the expected reason. A RED test that passes before implementation means
    the brief is defective — back to the Controller, ledger `arbitration`.
    Commit the RED tests separately (`test:` prefix). Ledger: `red_check`.
+   Flutter layer: use `scripts/red-gate`, which additionally verifies the
+   failure reason against the brief's `EXPECTED-RED:` text — a RED that
+   fails for the wrong reason (e.g. a compile error in test setup instead
+   of the missing symbol) is a defective brief, not a verified RED.
 
 3. **Coder rounds.** Dispatch the Coder (template: [coder-prompt.md](coder-prompt.md))
    on the Operational tier. Round 1 gets the brief path only. If tests stay

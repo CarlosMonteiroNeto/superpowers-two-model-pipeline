@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import shutil
@@ -48,7 +49,7 @@ class GateTestBase(unittest.TestCase):
             """
 cmd="$1"; shift
 case "$cmd" in
-  test) echo "stub: flutter test $*"; exit "${STUB_TEST_EXIT:-0}" ;;
+  test) echo "stub: flutter test $*"; echo "${STUB_TEST_OUTPUT:-}"; exit "${STUB_TEST_EXIT:-0}" ;;
   analyze) echo "stub: flutter analyze"; exit "${STUB_ANALYZE_EXIT:-0}" ;;
   pub)
     sub="$1"; shift
@@ -78,6 +79,16 @@ echo "$*" >> "${STUB_LOG:?}"
 exit "${STUB_GRAPHIFY_EXIT:-0}"
 """,
         )
+        # Native Windows stub for python-invoked scripts (subprocess.run with
+        # a bash-shebang file fails on CreateProcess; a .cmd is executable).
+        if os.name == "nt":
+            self.graphify_cmd = pathlib.Path(self.stub_dir) / "graphify.cmd"
+            self.graphify_cmd.write_text(
+                '@echo off\necho %* >> "%STUB_LOG%"\nexit /b %STUB_GRAPHIFY_EXIT%\n',
+                encoding="ascii",
+            )
+        else:
+            self.graphify_cmd = self.graphify
         self.env = {
             "FLUTTER_BIN": self.flutter,
             "DART_BIN": self.dart,
@@ -188,7 +199,7 @@ class TestGreenGate(GateTestBase):
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any("--update" in c for c in calls), calls)
+        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
 
     def test_no_commit_does_not_chain_graphify(self):
         """--no-commit (Phase 4 revalidation) changes nothing, so it must not
@@ -229,16 +240,23 @@ class TestRedGate(GateTestBase):
     def _brief(self, dest="test/red_test.dart"):
         return self.ws / "task-3-brief.md"
 
+    def _brief_text(self, expected_red="Error: api_client.dart does not exist"):
+        return (
+            "RED-TESTS:\n"
+            f"{self.src_test} -> {self._brief().parent}/red_target.dart\n"
+            "\n"
+            "EXPECTED-RED:\n"
+            f"{expected_red}\n"
+        )
+
     def test_materializes_and_verifies_red_when_tests_fail(self):
         brief = self._brief()
-        brief.write_text(
-            f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
-            encoding="utf-8",
-        )
+        brief.write_text(self._brief_text(), encoding="utf-8")
         r = run_script(
             "red-gate", [str(self.ws), "3"],
             cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1"},
+            env_extra={**self.env, "STUB_TEST_EXIT": "1",
+                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist"},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         target = self.ws / "red_target.dart"
@@ -247,6 +265,36 @@ class TestRedGate(GateTestBase):
 
     def test_defective_brief_when_red_passes(self):
         brief = self._brief()
+        brief.write_text(self._brief_text(), encoding="utf-8")
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra={**self.env, "STUB_TEST_EXIT": "0"},
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+
+    def test_defective_brief_when_red_fails_for_wrong_reason(self):
+        """A RED failure whose report does NOT contain the brief's expected
+        failure text is a defective brief, not a verified RED: the test
+        failed for the wrong reason (e.g. a compile error in test setup
+        instead of the missing production symbol)."""
+        brief = self._brief()
+        brief.write_text(
+            self._brief_text(expected_red="Error: api_client.dart does not exist"),
+            encoding="utf-8",
+        )
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra={**self.env, "STUB_TEST_EXIT": "1",
+                       "STUB_TEST_OUTPUT": "Error: type 'SessionStore' not found in test setup"},
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+
+    def test_missing_expected_red_is_defective(self):
+        """A brief without an EXPECTED-RED block cannot be verified: the
+        gate must reject it instead of rubber-stamping any failure."""
+        brief = self._brief()
         brief.write_text(
             f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
             encoding="utf-8",
@@ -254,7 +302,8 @@ class TestRedGate(GateTestBase):
         r = run_script(
             "red-gate", [str(self.ws), "3"],
             cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "0"},
+            env_extra={**self.env, "STUB_TEST_EXIT": "1",
+                       "STUB_TEST_OUTPUT": "Error: anything"},
         )
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
@@ -266,31 +315,29 @@ class TestRedGate(GateTestBase):
         """After RED is verified, the graph is rebuilt so the Coder (LLM)
         reads the freshly materialized test files through the graph."""
         brief = self._brief()
-        brief.write_text(
-            f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
-            encoding="utf-8",
-        )
+        brief.write_text(self._brief_text(), encoding="utf-8")
         log = pathlib.Path(self._tmp) / "g.log"
         r = run_script(
             "red-gate", [str(self.ws), "3"],
             cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1", "STUB_LOG": str(log)},
+            env_extra={**self.env, "STUB_TEST_EXIT": "1",
+                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist",
+                       "STUB_LOG": str(log)},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any("--update" in c for c in calls), calls)
+        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
 
     def test_red_gate_respects_graphify_enabled(self):
         brief = self._brief()
-        brief.write_text(
-            f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
-            encoding="utf-8",
-        )
+        brief.write_text(self._brief_text(), encoding="utf-8")
         log = pathlib.Path(self._tmp) / "g.log"
         r = run_script(
             "red-gate", [str(self.ws), "3"],
             cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1", "STUB_LOG": str(log), "GRAPHIFY_ENABLED": "0"},
+            env_extra={**self.env, "STUB_TEST_EXIT": "1",
+                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist",
+                       "STUB_LOG": str(log), "GRAPHIFY_ENABLED": "0"},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8") if log.exists() else ""
@@ -335,7 +382,10 @@ class TestPubSync(GateTestBase):
 
 
 class TestGraphifyRegen(GateTestBase):
-    def test_invokes_graphify_with_update_on_root(self):
+    def test_invokes_graphify_update_subcommand_on_root(self):
+        """graphify-regen must invoke `graphify update <root>` - the real
+        CLI form - not the old `graphify <root> --update` (which the real
+        CLI rejects; a wrapper was needed to translate it)."""
         log = pathlib.Path(self._tmp) / "graphify.log"
         r = run_script(
             "graphify-regen", [],
@@ -344,9 +394,65 @@ class TestGraphifyRegen(GateTestBase):
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any("--update" in c for c in calls), calls)
+        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
         # the root argument must resolve to the working directory (any path form)
         self.assertTrue(any(os.path.basename(self._tmp) in c for c in calls), calls)
+
+    def test_never_uses_the_old_flag_form(self):
+        log = pathlib.Path(self._tmp) / "graphify.log"
+        r = run_script(
+            "graphify-regen", [],
+            cwd=self._tmp,
+            env_extra={**self.env, "STUB_LOG": str(log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = log.read_text(encoding="utf-8").splitlines()
+        self.assertFalse(any("--update" in c for c in calls), calls)
+
+
+class TestGraphifyPackage(GateTestBase):
+    def _run_pkg(self, args, env_extra):
+        env = dict(os.environ)
+        env.update(self.env)
+        env.update(env_extra)
+        env["GRAPHIFY_BIN"] = str(self.graphify_cmd)
+        # graphify-package has no .py extension (bash shebang for Unix);
+        # invoke the real python module directly so Windows can run it.
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "graphify_package.py"), *args],
+            cwd=str(self._tmp),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_invokes_graphify_update_subcommand_on_package_dir(self):
+        """graphify-package must invoke `graphify update <pkg_dir>` - the
+        real CLI form - not `graphify <pkg_dir> --out <dir>`."""
+        config = {
+            "configVersion": 2,
+            "packages": [
+                {"name": "pkg_a", "rootUri": "file:///C:/cache/pkg_a/", "packageUri": "lib/"},
+            ],
+        }
+        config_path = pathlib.Path(self._tmp) / "package_config.json"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        log = pathlib.Path(self._tmp) / "g.log"
+        r = self._run_pkg(
+            ["pkg_a", "--config", str(config_path)],
+            {"STUB_LOG": str(log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
+        self.assertTrue(any("pkg_a" in c for c in calls), calls)
+        self.assertFalse(any("--out" in c for c in calls), calls)
+
+    def test_missing_package_is_an_error(self):
+        config_path = pathlib.Path(self._tmp) / "package_config.json"
+        config_path.write_text(json.dumps({"configVersion": 2, "packages": []}), encoding="utf-8")
+        r = self._run_pkg(["nope", "--config", str(config_path)], {})
+        self.assertNotEqual(r.returncode, 0)
 
 
 if __name__ == "__main__":

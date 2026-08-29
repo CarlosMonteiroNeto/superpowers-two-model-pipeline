@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Deterministic next-action router for the two-model pipeline.
+#
+# Reads the ledger and emits the NEXT ACTION for a task - the review-to-next
+# transition (and every earlier transition) becomes script judgment, never an
+# LLM decision. The Orchestrator executes the emitted action; it never decides
+# "APPROVED -> next task" or "SEND_BACK -> fix round" by reasoning.
+#
+# Usage: route-next WORKSPACE TASK [TOTAL_TASKS]
+#   WORKSPACE   - the pipeline workspace (holds ledger.jsonl, plan.json)
+#   TASK        - the task number to route
+#   TOTAL_TASKS - optional; defaults to the task count in WORKSPACE/plan.json
+#
+# Emits one line on stdout: ACTION [TASK] [ARGS...]
+#   BRIEF N        -> dispatch the Controller for a JIT brief
+#   RED N          -> materialize + run red-gate (expected-reason check)
+#   CODER N ROUND  -> dispatch the Coder, round 1 or 2
+#   ESCALATE N     -> dispatch the Strategic Coder (2 rounds failed)
+#   STRATEGIC N    -> dispatch the Strategic Coder (escalated / review ESCALATE)
+#   REVIEW N       -> build review package + dispatch the Reviewer
+#   FIX N          -> one fix round (SEND_BACK) by the budgeted implementer
+#   NEXT N         -> task N-1 complete (APPROVED / task_complete)
+#   FINAL_REVIEW   -> all tasks complete; whole-branch review
+#
+# Exit codes: 0 = routed, 1 = inconsistent state, 2 = usage / no ledger.
+set -euo pipefail
+
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "usage: route-next WORKSPACE TASK [TOTAL_TASKS]" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+ledger="$ws/ledger.jsonl"
+
+[ -f "$ledger" ] || { echo "ROUTE-NEXT: no ledger: $ledger" >&2; exit 2; }
+
+# TOTAL_TASKS: explicit arg, else plan.json task count.
+total=${3:-}
+if [ -z "$total" ]; then
+  plan="$ws/plan.json"
+  if [ -f "$plan" ]; then
+    total=$(grep -c '"id"' "$plan" || true)
+  fi
+fi
+
+# Gather this task's ledger entries, oldest first. Patterns tolerate the
+# optional spaces of any JSON pretty-printer ("task": "3" vs "task":"3").
+task_entries=$(grep -E '"task": *"'$task'"' "$ledger" || true)
+
+has_brief=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"brief_ready"' || true)
+has_red=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"red_check"' || true)
+rounds=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"coder_round"' || true)
+has_commit=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"commit"' || true)
+has_escalated=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"escalated"' || true)
+has_complete=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"task_complete"' || true)
+
+# Last review outcome verdict, if any.
+last_review=$(printf '%s\n' "$task_entries" | grep -E '"type": *"review_outcome"' | tail -1 || true)
+review_verdict=$(printf '%s' "$last_review" | sed -n 's/.*"summary": *"\([^"]*\)".*/\1/p')
+
+next_task=$((task + 1))
+
+# NEXT vs FINAL_REVIEW needs the total task count. Require it at decision
+# time, not earlier - BRIEF/RED/CODER/REVIEW/FIX never need it.
+need_total() {
+  [ -n "$total" ] || { echo "ROUTE-NEXT: TOTAL_TASKS (or plan.json) required to decide NEXT vs FINAL_REVIEW" >&2; exit 2; }
+}
+
+# Decision table (deterministic, ordered by state maturity).
+if [ "$has_complete" -ge 1 ]; then
+  need_total
+  if [ "$task" -ge "$total" ]; then echo "FINAL_REVIEW"; else echo "NEXT $next_task"; fi
+  exit 0
+fi
+
+if [ -n "$review_verdict" ]; then
+  case "$review_verdict" in
+    APPROVED)
+      need_total
+      if [ "$task" -ge "$total" ]; then echo "FINAL_REVIEW"; else echo "NEXT $next_task"; fi
+      exit 0 ;;
+    SEND_BACK)
+      echo "FIX $task"
+      exit 0 ;;
+    ESCALATE)
+      echo "STRATEGIC $task"
+      exit 0 ;;
+    *)
+      echo "ROUTE-NEXT: unknown review verdict: $review_verdict" >&2
+      exit 1 ;;
+  esac
+fi
+
+if [ "$has_escalated" -ge 1 ] && [ "$has_commit" -eq 0 ]; then
+  echo "STRATEGIC $task"
+  exit 0
+fi
+
+if [ "$has_commit" -ge 1 ]; then
+  echo "REVIEW $task"
+  exit 0
+fi
+
+if [ "$rounds" -ge 2 ]; then
+  echo "ESCALATE $task"
+  exit 0
+fi
+
+if [ "$rounds" -eq 1 ]; then
+  echo "CODER $task 2"
+  exit 0
+fi
+
+if [ "$has_red" -ge 1 ]; then
+  echo "CODER $task 1"
+  exit 0
+fi
+
+if [ "$has_brief" -ge 1 ]; then
+  echo "RED $task"
+  exit 0
+fi
+
+echo "BRIEF $task"
+exit 0

@@ -77,15 +77,17 @@ silently inherits the expensive session model.
 |---|---|---|
 | `pkg-score PACKAGE` | Fetch pub.dev + GitHub, compute the corrected Quality Score | JSON + gate verdict (AUTO_APPROVE / DEVELOPER_DECISION / AUTO_REJECT) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
-| `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify expected failure | exit 0 RED verified; exit 1 defective brief; exit 2 usage |
+| `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report) | exit 0 RED verified; exit 1 defective brief (passes, or fails for the wrong reason); exit 2 usage |
 | `green-gate [--no-commit] [-m MSG]` | Chain `flutter test` + `flutter analyze` + format + commit | exit 0 green (+ commit); 1 tests; 2 analyze; 3 format; `--no-commit` never commits |
-| `graphify-regen [ROOT]` | Rebuild project graph | exit code of graphify |
-| `graphify-package PACKAGE` | Build graph for a downloaded dependency | resolves dir from `.dart_tool/package_config.json` |
+| `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form) | exit code of graphify |
+| `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` | resolves dir from `.dart_tool/package_config.json` |
+| `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER N ROUND / ESCALATE / STRATEGIC / REVIEW / FIX / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
 
 All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env
 overrides. `pub-sync`, `red-gate` and `green-gate` auto-chain the graphify
 rebuild at the script→LLM boundaries (non-fatal; disable with
-`GRAPHIFY_ENABLED=0`). Tests live in `skills/flutter-app-pipeline/tests/`, run
+`GRAPHIFY_ENABLED=0`). Tests live in `skills/flutter-app-pipeline/tests/`
+(flutter scripts) and `skills/two-model-sdd-pipeline/tests/` (router), run
 with `run-tests.sh` (`python3 -m unittest discover`).
 
 ## 7. Ordering invariants (do not violate)
@@ -94,19 +96,32 @@ with `run-tests.sh` (`python3 -m unittest discover`).
   `pub-sync` chains `graphify-package` for each newly added package; `red-gate`
   chains `graphify-regen` after verifying RED (before the Coder reads the
   materialized tests); `green-gate` chains `graphify-regen` after committing
-  (before the Reviewer / next task reads). The chains are best-effort — a
-  graphify failure never fails a gate — and can be disabled with
-  `GRAPHIFY_ENABLED=0`. Query the graph for structure/interfaces first; only
-  then make targeted reads of the few files actually needed (the graph exposes
-  structure, not method bodies).
+  (before the Reviewer / next task reads). The chains invoke the real CLI form
+  — `graphify update <path>` — never the old `graphify <path> --update` (which
+  the real CLI rejects and previously required a translation wrapper). The
+  chains are best-effort — a graphify failure never fails a gate — and can be
+  disabled with `GRAPHIFY_ENABLED=0`. The Controller queries the graph
+  (`graphify explain` / `graphify path`) for structure/interfaces when writing
+  briefs; other roles read only the curated artifacts (brief, diff, interfaces
+  file). The graph exposes structure, not method bodies.
 - **Gates are exit codes:** never judge "did the test fail for the expected
   reason" or "are tests green" by reading output — run the gate script and read
-  its exit code.
+  its exit code. The red-gate additionally verifies the failure reason against
+  the brief's `EXPECTED-RED:` text.
+- **Routing is scripted:** after every review outcome (and every earlier
+  ledgered transition) run `route-next` and execute its emitted action — the
+  LLM never decides "APPROVED → next task" or "SEND_BACK → fix round" by
+  reasoning.
 - **Stateless calls:** never resume a dispatched agent; re-feed its successor
   from files (brief, diff, ledger excerpt).
 - **Ledger via script:** the ledger is appended through `ledger-append`, never
   free-handed as prose.
 - **Workers never commit:** only the Orchestrator (or `green-gate`) commits.
+- **No approval after decisions:** approval happens at the gate (once per
+  branch) and at Phase 2a/2b selection; from Phase 2c onward the branch runs
+  to completion without check-ins. The ledger is the state checkpoint —
+  compaction-safe by construction (stateless dispatches + `route-next` resume
+  from the ledger after any harness auto-compaction).
 
 ## 8. Quality Score (0–100)
 
@@ -192,9 +207,12 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, r
 
 1. New dev request -> invoke `brainstorming` before any code.
 2. Flutter/Dart work -> run `flutter-app-pipeline`; on the two-tier gate default
-   to YES and ask only for tier models + test/analyze commands (once per branch).
+   to YES. Tiers are pre-configured locally (`two-model-controller` /
+   `two-model-coder` agents); ask only for the test/analyze commands, once per
+   branch — and ask about tiers only when the local pipeline is not installed.
 3. Per task: `pkg-score` candidates -> select with the developer -> `writing-plans`
-   tasks -> `pub-sync` -> `red-gate` -> Coder rounds -> `green-gate` ->
-   Graphify rebuild -> review. Repeat.
+   tasks -> `pub-sync` -> `red-gate` (expected-reason check) -> Coder rounds ->
+   `green-gate` -> Graphify rebuild -> `route-next` -> review. Repeat. The router,
+   not the LLM, decides every transition.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.

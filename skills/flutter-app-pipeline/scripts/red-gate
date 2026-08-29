@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Deterministic RED confirmation: materialize the brief's RED test files into
-# the working tree and verify they FAIL. A RED test that passes before
-# implementation means the brief is defective (exit 1) -> back to the Controller.
+# the working tree and verify they FAIL for the expected reason. A RED test
+# that passes before implementation means the brief is defective (exit 1) ->
+# back to the Controller. A RED failure whose output does not contain the
+# brief's EXPECTED-RED text also means the brief is defective: the test
+# failed for the wrong reason (e.g. a compile error in test setup instead of
+# the missing production symbol).
 #
-# Brief convention (task-N-brief.md) RED-TESTS block, one mapping per line:
+# Brief convention (task-N-brief.md):
 #   RED-TESTS:
 #   <workspace>/task-N-test.dart -> test/task_N_test.dart
 #
+#   EXPECTED-RED:
+#   <text that must appear verbatim in the failure report>
+#
 # Usage: red-gate WORKSPACE TASK
-# Exit codes: 0 = RED verified (expected failure), 1 = defective brief,
-#             2 = usage / missing brief / bad entry.
+# Exit codes: 0 = RED verified (expected failure, expected reason),
+#             1 = defective brief, 2 = usage / missing brief / bad entry.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -27,8 +34,12 @@ FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 [ -f "$brief" ] || { echo "RED-GATE: no brief: $brief" >&2; exit 2; }
 
 targets=()
+# RED-TESTS block ends at the first blank line (or EXPECTED-RED marker).
 while IFS= read -r line; do
   [ -z "$line" ] && continue
+  case "$line" in
+    EXPECTED-RED:*) break ;;
+  esac
   src=${line%% -> *}
   dst=${line#* -> }
   if [ -z "$src" ] || [ -z "$dst" ]; then
@@ -39,19 +50,32 @@ while IFS= read -r line; do
   cp "$src" "$dst" || { echo "RED-GATE: cannot materialize $src -> $dst" >&2; exit 2; }
   echo "RED-GATE: materialized $src -> $dst"
   targets+=("$dst")
-done < <(sed -n '/^RED-TESTS:/,$p' "$brief" | sed -n '2,$p' | grep -v '^```')
+done < <(sed -n '/^RED-TESTS:/,/^$/p' "$brief" | sed -n '2,$p' | grep -v '^```')
 
 if [ "${#targets[@]}" -eq 0 ]; then
   echo "RED-GATE: no RED-TESTS entries in brief" >&2
   exit 2
 fi
 
+# Expected failure reason: first non-empty line after the EXPECTED-RED marker.
+expected=$(sed -n '/^EXPECTED-RED:/,$p' "$brief" | sed -n '2,$p' | grep -v '^```' | grep -v '^[[:space:]]*$' | head -1)
+
 if "$FLUTTER_BIN" test "${targets[@]}" > "$ws/red-gate-report.txt" 2>&1; then
   echo "RED-GATE: RED tests PASSED before implementation - brief defective (see $ws/red-gate-report.txt)" >&2
   exit 1
 fi
 
-echo "RED-GATE: RED verified (expected failure)"
+if [ -z "$expected" ]; then
+  echo "RED-GATE: brief has no EXPECTED-RED text - cannot verify the failure reason (see $ws/red-gate-report.txt)" >&2
+  exit 1
+fi
+
+if ! grep -Fq "$expected" "$ws/red-gate-report.txt"; then
+  echo "RED-GATE: RED failure does not match the expected reason - brief defective (see $ws/red-gate-report.txt)" >&2
+  exit 1
+fi
+
+echo "RED-GATE: RED verified (expected failure, expected reason)"
 
 # Graphify chain: the Coder (LLM) reads the freshly materialized test files
 # next, so rebuild the project graph now. Best-effort: never fails the gate.

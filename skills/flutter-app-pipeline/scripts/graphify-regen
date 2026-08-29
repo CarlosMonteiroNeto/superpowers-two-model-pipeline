@@ -3,12 +3,17 @@
 # Run after every download (pub-sync) and after every task's changes, BEFORE
 # any LLM reads the affected or downloaded files.
 #
+# Invokes the real CLI form: `graphify update <root>` (the `update`
+# subcommand re-extracts code files locally with no LLM API key needed).
+# The old `graphify <root> --update` form was rejected by the real CLI and
+# required a translation wrapper - this script calls the correct form now.
+#
 # Usage: graphify-regen [ROOT]
 set -euo pipefail
 
 root=$(realpath "${1:-.}")
 GRAPHIFY_BIN="${GRAPHIFY_BIN:-graphify}"
 
-"$GRAPHIFY_BIN" "$root" --update
+"$GRAPHIFY_BIN" update "$root"
 echo "GRAPHIFY-REGEN: graph updated"
 exit 0
