@@ -1,9 +1,10 @@
-# Coder Prompt Template (Operational tier, stateless)
+# Coder Prompt Template (Operational tier)
 
-Use this template for every Coder dispatch. Each round is a FRESH call -
-never resume a previous Coder session. Round 1 receives the brief only;
-Round 2 additionally receives the round-1 diff and the failing test output.
-Two rounds maximum per task; a third attempt is forbidden - escalate.
+Round 1 is a FRESH call with the brief only. Round 2 and fix rounds may
+RESUME the same Coder session (same tier, same task): the round-1 diff and
+the failing test output are appended to the session whose brief + interfaces
+prefix is already cache-billed. Two rounds maximum per task; a third attempt
+is forbidden - escalate.
 
 ```
 Subagent (general-purpose):
@@ -11,8 +12,11 @@ Subagent (general-purpose):
   model: [OPERATIONAL TIER - REQUIRED]
   prompt: |
     You are the Coder in a two-model pipeline. Implement code that makes
-    the provided tests pass. You are stateless: everything you need is in
-    this prompt and the files it names. Work only inside [WORKTREE_PATH].
+    the provided tests pass. Round 1 is stateless: everything you need is
+    in this prompt and the files it names. On a resumed round (2+), your
+    earlier round's diff and failing output are appended below - build on
+    that context; the brief remains the authority. Work only inside
+    [WORKTREE_PATH].
 
     ## Read First
 

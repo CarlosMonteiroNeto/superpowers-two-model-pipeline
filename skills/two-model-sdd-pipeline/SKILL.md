@@ -74,11 +74,13 @@ depends on them, and they must survive compaction.
 - **Hybrid orchestration:** the Orchestrator manages state, git worktrees,
   task transitions, test execution, and retry-loop tracking. LLMs reason;
   they never keep books.
-- **Stateless LLM calls:** no role is a persistent chat session. Every
-  dispatch — Controller, Coder, Strategic Coder, Code Reviewer — is a fresh
-  call fed curated context (a task brief, a diff, a ledger excerpt), never
-  an accumulating conversation. Never "resume" a dispatched agent: re-feed
-  its successor from files.
+- **Stateless LLM calls, cache-aware:** no role is a persistent chat session
+  across the branch. Every dispatch is fed curated context (a task brief, a
+  diff, a ledger excerpt), never an accumulating conversation.
+  **Resume rule:** resuming a dispatched agent is allowed only for the **same
+  tier** and the **same task** — the resumed session appends deltas to a
+  stable prefix (system + plan + brief + interfaces) that the provider
+  cache-bills; when the **role or task changes**, the dispatch is **fresh**.
 - **Git + plan + ledger as source of truth:** continuity comes from the
   JSON plan, git history, and the script-maintained ledger — not from any
   LLM's memory.
@@ -117,22 +119,27 @@ usually the expensive one — silently defeating the pipeline.
 You do not implement, review, or fix anything yourself. Your context stays
 clean for coordination.
 
-### Controller (Strategic, stateless per dispatch)
+### Controller (Strategic, session for plan + briefs)
 
-- Initial brainstorming support and plan writing (JSON plan, see below).
-- Just-in-time task briefs with the RED test, generated immediately before
-  each task is dispatched — never batched upfront, so tests cannot go stale
-  against interface changes made by earlier tasks.
-- Arbitration when the Orchestrator detects a deadlock.
-- Final branch review and consolidation (see Final Branch Review).
+- Holds a session for plan writing and just-in-time task briefs — same tier,
+  and the plan + accumulated interfaces form a stable **cached prefix**; each
+  brief only **append**s the current task's slice. Brief composition is
+  near-mechanical, so the session's growing context is a cache hit, not a
+  pollution risk.
+- JIT briefs with the RED test are generated immediately before each task is
+  dispatched — never batched upfront, so tests cannot go stale against
+  interface changes made by earlier tasks.
+- **Arbitration and final branch review are FRESH dispatches** (judgment;
+  anti-bias beats cache here), fed only the relevant slice — never the
+  session's accumulated history.
 
-Each Controller dispatch receives only: the feature intent summary, the
-relevant slice of the plan, affected interfaces, and the specific question.
-It never sees the branch's conversation history.
-
-### Coder (Operational, per task, stateless)
+### Coder (Operational, per task — resumable within the task)
 
 - Implements code to satisfy the RED test. Up to 2 rounds per task.
+- Rounds and fix rounds may **resume the same Coder dispatch** (same tier,
+  same task): round 2 / fix rounds append the round-1 diff and the failing
+  test output to the session whose brief + interfaces prefix is already
+  cache-billed. Fresh when the task or the role changes.
 - Never writes or edits tests — including "fixing" a failing test to pass.
 - On success: reports back; the Orchestrator runs the standard wrap-up
   (tests, analysis, commit) and review.
@@ -290,9 +297,11 @@ For each task in order:
 
 3. **Coder rounds.** Dispatch the Coder (template: [coder-prompt.md](coder-prompt.md))
    on the Operational tier. Round 1 gets the brief path only. If tests stay
-   red, Round 2 gets the brief path plus the round-1 diff and the failing
-   test output. Two rounds maximum — a third Coder attempt is forbidden;
-   escalation is the answer, not persistence. Ledger: `coder_round` each.
+   red, Round 2 may **resume the round-1 Coder session** (same tier, same
+   task) with the round-1 diff and the failing test output appended — the
+   brief + interfaces prefix is cache-billed. Two rounds maximum — a third
+   Coder attempt is forbidden; escalation is the answer, not persistence.
+   Ledger: `coder_round` each.
 
 4. **Wrap-up on success.** Run the full test suite and the analysis
    command. Both clean: commit the implementation (`Task N: <title>`),
@@ -379,8 +388,11 @@ Orchestrator's — deterministic, no dispatch.
 
 ## Context and Cost Optimization Rules
 
-- No role holds a continuous session across tasks or the branch. Every
-  dispatch is stateless and fed only what that call needs.
+- **Cache-aware context:** keep the stable prefix (system + plan + brief +
+  interfaces) front and **append** deltas at the end — a change in the middle
+  invalidates the **cached prefix** and bills the whole input fresh. Same-tier,
+  same-task resume is the only reuse; when the role or task changes, dispatch
+  fresh.
 - The ledger carries continuity — written by the script from structured
   output, read by any role needing prior decisions (the final review reads
   all of it; nobody else needs more than excerpts).
@@ -405,7 +417,7 @@ Orchestrator's — deterministic, no dispatch.
 
 | Excuse | Reality |
 |--------|---------|
-| "Resuming the Coder's session is cheaper than a fresh dispatch" | Resumed sessions carry pollution you cannot see. Fresh dispatch, curated inputs — that is the architecture. |
+| "Resuming the Coder's session is cheaper than a fresh dispatch" | Only same-tier, same-task resume is cache-safe. Resuming across roles or tasks reintroduces pollution — stay inside the Resume rule. |
 | "I'll just fix this one finding myself" | Orchestrator fixes skip review and dirty your coordination context. Route it to a tier. |
 | "One more Coder round will converge" | Two rounds is the budget. Round 3 is escalation denial — dispatch the Strategic Coder. |
 | "The Reviewer already saw task 3, reuse it" | A reused Reviewer grades with stale attention. Fresh dispatch, every task, no exceptions. |
