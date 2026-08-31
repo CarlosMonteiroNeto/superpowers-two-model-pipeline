@@ -381,6 +381,10 @@ change. Judgment-heavy work stays one-dispatch-per-task.
 6. Export every `Ruling`-bearing ledger line into your final message under
    "Rulings I made" — each with what it costs if wrong. A ruling that dies
    with the workspace was a decision made in secret.
+7. Run `scripts/doc-check` — deterministic gate: if the branch changed
+   pipeline files (`skills/`) and `README.txt` / `README-LLM.md` were not
+   updated, exit 1. The Orchestrator must update them and amend the
+   commit before proceeding.
 
 Then delete the workspace (git history is the record) and use
 superpowers:finishing-a-development-branch. The merge itself is the

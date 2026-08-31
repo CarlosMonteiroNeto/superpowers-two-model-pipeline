@@ -83,7 +83,7 @@ Flutter-specific additions to the per-task loop:
 - Revalidate the branch with `scripts/green-gate --no-commit` (full suite + analyze; report only, never commits).
 - Full codebase code review after all tasks are green.
 - Any correction re-enters the Phase 3 loop (red → fix → green → review → commit).
-- **Repository documentation:** if this session changed the pipeline itself (scripts, skills, invariants, phases), update `README.txt` and `README-LLM.md` to reflect the changes and include them in the push. Do not churn docs when behavior did not change.
+- **Repository documentation:** if this session changed the pipeline itself (scripts, skills, invariants, phases), update `README.txt` and `README-LLM.md` to reflect the changes and include them in the push. Run `scripts/doc-check` as a deterministic gate to verify before the merge — exit 1 means READMEs were not updated with pipeline changes; the Orchestrator must amend them.
 
 ## 5. Deterministic Scripts (no AI involvement)
 

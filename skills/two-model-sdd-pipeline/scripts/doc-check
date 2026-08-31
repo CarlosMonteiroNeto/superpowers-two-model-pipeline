@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Deterministic post-commit gate: if pipeline files changed, READMEs must
+# also be updated. Prevents the end-of-session rule from being skipped.
+#
+# Usage: doc-check [REPO]    (defaults to cwd)
+# Exit codes: 0 = OK (no violation), 1 = pipeline changed but READMEs not
+#             updated, 2 = usage / not a repo.
+set -euo pipefail
+
+repo=${1:-.}
+cd "$repo" || { echo "DOC-CHECK: no such repo: $repo" >&2; exit 2; }
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "DOC-CHECK: not a git work tree" >&2; exit 2; }
+
+# No parent commit (initial commit): nothing to check.
+if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+  echo "DOC-CHECK: initial commit - no check needed"
+  exit 0
+fi
+
+changed=$(git diff --name-only HEAD~1..HEAD || true)
+pipeline_changed=$(printf '%s\n' "$changed" | grep -E '^skills/' || true)
+
+if [ -z "$pipeline_changed" ]; then
+  echo "DOC-CHECK: no pipeline files changed - OK"
+  exit 0
+fi
+
+readme_changed=$(printf '%s\n' "$changed" | grep -E '^README.*\.(txt|md)$' || true)
+
+if [ -z "$readme_changed" ]; then
+  echo "DOC-CHECK: pipeline files changed but READMEs not updated" >&2
+  echo "DOC-CHECK: update README.txt and README-LLM.md then amend or commit" >&2
+  exit 1
+fi
+
+echo "DOC-CHECK: pipeline files and READMEs both updated - OK"
+exit 0
