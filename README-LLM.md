@@ -12,7 +12,8 @@ A fork of [`obra/superpowers`](https://github.com/obra/superpowers) (MIT)
 turned into an AI-assisted, **two-tier** development pipeline for
 Flutter/Dart apps. The design rule: **LLMs reason and scripts decide** —
 mechanical steps are chained into deterministic scripts whose verdict is an
-exit code, and every LLM call is a stateless dispatch fed curated context.
+exit code, and LLM calls are **cache-aware** (same-tier/same-task resume
+for prefix-cached inputs; fresh dispatch when role or task changes).
 
 The pipeline is **automatic**: a default OpenCode agent
 (`~/.config/opencode/agent/flutter-pipeline.md`) makes every session run
@@ -64,7 +65,7 @@ end to end.
 |---|---|---|
 | Orchestrator | none (deterministic) | worktrees, dispatch, tests, analysis, commits, ledger, merge; never implements/reviews itself |
 | Controller | Strategic | design, plan.json, JIT task briefs with RED tests, arbitration, final review |
-| Coder | Operational | bounded implementation against a RED test (max 2 rounds) |
+| Coder | Operational | bounded implementation against a RED test (max 2 rounds; rounds 1→2 and fix rounds resumable same-tier/same-task for cache hits) |
 | Strategic Coder | Strategic | escalation only; explicitly KEEP/DISCARD partial work |
 | Code Reviewer | Strategic | fresh per task, read-only, one verdict: APPROVED / SEND_BACK / ESCALATE |
 
@@ -82,6 +83,10 @@ silently inherits the expensive session model.
 | `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form) | exit code of graphify |
 | `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` | resolves dir from `.dart_tool/package_config.json` |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER N ROUND / ESCALATE / STRATEGIC / REVIEW / FIX / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
+| `red-integrity WORKSPACE TASK` | Byte-compare committed tests vs brief RED-TESTS | exit 0 intact; 1 tampered; 2 usage/missing |
+| `keep-discard WORKSPACE TASK` | Escalation pre-gate: empty diff / out-of-scope files → DISCARD; else KEEP | exit 0 KEEP; 1 DISCARD; 2 usage |
+| `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
+| `final-gate WORKSPACE TOTAL_TASKS` | Pre-holistic: all complete + no unresolved verdicts + no blocking parked + tests/analyze green | exit 0 ready; 1 blockers; 2 usage |
 
 All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env
 overrides. `pub-sync`, `red-gate` and `green-gate` auto-chain the graphify
@@ -112,8 +117,17 @@ with `run-tests.sh` (`python3 -m unittest discover`).
   ledgered transition) run `route-next` and execute its emitted action — the
   LLM never decides "APPROVED → next task" or "SEND_BACK → fix round" by
   reasoning.
-- **Stateless calls:** never resume a dispatched agent; re-feed its successor
-  from files (brief, diff, ledger excerpt).
+- **Cache-aware calls:** same-tier/same-task resume is allowed (the provider
+  cache-bills the stable prefix — system + plan + brief + interfaces); the
+  Orchestrator appends deltas only. When the role or task changes, dispatch
+  fresh. Controller holds a session for plan + JIT briefs (near-mechanical
+  composition; cached prefix); arbitration and final review are always fresh.
+- **Review pre-gates are exit codes:** `red-integrity` byte-compares committed
+  tests vs brief (no LLM judgment); `interface-check` detects cross-task
+  interface touch via plan.json; `keep-discard` decides the mechanical fate
+  of partial work before the Strategic Coder judges approach; `final-gate`
+  verifies all tasks complete, no unresolved verdicts, no blocking parked
+  findings, and tests/analyze green before the holistic review.
 - **Ledger via script:** the ledger is appended through `ledger-append`, never
   free-handed as prose.
 - **Workers never commit:** only the Orchestrator (or `green-gate`) commits.
@@ -211,8 +225,11 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, r
    `two-model-coder` agents); ask only for the test/analyze commands, once per
    branch — and ask about tiers only when the local pipeline is not installed.
 3. Per task: `pkg-score` candidates -> select with the developer -> `writing-plans`
-   tasks -> `pub-sync` -> `red-gate` (expected-reason check) -> Coder rounds ->
-   `green-gate` -> Graphify rebuild -> `route-next` -> review. Repeat. The router,
-   not the LLM, decides every transition.
+   tasks -> `pub-sync` -> `red-gate` (expected-reason check) -> `red-integrity`
+   (byte-compare) -> Coder rounds (resumable same-tier/same-task) ->
+   `green-gate` (chains graphify) -> `interface-check` (post-commit) ->
+   `route-next` -> review. Before escalation: `keep-discard` gate. After all
+   tasks: `final-gate` (pre-holistic) then Controller final review. The
+   router, not the LLM, decides every transition.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.

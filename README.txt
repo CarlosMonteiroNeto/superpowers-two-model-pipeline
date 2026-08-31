@@ -37,8 +37,9 @@ PRINCIPLES
   resolution, test execution, lint, commit, graph rebuild, task routing)
   are chained into deterministic scripts whose verdict is an exit code or
   a stdout action line.
-- Stateless LLM calls with curated context; the ledger + git are the
-  source of truth.
+- Cache-aware LLM calls with curated context; same-tier, same-task
+  resume is allowed (prefix-cached); fresh dispatch when role or task
+  changes. The ledger + git are the source of truth.
 - Graphify-before-LLM: newly downloaded or changed code is indexed into a
   knowledge graph before any LLM reads it, minimizing token consumption.
 - No approval after decisions: approval happens at the gate (once per
@@ -106,6 +107,15 @@ skills/two-model-sdd-pipeline/scripts/:
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / ESCALATE /
                        STRATEGIC / REVIEW / FIX / NEXT / FINAL_REVIEW)
+  red-integrity        byte-compare committed tests vs brief RED-TESTS
+                       (exit 0 intact; 1 tampered; 2 usage)
+  keep-discard         escalation pre-gate: empty diff / out-of-scope
+                       files -> DISCARD; else KEEP (exit 0/1/2)
+  interface-check      diff touched a file another task consumes
+                       (exit 0 clean; 1 interface changed; 2 usage)
+  final-gate           pre-holistic: all tasks complete + no unresolved
+                       verdicts + no blocking parked + tests/analyze green
+                       (exit 0 ready; 1 blockers; 2 usage)
 
 Graphify is chained automatically into the gates at the script->LLM
 boundaries: pub-sync indexes each newly added package, red-gate rebuilds
