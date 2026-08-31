@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Deterministic RED-test integrity gate: the test files in the working tree
+# must match the brief's RED-TESTS sources byte-for-byte. Verdict is an exit
+# code, never a reviewer judgment.
+#
+# Usage: red-integrity WORKSPACE TASK
+# Exit codes: 0 = intact, 1 = deviation(s), 2 = usage / missing brief / no entries.
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+  echo "usage: red-integrity WORKSPACE TASK" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+brief="$ws/task-$task-brief.md"
+
+[ -f "$brief" ] || { echo "RED-INTEGRITY: no brief: $brief" >&2; exit 2; }
+
+entries=0
+violations=0
+while IFS= read -r line; do
+  if [ -z "$line" ]; then continue; fi
+  case "$line" in
+    EXPECTED-RED:*) break ;;
+  esac
+  src=${line%% -> *}
+  dst=${line#* -> }
+  if [ -z "$src" ] || [ -z "$dst" ]; then
+    echo "RED-INTEGRITY: bad RED-TESTS entry: $line" >&2
+    exit 2
+  fi
+  entries=$((entries + 1))
+  if [ ! -f "$src" ] || [ ! -f "$dst" ]; then
+    echo "RED-INTEGRITY: missing file: $src -> $dst" >&2
+    violations=$((violations + 1))
+  elif ! cmp -s "$src" "$dst"; then
+    echo "RED-INTEGRITY: test tampered: $dst differs from the brief's $src" >&2
+    violations=$((violations + 1))
+  fi
+done < <(sed -n '/^RED-TESTS:/,/^$/p' "$brief" | sed -n '2,$p' | grep -v '^```')
+
+if [ "$entries" -eq 0 ]; then
+  echo "RED-INTEGRITY: no RED-TESTS entries in brief" >&2
+  exit 2
+fi
+
+if [ "$violations" -gt 0 ]; then
+  echo "RED-INTEGRITY: FAIL - $violations test file(s) deviate from the brief" >&2
+  exit 1
+fi
+
+echo "RED-INTEGRITY: OK - tests match the brief verbatim"
+exit 0

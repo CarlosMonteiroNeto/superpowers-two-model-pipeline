@@ -44,8 +44,9 @@ Subagent (general-purpose):
     1. Spec compliance: everything in the brief present; nothing extra;
        nothing misunderstood. A requirement not verifiable from this diff
        alone is a ⚠️ item, not an assumption.
-    2. RED test integrity: test files in the diff must match the brief's
-       tests. Any deviation is Critical - implementers may not touch tests.
+    2. RED test integrity: already gated by `scripts/red-integrity` before
+       you (byte-compare of committed tests against the brief's RED-TESTS);
+       deviations never reach you, do not re-derive this check.
     3. Code quality: clean separation, real error handling, no verbatim
        duplication, edge cases handled, follows existing patterns.
     4. Interface discipline: does the diff break or silently widen any

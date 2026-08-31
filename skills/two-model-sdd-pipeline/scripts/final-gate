@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Deterministic final-review readiness gate (pre-gate before the Controller's
+# holistic final review). Verdict is an exit code, never LLM judgment.
+#
+# Checks:
+#   1. Every task 1..TOTAL has a `task_complete` ledger entry.
+#   2. No task's LAST review_outcome is an unresolved SEND_BACK / ESCALATE.
+#   3. No task_complete carries a blocking parked finding (PARKED containing
+#      "Critical" or "Important").
+#   4. The test and analyze commands recorded in the `gate` ledger entry both
+#      succeed.
+#
+# Usage: final-gate WORKSPACE TOTAL_TASKS
+# Exit codes: 0 = mechanically ready, 1 = blocker(s) listed, 2 = usage /
+#             missing ledger / missing gate entry.
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+  echo "usage: final-gate WORKSPACE TOTAL_TASKS" >&2
+  exit 2
+fi
+
+ws=$1
+total=$2
+ledger="$ws/ledger.jsonl"
+
+[ -f "$ledger" ] || { echo "FINAL-GATE: no ledger: $ledger" >&2; exit 2; }
+
+gate_line=$(grep -E '"type": *"gate"' "$ledger" | head -1)
+if [ -z "$gate_line" ]; then
+  echo "FINAL-GATE: no gate entry in ledger" >&2
+  exit 2
+fi
+
+test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test": *"\([^"]*\)".*/\1/p')
+analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
+
+blockers=0
+emit() {
+  echo "FINAL-GATE: $1" >&2
+  blockers=$((blockers + 1))
+}
+
+for t in $(seq 1 "$total"); do
+  entries=$(grep -E '"task": *"'$t'"' "$ledger" || true)
+
+  complete=$(printf '%s' "$entries" | grep -cE '"type": *"task_complete"' || true)
+  if [ "$complete" -eq 0 ]; then
+    emit "task $t is not complete"
+  fi
+
+  last_review=$(printf '%s' "$entries" | grep -E '"type": *"review_outcome"' | tail -1 || true)
+  verdict=$(printf '%s' "$last_review" | sed -n 's/.*"summary": *"\([^"]*\)".*/\1/p')
+  case "$verdict" in
+    SEND_BACK|ESCALATE) emit "task $t last review unresolved: $verdict" ;;
+  esac
+
+  parked=$(printf '%s' "$entries" | grep -E '"type": *"task_complete"' | grep -i PARKED | grep -iE 'Critical|Important' || true)
+  if [ -n "$parked" ]; then
+    emit "task $t has blocking parked finding(s)"
+  fi
+done
+
+if [ -n "$test_cmd" ]; then
+  read -ra cmd <<< "$test_cmd"
+  if ! "${cmd[@]}" >/dev/null 2>&1; then
+    emit "test command failed: $test_cmd"
+  fi
+fi
+
+if [ -n "$analyze_cmd" ]; then
+  read -ra cmd <<< "$analyze_cmd"
+  if ! "${cmd[@]}" >/dev/null 2>&1; then
+    emit "analyze command failed: $analyze_cmd"
+  fi
+fi
+
+if [ "$blockers" -eq 0 ]; then
+  echo "FINAL-GATE: mechanically ready for holistic review"
+  exit 0
+fi
+
+echo "FINAL-GATE: $blockers blocker(s) - not ready" >&2
+exit 1

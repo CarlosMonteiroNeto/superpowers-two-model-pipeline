@@ -21,15 +21,19 @@ Subagent (general-purpose):
 
     Review findings that triggered escalation (if any): [FINDINGS]
 
-    ## First Decision: Keep or Discard
+    ## First Decision: Approach Soundness (mechanical fate is scripted)
 
-    Explicitly decide the fate of the partial work BEFORE implementing:
+    The Orchestrator already ran `scripts/keep-discard` - the mechanical
+    verdict (empty diff, out-of-scope files) is an exit code. You receive
+    that verdict and judge only what the script cannot: whether the
+    approach itself is sound.
     - KEEP: the approach is sound; build on it.
-    - DISCARD: revert to BASE and implement fresh.
+    - DISCARD: the approach is a dead end; revert to BASE and implement
+      fresh.
     State `DECISION: KEEP` or `DECISION: DISCARD` as the first line of your
-    report with a 1-2 sentence reason. Neither direction is automatic; a
-    wrong keep costs you debugging someone else's dead end, a wrong
-    discard costs working code. Judge by the brief and the failing output.
+    report with a 1-2 sentence reason. A wrong keep costs you debugging
+    someone else's dead end, a wrong discard costs working code. Judge by
+    the brief and the failing output.
 
     ## The Rules
 

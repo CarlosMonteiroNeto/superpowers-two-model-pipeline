@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Deterministic KEEP/DISCARD gate for escalated tasks.
+
+Decides the fate of the Coder's partial work with exit codes, reserving
+approach-soundness judgment for the Strategic Coder when the gate says KEEP.
+
+Mechanical DISCARD triggers (first match wins):
+  1. No partial work since HEAD (empty diff, nothing staged, no untracked).
+  2. Any changed file outside this task's `touches` (plan.json) - scope
+     violation; tampered test files are out of scope and thus discarded.
+
+Usage: keep-discard WORKSPACE TASK     (run from the repository root)
+Exit codes: 0 = KEEP, 1 = DISCARD, 2 = usage / missing artifacts.
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True).stdout
+
+
+def main():
+    if len(sys.argv) != 3:
+        print("usage: keep-discard WORKSPACE TASK", file=sys.stderr)
+        return 2
+    ws, task = sys.argv[1], sys.argv[2]
+    brief = os.path.join(ws, "task-{}-brief.md".format(task))
+    plan = os.path.join(ws, "plan.json")
+    if not os.path.isfile(brief):
+        print("KEEP-DISCARD: no brief at {}".format(brief), file=sys.stderr)
+        return 2
+    if not os.path.isfile(plan):
+        print("KEEP-DISCARD: no plan.json at {}".format(plan), file=sys.stderr)
+        return 2
+    if not git("rev-parse", "--is-inside-work-tree").strip() == "true":
+        print("KEEP-DISCARD: not a git work tree (run from the repo root)", file=sys.stderr)
+        return 2
+
+    with open(plan, "r", encoding="utf-8") as fh:
+        plan_data = json.load(fh)
+    touches = set()
+    for t in plan_data.get("tasks", []):
+        if str(t.get("id")) == str(task):
+            touches = set(t.get("touches", []))
+            break
+
+    changed = set()
+    changed |= set(git("diff", "--name-only", "HEAD").splitlines())
+    changed |= set(git("diff", "--cached", "--name-only").splitlines())
+    changed |= set(git("ls-files", "--others", "--exclude-standard").splitlines())
+    changed = {c for c in changed if c}
+
+    if not changed:
+        print("KEEP-DISCARD: DISCARD - no partial work since HEAD", file=sys.stderr)
+        return 1
+
+    out_of_scope = sorted(c for c in changed if c not in touches)
+    if out_of_scope:
+        print(
+            "KEEP-DISCARD: DISCARD - out of scope: {}".format(", ".join(out_of_scope)),
+            file=sys.stderr,
+        )
+        return 1
+
+    print("KEEP-DISCARD: KEEP - partial work is in scope")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

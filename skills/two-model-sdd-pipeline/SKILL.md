@@ -186,12 +186,12 @@ Entry types and when to append them:
 | `red_check` | RED tests materialized; expected FAIL confirmed |
 | `coder_round` | after each Coder round (STATUS=..., ROUND=n/N) |
 | `escalated` | Coder failed 2 rounds; Strategic Coder dispatched |
-| `keep_decision` | Strategic Coder kept or discarded partial work |
+| `keep_decision` | keep-discard gate verdict (KEEP / DISCARD) |
 | `review_outcome` | APPROVED / SEND_BACK / ESCALATE + finding count |
 | `commit` | Orchestrator committed the task (COMMITS=a7b..c9d) |
 | `task_complete` | task closed (verdict, parked findings if any) |
 | `arbitration` | Controller ruling on a deadlock or TEST_DEFECT |
-| `interface_change` | an interface other tasks consume changed |
+| `interface_change` | an interface other tasks consume changed (interface-check exit 1) |
 | `final_review` | verdict of the whole-branch review |
 
 Recovery rule: conversation memory does not survive compaction. After
@@ -296,10 +296,16 @@ For each task in order:
 
 4. **Wrap-up on success.** Run the full test suite and the analysis
    command. Both clean: commit the implementation (`Task N: <title>`),
-   ledger `commit`. Failing analysis is a finding for review, not a
-   silent fix — never repair code yourself.
+   ledger `commit`. Run `scripts/interface-check <workspace> TASK BASE`; on
+   exit 1 it prints the consumed file(s) and dependent task(s) — ledger
+   `interface_change` from the script output (the semantic "did it break the
+   contract" stays with the Reviewer). Failing analysis is a finding for
+   review, not a silent fix — never repair code yourself.
 
-5. **Review.** Build the review package
+5. **Review.** Run `scripts/red-integrity <workspace> TASK` first — the
+   committed tests must match the brief's RED-TESTS byte-for-byte; exit 1 is
+   test tampering, an automatic Critical finding (reject before review).
+   Then build the review package
    (`scripts/review-package <workspace> BASE HEAD` — record BASE before
    the task's first dispatch) and the interface context: the signatures and
    contracts this task's `touches` and `depends_on` declare or consume,
@@ -319,11 +325,15 @@ For each task in order:
    Minor findings are ledgered as deferred minors
    (`task_complete` PARKED=k/v notes); the final review triages them.
 
-7. **Escalation.** Dispatch the Strategic Coder (template:
+7. **Escalation.** Run `scripts/keep-discard <workspace> TASK` first — the
+   mechanical fate of the partial work is an exit code, not a judgment:
+   DISCARD (exit 1) → `git checkout BASE -- .` + clean untracked, start
+   fresh; KEEP (exit 0) → the Strategic Coder still judges approach
+   soundness explicitly. Ledger `keep_decision` from the gate. Then dispatch
+   the Strategic Coder (template:
    [strategic-coder-prompt.md](strategic-coder-prompt.md)) with the current
-   diff and the failing test output. It decides KEEP or DISCARD
-   explicitly, implements, and reports. Wrap-up, review, outcome as above.
-   Ledger: `escalated`, then `keep_decision`.
+   diff and the failing test output. It implements and reports. Wrap-up,
+   review, outcome as above.
    If the Strategic Coder also fails twice, or Reviewer and Strategic Coder
    cycle twice with no convergence: **deadlock** — dispatch the Controller
    for arbitration with the diff, failing tests, review findings, and the
@@ -342,19 +352,24 @@ change. Judgment-heavy work stays one-dispatch-per-task.
 | Holistic final review | Controller (stateless dispatch) | Curated, not raw |
 | Merge | Orchestrator | No — deterministic |
 
-1. Re-run the full suite and analysis on the finished branch. Fix nothing
+1. Run `scripts/final-gate <workspace> TOTAL_TASKS` — the mechanical
+   readiness verdict is an exit code: exit 0 (all tasks complete, no
+   unresolved SEND_BACK/ESCALATE, no blocking parked findings, tests +
+   analysis green) is required before the holistic review is dispatched;
+   exit 1 lists the blockers to resolve first.
+2. Re-run the full suite and analysis on the finished branch. Fix nothing
    yourself; findings go to the step below.
-2. Generate the whole-branch diff: `scripts/review-package <workspace>
+3. Generate the whole-branch diff: `scripts/review-package <workspace>
    MERGE_BASE HEAD` (`MERGE_BASE = git merge-base main HEAD`).
-3. Dispatch the Controller ([final-review-prompt.md](final-review-prompt.md))
+4. Dispatch the Controller ([final-review-prompt.md](final-review-prompt.md))
    with that package plus the full ledger — two curated artifacts, not the
    branch's conversation history. Point it at deferred-minor entries to
    triage what blocks merge.
-4. Findings become escalation-at-task-scope: one targeted Strategic Coder
+5. Findings become escalation-at-task-scope: one targeted Strategic Coder
    dispatch per coherent fix group, reviewed by a fresh Code Reviewer. Only
    the part the diff flags is reprocessed — never the whole branch. If the
    issue is structural, reopen the plan instead.
-5. Export every `Ruling`-bearing ledger line into your final message under
+6. Export every `Ruling`-bearing ledger line into your final message under
    "Rulings I made" — each with what it costs if wrong. A ruling that dies
    with the workspace was a decision made in secret.
 

@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Deterministic interface-change gate.
+
+Detects when a task's committed diff touches a file that a LATER task
+declares in its `touches` or `depends_on` (plan.json) - an interface another
+task consumes. The semantic "did it break the contract" question stays with
+the Reviewer; the mechanical "did it touch a consumed interface" is a script.
+
+Usage: interface-check WORKSPACE TASK [BASE]    (run from the repository root)
+  BASE defaults to HEAD~1.
+Exit codes: 0 = no consumed interface touched, 1 = interface change(s),
+            2 = usage / missing plan.
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True).stdout
+
+
+def main():
+    if len(sys.argv) not in (3, 4):
+        print("usage: interface-check WORKSPACE TASK [BASE]", file=sys.stderr)
+        return 2
+    ws, task = sys.argv[1], sys.argv[2]
+    base = sys.argv[3] if len(sys.argv) == 4 else "HEAD~1"
+    plan = os.path.join(ws, "plan.json")
+    if not os.path.isfile(plan):
+        print("INTERFACE-CHECK: no plan.json at {}".format(plan), file=sys.stderr)
+        return 2
+
+    with open(plan, "r", encoding="utf-8") as fh:
+        plan_data = json.load(fh)
+
+    changed = set(git("diff", "--name-only", base, "HEAD").splitlines())
+    changed = {c for c in changed if c}
+
+    consumed = {}
+    for t in plan_data.get("tasks", []):
+        if str(t.get("id")) == str(task):
+            continue
+        for f in t.get("touches", []) + t.get("depends_on", []):
+            consumed.setdefault(f, []).append(str(t["id"]))
+
+    hits = sorted(f for f in changed if f in consumed)
+    if hits:
+        for f in hits:
+            print(
+                "INTERFACE-CHANGE: {} consumed by task(s) {}".format(f, ",".join(consumed[f])),
+                file=sys.stderr,
+            )
+        return 1
+
+    print("INTERFACE-CHECK: no interface consumed by other tasks changed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
