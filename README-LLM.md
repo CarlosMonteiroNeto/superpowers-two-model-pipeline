@@ -191,17 +191,20 @@ The pipeline keeps itself in sync with its GitHub repository:
 
 - The OpenCode plugin loads from a vendored git checkout of the fork
   (`~/.config/opencode/vendor/superpowers`), decoupled from npm.
-- `check-superpowers` compares the local checkout SHA against `origin/main`
+- The self-update scripts live in the fork's `scripts/` dir and auto-detect
+  the checkout dir (or take it as the first argument): `check-superpowers`
+  compares the local checkout SHA against `origin/main`
   (exit 0 up to date, exit 1 behind, exit 2 not installed).
 - `sync-superpowers` fetches + resets to `origin/main`, then runs the pipeline
-  test suite; exit 1 if the new copy fails its tests.
+  test suite; exit 1 if the new copy fails its tests (refuses to reset over
+  uncommitted changes).
 - `install-superpowers` clones the fork fully when nothing is installed (exit 2
   = it refused to clobber a non-empty, non-repo path); it verifies with the
   pipeline test suite.
-- At session start the agent runs `check-superpowers`; if behind it runs
-  `sync-superpowers`, if not installed it runs `install-superpowers`, and in
-  either case asks the developer to restart OpenCode (skills load at session
-  start).
+- At session start the agent runs `scripts/check-superpowers`; if behind it
+  runs `scripts/sync-superpowers`, if not installed it runs
+  `scripts/install-superpowers`, and in either case asks the developer to
+  restart OpenCode (skills load at session start).
 - **End-of-session:** if a session changed the pipeline itself (scripts,
   skills, invariants, phases), update `README.txt` and `README-LLM.md` to
   reflect the changes and include them in the push. Do not churn docs when

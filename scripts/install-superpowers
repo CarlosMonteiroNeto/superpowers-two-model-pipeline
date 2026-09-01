@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# install-superpowers
+#
+# Full clone of the fork when nothing is installed, then verify with the
+# pipeline test suite. Deterministic install gate:
+#
+#   exit 0 = installed (fresh clone, or already present) and tests pass
+#   exit 1 = installed but the pipeline test suite failed
+#   exit 2 = refused to clobber a non-empty, non-repo path
+#   exit 2 = usage error
+#
+# Usage: install-superpowers [VENDOR_DIR]
+#   VENDOR_DIR defaults to ~/.config/opencode/vendor/superpowers.
+#   Set REPO_URL to override the clone URL (defaults to the fork on GitHub:
+#   https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git).
+#
+# A pre-existing path is only acceptable when it is already a git checkout of
+# this fork; anything else (non-empty, non-repo) is refused rather than
+# clobbered. After cloning it verifies with the same pipeline test suite that
+# sync-superpowers uses (every run-tests.sh under skills/*/tests/).
+
+set -euo pipefail
+
+VENDOR_DIR="${1:-${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}}"
+REPO_URL="${REPO_URL:-https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git}"
+
+if [[ -e "$VENDOR_DIR" ]]; then
+  if [[ -d "$VENDOR_DIR/.git" ]]; then
+    echo "INSTALL-SUPERPOWERS: checkout already present at $VENDOR_DIR"
+    echo "INSTALL-SUPERPOWERS: running check-superpowers to report freshness"
+    exec bash "$(dirname "$0")/check-superpowers" "$VENDOR_DIR"
+  fi
+  if [[ -n "$(ls -A "$VENDOR_DIR" 2>/dev/null)" ]]; then
+    echo "INSTALL-SUPERPOWERS: refusing to clobber non-empty, non-repo path: $VENDOR_DIR" >&2
+    exit 2
+  fi
+fi
+
+mkdir -p "$(dirname "$VENDOR_DIR")"
+echo "INSTALL-SUPERPOWERS: cloning $REPO_URL -> $VENDOR_DIR"
+if ! git clone "$REPO_URL" "$VENDOR_DIR"; then
+  echo "INSTALL-SUPERPOWERS: clone failed" >&2
+  exit 1
+fi
+
+# Verify with the same pipeline test suite as sync-superpowers.
+failed=0
+for runner in "$VENDOR_DIR"/skills/*/tests/run-tests.sh; do
+  [[ -x "$runner" ]] || continue
+  name="$(basename "$(dirname "$(dirname "$runner")")")"
+  echo "INSTALL-SUPERPOWERS: running $name test suite ($runner)"
+  if ! bash "$runner"; then
+    echo "INSTALL-SUPERPOWERS: $name tests FAILED" >&2
+    failed=1
+  fi
+done
+
+if [[ $failed -ne 0 ]]; then
+  echo "INSTALL-SUPERPOWERS: installed but the pipeline test suite failed" >&2
+  exit 1
+fi
+
+echo "INSTALL-SUPERPOWERS: installed and verified at $VENDOR_DIR"
+exit 0

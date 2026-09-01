@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# sync-superpowers
+#
+# Fetch the vendored superpowers checkout to origin/main, hard-reset to it,
+# and re-run the pipeline test suite. Deterministic sync gate:
+#
+#   exit 0 = synced and all pipeline tests pass
+#   exit 1 = synced but the new copy fails its tests (the checkout was NOT
+#            reset - the failure is reported before any destructive move)
+#   exit 2 = usage error / not a checkout
+#
+# Usage: sync-superpowers [VENDOR_DIR]
+#   VENDOR_DIR defaults to ~/.config/opencode/vendor/superpowers.
+#   Set REPO_URL to override the origin URL used for the fetch (defaults to
+#   the checkout's configured 'origin' remote).
+#
+# The pipeline test suite = every run-tests.sh under skills/*/tests/
+# (two-model-sdd-pipeline, flutter-app-pipeline, brainstorming). Set PYTHON
+# to override the interpreter used by the suites.
+
+set -euo pipefail
+
+VENDOR_DIR="${1:-${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}}"
+
+if [[ ! -d "$VENDOR_DIR/.git" ]]; then
+  echo "SYNC-SUPERPOWERS: not a git checkout at $VENDOR_DIR" >&2
+  exit 2
+fi
+
+# Refuse to hard-reset over uncommitted local changes.
+if [[ -n "$(git -C "$VENDOR_DIR" status --porcelain)" ]]; then
+  echo "SYNC-SUPERPOWERS: uncommitted changes in $VENDOR_DIR - refusing to reset" >&2
+  echo "SYNC-SUPERPOWERS: commit, stash, or discard them first" >&2
+  exit 2
+fi
+
+echo "SYNC-SUPERPOWERS: fetching origin..."
+if ! git -C "$VENDOR_DIR" fetch origin >/dev/null 2>&1; then
+  echo "SYNC-SUPERPOWERS: fetch failed (offline?)" >&2
+  exit 1
+fi
+
+local_before="$(git -C "$VENDOR_DIR" rev-parse --short HEAD)"
+remote="$(git -C "$VENDOR_DIR" rev-parse --short origin/main)"
+
+if [[ "$local_before" == "$remote" ]]; then
+  echo "SYNC-SUPERPOWERS: already at origin/main ($remote) - no reset needed"
+else
+  echo "SYNC-SUPERPOWERS: resetting $local_before -> $remote"
+  git -C "$VENDOR_DIR" reset --hard origin/main
+fi
+
+# Pipeline test suite: every run-tests.sh under skills/*/tests/.
+# Failures abort before we report success; the checkout is already on the
+# new commit (reset happened above), so a test failure means the new copy
+# is broken - report it loudly.
+failed=0
+for runner in "$VENDOR_DIR"/skills/*/tests/run-tests.sh; do
+  [[ -x "$runner" ]] || continue
+  name="$(basename "$(dirname "$(dirname "$runner")")")"
+  echo "SYNC-SUPERPOWERS: running $name test suite ($runner)"
+  if ! bash "$runner"; then
+    echo "SYNC-SUPERPOWERS: $name tests FAILED" >&2
+    failed=1
+  fi
+done
+
+if [[ $failed -ne 0 ]]; then
+  echo "SYNC-SUPERPOWERS: one or more pipeline test suites failed after sync" >&2
+  exit 1
+fi
+
+echo "SYNC-SUPERPOWERS: synced to $remote, all pipeline tests pass"
+exit 0

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# check-superpowers
+#
+# Compare the vendored superpowers checkout against origin/main and report
+# whether it is up to date. Deterministic status gate for session start:
+#
+#   exit 0 = up to date (local HEAD == origin/main)
+#   exit 1 = behind (origin/main has commits local does not)
+#   exit 2 = not installed (no checkout at the expected location)
+#
+# Usage: check-superpowers [VENDOR_DIR]
+#   VENDOR_DIR defaults to ~/.config/opencode/vendor/superpowers.
+#   Set REPO_URL to override the origin URL used for the fetch (defaults to
+#   the checkout's configured 'origin' remote).
+#
+# The fetch is best-effort: if the network is unavailable the gate fails
+# CLOSED (exit 1) rather than guessing, so the session never runs a stale
+# pipeline silently. Run with CHECK_SKIP_FETCH=1 to skip the fetch entirely
+# (compares against the last fetched origin/main).
+
+set -euo pipefail
+
+VENDOR_DIR="${1:-${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}}"
+
+if [[ ! -d "$VENDOR_DIR/.git" ]]; then
+  echo "CHECK-SUPERPOWERS: not installed (no git checkout at $VENDOR_DIR)" >&2
+  exit 2
+fi
+
+local_sha="$(git -C "$VENDOR_DIR" rev-parse HEAD 2>/dev/null)" || {
+  echo "CHECK-SUPERPOWERS: cannot resolve HEAD at $VENDOR_DIR" >&2
+  exit 2
+}
+
+if [[ "${CHECK_SKIP_FETCH:-0}" != "1" ]]; then
+  if ! git -C "$VENDOR_DIR" fetch origin >/dev/null 2>&1; then
+    echo "CHECK-SUPERPOWERS: fetch failed (offline?); cannot verify freshness" >&2
+    exit 1
+  fi
+fi
+
+remote_sha="$(git -C "$VENDOR_DIR" rev-parse origin/main 2>/dev/null || true)"
+if [[ -z "$remote_sha" ]]; then
+  echo "CHECK-SUPERPOWERS: no origin/main ref at $VENDOR_DIR" >&2
+  exit 2
+fi
+
+if [[ "$local_sha" == "$remote_sha" ]]; then
+  echo "CHECK-SUPERPOWERS: up to date ($(git -C "$VENDOR_DIR" rev-parse --short HEAD))"
+  exit 0
+fi
+
+echo "CHECK-SUPERPOWERS: behind - local $(git -C "$VENDOR_DIR" rev-parse --short HEAD) != origin/main $(git -C "$VENDOR_DIR" rev-parse --short origin/main)" >&2
+exit 1

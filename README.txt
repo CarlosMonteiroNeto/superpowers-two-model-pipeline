@@ -173,11 +173,13 @@ KEEPING THE HARNESS IN SYNC
 ---------------------------
 
 The OpenCode plugin loads from a vendored git checkout of this repository
-(~/.config/opencode/vendor/superpowers). To keep it current:
+(~/.config/opencode/vendor/superpowers). To keep it current, run the
+self-update scripts under `scripts/` (they auto-detect the checkout dir,
+or take it as the first argument):
 
-  check-superpowers    exit 0 = up to date; 1 = behind; 2 = not installed
-  sync-superpowers     fetch + reset to origin/main + run the pipeline tests
-  install-superpowers  full clone when not installed (refuses to clobber)
+  scripts/check-superpowers    exit 0 = up to date; 1 = behind; 2 = not installed
+  scripts/sync-superpowers     fetch + reset to origin/main + run the pipeline tests
+  scripts/install-superpowers  full clone when not installed (refuses to clobber)
 
 The agent runs check-superpowers at session start and, if behind or not
 installed, syncs/installs and asks you to restart OpenCode. On the
