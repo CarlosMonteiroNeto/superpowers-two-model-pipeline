@@ -74,10 +74,19 @@ Subagent (general-purpose):
       Exact Values section as a binding contract.
     - **Query the project graph for structure and interfaces first.** When
       a Graphify graph exists (project root `graphify-out/graph.json` or
-      the workspace's graph output), run `graphify explain "Node"` /
-      `graphify path "A" "B"` to discover the signatures and dependencies
+      the workspace's graph output), run the graphify query commands through
+      the pipeline runner: `scripts/cmd --full-file
+      <workspace>/task-N-graphify.txt -- graphify explain "Node"` /
+      `scripts/cmd --full-file <workspace>/task-N-graphify.txt --
+      graphify path "A" "B"` to discover the signatures and dependencies
       the task touches before writing the brief. Never read whole files to
       find a signature; read only the file(s) the graph points you to.
+      **If no graph exists, or it is stale** (older than the last commit
+      whose code you need), rebuild it first with `scripts/cmd --full-file
+      <workspace>/task-N-graphify.txt -- graphify update <project_root>`
+      (best-effort, no LLM API key for code) and then query. Graphify is a
+      Controller-side optimization only - if it is unavailable, write the
+      brief from the interfaces you are given and the files the plan names.
 
     Return ONLY the brief markdown, no preamble, no closing commentary.
 ```

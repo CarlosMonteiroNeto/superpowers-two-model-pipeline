@@ -94,6 +94,7 @@ exit "${STUB_GRAPHIFY_EXIT:-0}"
             "DART_BIN": self.dart,
             "GRAPHIFY_BIN": self.graphify,
             "GIT_BIN": shutil.which("git") or "git",
+            "RTK_ENABLED": "0",
         }
 
     def tearDown(self):
@@ -186,9 +187,11 @@ class TestGreenGate(GateTestBase):
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self._log(repo), before)
 
-    def test_chains_graphify_regen_after_commit(self):
-        """After a green commit, the project graph is rebuilt before the next
-        LLM (Reviewer / next task) reads the code."""
+    def test_does_not_chain_graphify_after_commit(self):
+        """green-gate no longer rebuilds the project graph: the Reviewer reads
+        the review package (diff), not the graph, and graphify is a
+        Controller-side lazy optimization at brief time. The gate must stay
+        fast and deterministic with no graphify side effect."""
         repo = self._git_repo()
         (repo / "lib" / "app.dart").write_text("void main() { print('chained'); }\n", encoding="utf-8")
         log = pathlib.Path(self._tmp) / "g.log"
@@ -198,8 +201,8 @@ class TestGreenGate(GateTestBase):
             env_extra={**self.env, "STUB_LOG": str(log)},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
+        calls = log.read_text(encoding="utf-8") if log.exists() else ""
+        self.assertEqual(calls, "", f"green-gate must not invoke graphify, got: {calls}")
 
     def test_no_commit_does_not_chain_graphify(self):
         """--no-commit (Phase 4 revalidation) changes nothing, so it must not
@@ -214,19 +217,6 @@ class TestGreenGate(GateTestBase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8") if log.exists() else ""
         self.assertEqual(calls, "")
-
-    def test_graphify_failure_is_non_fatal(self):
-        """A graphify failure must never fail a green gate: tests+analyze are
-        the verdict; the graph rebuild is best-effort."""
-        repo = self._git_repo()
-        (repo / "lib" / "app.dart").write_text("void main() { print('nonfatal'); }\n", encoding="utf-8")
-        r = run_script(
-            "green-gate", ["-m", "Task 1: nonfatal"],
-            cwd=repo,
-            env_extra={**self.env, "STUB_GRAPHIFY_EXIT": "1", "STUB_LOG": str(pathlib.Path(self._tmp) / "g.log")},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("Task 1: nonfatal", self._log(repo))
 
 
 class TestRedGate(GateTestBase):
@@ -311,9 +301,10 @@ class TestRedGate(GateTestBase):
         r = run_script("red-gate", [str(self.ws), "99"], cwd=self.ws, env_extra=self.env)
         self.assertEqual(r.returncode, 2)
 
-    def test_chains_graphify_regen_after_red_verified(self):
-        """After RED is verified, the graph is rebuilt so the Coder (LLM)
-        reads the freshly materialized test files through the graph."""
+    def test_does_not_chain_graphify_after_red_verified(self):
+        """red-gate no longer rebuilds the project graph: the Coder reads the
+        brief and the materialized tests, not the graph; graphify is a
+        Controller-side lazy optimization at brief time."""
         brief = self._brief()
         brief.write_text(self._brief_text(), encoding="utf-8")
         log = pathlib.Path(self._tmp) / "g.log"
@@ -325,23 +316,8 @@ class TestRedGate(GateTestBase):
                        "STUB_LOG": str(log)},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
-
-    def test_red_gate_respects_graphify_enabled(self):
-        brief = self._brief()
-        brief.write_text(self._brief_text(), encoding="utf-8")
-        log = pathlib.Path(self._tmp) / "g.log"
-        r = run_script(
-            "red-gate", [str(self.ws), "3"],
-            cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1",
-                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist",
-                       "STUB_LOG": str(log), "GRAPHIFY_ENABLED": "0"},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8") if log.exists() else ""
-        self.assertEqual(calls, "")
+        self.assertEqual(calls, "", f"red-gate must not invoke graphify, got: {calls}")
 
 
 class TestPubSync(GateTestBase):

@@ -1,6 +1,6 @@
 ---
 name: two-model-sdd-pipeline
-description: Use instead of subagent-driven-development when the human partner opts into a deterministic two-tier pipeline - an expensive Strategic model handles reasoning (plan, briefs, reviews) while a cheap Operational model writes code, every LLM call is stateless, and a script maintains the ledger. Ask about tiers before brainstorming starts.
+description: Use instead of subagent-driven-development when the human partner opts into a deterministic two-tier pipeline - an expensive Strategic model handles reasoning (plan, briefs, reviews) while a cheap Operational model writes code, every LLM call is stateless, a script maintains the ledger, and every command line runs through the scripts/cmd runner (RTK-compressed LLM-facing output, full output to files). Ask about tiers before brainstorming starts.
 ---
 
 # Two-Model SDD Pipeline (Hybrid Orchestrated Architecture)
@@ -13,7 +13,8 @@ continuous session across the branch.
 **Layering:** this is the generic orchestration engine. Flutter/Dart projects
 use `flutter-app-pipeline` on top of it — that skill adds the package research
 and Quality Score phase, the deterministic Flutter scripts, and the
-Graphify-before-LLM rule, and delegates the per-task loop back to this skill.
+RTK-compression + Graphify-before-LLM ordering rules, and delegates the
+per-task loop back to this skill.
 
 **Why this exists:** native SDD keeps one controller conversation alive for
 the whole branch and lets each implementer resume itself mid-loop. That
@@ -66,8 +67,9 @@ depends on them, and they must survive compaction.
   `scripts/ledger-append` at the moment it happens. There is no separate
   "compress now" step — stateless dispatches plus the ledger make the branch
   safe under harness auto-compaction at any point.
-- After compaction, re-read the ledger and `git log`; resume at the first
-  task without a `task_complete` line, routing via `route-next`.
+- After compaction, re-read the ledger and `scripts/cmd --full-file
+  <workspace>/recovery-log.txt -- git log --oneline -20`; resume at the
+  first task without a `task_complete` line, routing via `route-next`.
 
 ## Core Principles
 
@@ -84,6 +86,10 @@ depends on them, and they must survive compaction.
 - **Git + plan + ledger as source of truth:** continuity comes from the
   JSON plan, git history, and the script-maintained ledger — not from any
   LLM's memory.
+- **Commands are scripted and compressed:** every LLM-invoked command line
+  runs through `scripts/cmd` (full output to a workspace file, RTK-compressed
+  stdout), so raw command output never enters an LLM context window. LLMs
+  never run bare commands.
 
 ## Tier Assignment
 
@@ -108,8 +114,14 @@ usually the expensive one — silently defeating the pipeline.
 - Iterates the task plan, dispatching each role with curated context.
 - Materializes the Controller's RED tests verbatim into the working tree and
   verifies they fail before any Coder round.
-- Runs the test suite and the analysis command recorded at the gate; reports
+- Runs the test suite and the analysis command recorded at the gate **via
+  `scripts/run-gates`** (which chains them through `scripts/cmd`); reports
   pass/fail back to whichever role needs it.
+- Runs every command line through `scripts/cmd` — the pipeline's generic
+  runner — so no raw command output reaches an LLM context window
+  uncompressed. Full output is always saved to workspace files (gates,
+  escalation packages and round-2 context read those); the LLM sees the
+  RTK-compressed view.
 - Tracks retry loops; triggers escalation after 2 failed Coder rounds.
 - Performs all commits and the final merge. Workers never commit.
 - Appends every decision to the ledger **via `scripts/ledger-append`** — the
@@ -202,8 +214,8 @@ Entry types and when to append them:
 | `final_review` | verdict of the whole-branch review |
 
 Recovery rule: conversation memory does not survive compaction. After
-compaction, trust the ledger and `git log` over your recollection. Resume
-at the first task without a `task_complete` line.
+compaction, trust the ledger and `git log` (read via `scripts/cmd`) over
+your recollection. Resume at the first task without a `task_complete` line.
 
 ## Pipeline Flow
 
@@ -286,7 +298,8 @@ For each task in order:
    code. Ledger: `brief_ready`.
 
 2. **RED check.** Materialize the brief's test files verbatim into the
-   working tree, run the test command, and confirm the new tests FAIL for
+   working tree, run the test command **via `scripts/cmd`** (full output to
+   `<workspace>/task-N-red-out.txt`), and confirm the new tests FAIL for
    the expected reason. A RED test that passes before implementation means
    the brief is defective — back to the Controller, ledger `arbitration`.
    Commit the RED tests separately (`test:` prefix). Ledger: `red_check`.
@@ -303,9 +316,11 @@ For each task in order:
    Coder attempt is forbidden; escalation is the answer, not persistence.
    Ledger: `coder_round` each.
 
-4. **Wrap-up on success.** Run the full test suite and the analysis
-   command. Both clean: commit the implementation (`Task N: <title>`),
-   ledger `commit`. Run `scripts/interface-check <workspace> TASK BASE`; on
+4. **Wrap-up on success.** Run `scripts/run-gates <workspace> "<test_cmd>"
+   "<analyze_cmd>"` (full suite + analysis through `scripts/cmd`, full
+   reports to `<workspace>/run-gates-*.txt`). Both clean: commit the
+   implementation (`Task N: <title>`), ledger `commit`. Run
+   `scripts/interface-check <workspace> TASK BASE`; on
    exit 1 it prints the consumed file(s) and dependent task(s) — ledger
    `interface_change` from the script output (the semantic "did it break the
    contract" stays with the Reviewer). Failing analysis is a finding for
@@ -336,9 +351,11 @@ For each task in order:
 
 7. **Escalation.** Run `scripts/keep-discard <workspace> TASK` first — the
    mechanical fate of the partial work is an exit code, not a judgment:
-   DISCARD (exit 1) → `git checkout BASE -- .` + clean untracked, start
-   fresh; KEEP (exit 0) → the Strategic Coder still judges approach
-   soundness explicitly. Ledger `keep_decision` from the gate. Then dispatch
+   DISCARD (exit 1) → `scripts/cmd --full-file
+   <workspace>/task-N-discard.txt -- git checkout BASE -- .` + clean
+   untracked, start fresh; KEEP (exit 0) → the Strategic Coder still judges
+   approach soundness explicitly. Ledger `keep_decision` from the gate.
+   Then dispatch
    the Strategic Coder (template:
    [strategic-coder-prompt.md](strategic-coder-prompt.md)) with the current
    diff and the failing test output. It implements and reports. Wrap-up,
@@ -366,10 +383,11 @@ change. Judgment-heavy work stays one-dispatch-per-task.
    unresolved SEND_BACK/ESCALATE, no blocking parked findings, tests +
    analysis green) is required before the holistic review is dispatched;
    exit 1 lists the blockers to resolve first.
-2. Re-run the full suite and analysis on the finished branch. Fix nothing
-   yourself; findings go to the step below.
+2. Re-run `scripts/run-gates <workspace> "<test_cmd>" "<analyze_cmd>"` on
+   the finished branch. Fix nothing yourself; findings go to the step below.
 3. Generate the whole-branch diff: `scripts/review-package <workspace>
-   MERGE_BASE HEAD` (`MERGE_BASE = git merge-base main HEAD`).
+   MERGE_BASE HEAD` (`MERGE_BASE` from `scripts/cmd --full-file
+   <workspace>/merge-base.txt -- git merge-base main HEAD`).
 4. Dispatch the Controller ([final-review-prompt.md](final-review-prompt.md))
    with that package plus the full ledger — two curated artifacts, not the
    branch's conversation history. Point it at deferred-minor entries to
@@ -406,6 +424,20 @@ Orchestrator's — deterministic, no dispatch.
   accumulated history.
 - Hand artifacts over as file paths, never pasted content — pasted content
   sits in your context forever.
+- **Every command line is scripted and RTK-compressed:** run all LLM-invoked
+  commands (test runs, analysis, git ops, graphify queries) through
+  `scripts/cmd --full-file <file> -- <cmd>` — it saves the FULL output to the
+  file and prints the RTK-compressed view on stdout. Nothing a gate depends
+  on (red-gate `EXPECTED-RED`, escalation packages, `red-integrity`
+  byte-compare) is ever compressed; only what an LLM sees on stdout is.
+  `RTK_ENABLED=0` disables compression (passthrough); `RTK_BIN` overrides
+  the binary. If RTK has no filter for a command, `cmd` passes the full
+  output through — nothing is lost.
+- **Graphify is Controller-side and lazy:** the Controller queries the graph
+  (`graphify explain` / `graphify path`) when writing briefs and rebuilds it
+  only when stale. It is no longer chained into `red-gate`/`green-gate` —
+  those gates never read the graph. RTK covers the context-compression job
+  the eager chains used to aim at.
 
 ## Language Policy
 
@@ -450,10 +482,10 @@ You: [worktree verified] [scripts/pipeline-workspace plan.md -> .superpowers/two
 Task 1: Invoice model and serialization
 
 [Controller JIT dispatch -> task-1-brief.md with RED test]
-[Materialize test; flutter test -> fails: Invoice class missing]
+[scripts/cmd --full-file .../task-1-red-out.txt -- flutter test -> fails: Invoice class missing]
 [scripts/ledger-append ... red_check 1 "expected FAIL confirmed"]
 [Coder round 1 (haiku) -> report: DONE, 3 files]
-[flutter test: 12 passing incl. new RED tests; flutter analyze clean]
+[scripts/run-gates .../ "flutter test" "flutter analyze" -> green]
 [git commit -m "Task 1: invoice model and serialization"; ledger commit]
 [scripts/review-package .../ BASE HEAD -> task-1.diff]
 [Reviewer dispatch (opus, fresh) -> APPROVED]

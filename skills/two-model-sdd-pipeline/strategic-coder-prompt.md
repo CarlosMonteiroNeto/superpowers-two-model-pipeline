@@ -41,8 +41,12 @@ Subagent (general-purpose):
        defective, do not touch it: reply TEST_DEFECT with your reasoning;
        the Controller arbitrates and reissues the brief.
     2. Implement exactly what the brief specifies; nothing extra (YAGNI).
-    3. Run focused covering tests while iterating ([TEST_COMMAND]); the
-       FULL suite ([FULL_TEST_COMMAND]) once before reporting.
+    3. Run commands ONLY through the pipeline runner: `scripts/cmd
+       --full-file <ws>/task-N-strategic-test-out.txt -- [TEST_COMMAND]`.
+       It saves the FULL output to the file (escalation context) and prints
+       a compressed view you act on. Use it for focused covering tests
+       while iterating and the FULL suite ([FULL_TEST_COMMAND]) once before
+       reporting. Never invoke a test command bare.
     4. Do not commit. Do not spawn subagents. Do not touch git state.
     5. English for comments/identifiers; UI copy keeps the product locale.
 
@@ -70,10 +74,12 @@ Subagent (general-purpose):
 - `[FAILING_OUTPUT_FILE]` - latest failing run's captured output
 - `[FINDINGS]` - reviewer findings when escalation came from review;
   omit the section when it came from coder rounds
-- `[TEST_COMMAND]` / `[FULL_TEST_COMMAND]` - recorded at the gate
+- `[TEST_COMMAND]` / `[FULL_TEST_COMMAND]` - recorded at the gate; the
+  runner (`scripts/cmd`) wraps them
 - `[REPORT_FILE]` - `<workspace>/task-N-strategic-report.md`
 
 **Orchestrator after the dispatch:** ledger `keep_decision` from the
-DECISION line. If DISCARD: `git checkout BASE -- .` then apply nothing
-else - the strategic coder's fresh work arrives as its own changes.
+DECISION line. If DISCARD: `scripts/cmd --full-file
+<workspace>/task-N-discard.txt -- git checkout BASE -- .` then apply
+nothing else - the strategic coder's fresh work arrives as its own changes.
 Wrap-up and review proceed exactly as for any Coder task.

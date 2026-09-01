@@ -38,9 +38,13 @@ Subagent (general-purpose):
        ground truth.
     2. Implement exactly what the brief specifies. Nothing extra - no
        unrequested helpers, no speculative generality (YAGNI).
-    3. Run the focused covering tests while iterating
-       ([TEST_COMMAND]); run the FULL suite ([FULL_TEST_COMMAND])
-       once before reporting.
+    3. Run commands ONLY through the pipeline runner: `scripts/cmd
+       --full-file <ws>/task-N-test-out.txt -- [TEST_COMMAND]`. It runs
+       the command, saves the FULL output to the file (your round-2 /
+       escalation context), and prints a compressed view you act on. Use
+       it for the focused covering tests while iterating and for the FULL
+       suite ([FULL_TEST_COMMAND]) once before reporting. Never invoke a
+       test command bare - the raw output would pollute the context.
     4. Do not commit. Do not touch git state. The Orchestrator commits.
     5. Do not spawn subagents. Do all work yourself.
     6. English for all comments and identifiers; UI copy keeps the
@@ -74,9 +78,11 @@ Subagent (general-purpose):
 - `[BRIEF_FILE]` - `<workspace>/task-N-brief.md`
 - `[PRIOR_DIFF_FILE]` / `[FAILING_OUTPUT_FILE]` - round 2 only; omit both
   sections on round 1
-- `[TEST_COMMAND]` / `[FULL_TEST_COMMAND]` - recorded at the gate
+- `[TEST_COMMAND]` / `[FULL_TEST_COMMAND]` - recorded at the gate; the
+  runner (`scripts/cmd`) wraps them
 - `[REPORT_FILE]` - `<workspace>/task-N-report.md`
 
-**Orchestrator after the dispatch:** capture the diff (`git diff` to a
-file) and failing-test output BEFORE any retry; they are round 2's curated
-context and the escalation package. Two red rounds = escalate.
+**Orchestrator after the dispatch:** capture the diff via `scripts/cmd
+--full-file <ws>/task-N-diff.txt -- git diff` and the failing-test output
+(from `<ws>/task-N-test-out.txt`) BEFORE any retry; they are round 2's
+curated context and the escalation package. Two red rounds = escalate.

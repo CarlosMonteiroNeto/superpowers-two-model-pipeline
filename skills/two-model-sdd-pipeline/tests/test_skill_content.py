@@ -39,6 +39,34 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("resume", prompt.lower())
         self.assertNotIn("never resume", prompt.lower())
 
+    def test_cmd_runner_documented(self):
+        """Every LLM-invoked command runs through scripts/cmd: full output to
+        a file, RTK-compressed stdout, RTK_ENABLED/RTK_BIN envs."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("scripts/cmd", text)
+        self.assertIn("RTK_ENABLED", text)
+        self.assertIn("RTK_BIN", text)
+
+    def test_run_gates_documented(self):
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("run-gates", text)
+
+    def test_coder_prompt_routes_commands_through_cmd(self):
+        prompt = (self.dir / "coder-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("scripts/cmd", prompt)
+        self.assertIn("--full-file", prompt)
+
+    def test_strategic_coder_prompt_routes_commands_through_cmd(self):
+        prompt = (self.dir / "strategic-coder-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("scripts/cmd", prompt)
+        self.assertIn("--full-file", prompt)
+
+    def test_graphify_is_controller_side_lazy(self):
+        """Graphify is a Controller-side lazy optimization: the skill must say
+        it is no longer chained into red-gate/green-gate."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("Controller-side and lazy", text)
+
 
 if __name__ == "__main__":
     unittest.main()

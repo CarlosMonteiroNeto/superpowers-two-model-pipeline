@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Deterministic green approval for the generic engine: run the gate-recorded
+# test and analyze commands, verdict = exit code. Language-agnostic mirror of
+# the Flutter green-gate: it chains the full suite + analysis through
+# scripts/cmd (full reports to files, RTK-compressed LLM-facing stdout) and
+# never commits - the Orchestrator commits. It does not run a format gate;
+# Flutter keeps green-gate for that.
+#
+# Usage: run-gates WORKSPACE TEST_CMD ANALYZE_CMD
+#   WORKSPACE  the pipeline workspace (for report file locations)
+#   TEST_CMD   the test command recorded at the gate (one quoted string)
+#   ANALYZE_CMD the analysis command recorded at the gate (one quoted string)
+#
+# Exit codes: 0 = green, 1 = tests failed, 2 = analysis failed,
+#             3 = usage error.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+if [ $# -ne 3 ]; then
+  echo "usage: run-gates WORKSPACE TEST_CMD ANALYZE_CMD" >&2
+  exit 3
+fi
+
+ws=$1
+test_cmd=$2
+analyze_cmd=$3
+
+mkdir -p "$ws"
+
+# 1. full test suite (full report saved; exit code is the verdict).
+if ! "$SCRIPT_DIR/cmd" --full-file "$ws/run-gates-test.txt" -- $test_cmd; then
+  echo "RUN-GATES: tests FAILED (see $ws/run-gates-test.txt)" >&2
+  exit 1
+fi
+
+# 2. static analysis (full report saved; exit code is the verdict).
+if ! "$SCRIPT_DIR/cmd" --full-file "$ws/run-gates-analyze.txt" -- $analyze_cmd; then
+  echo "RUN-GATES: analysis found issues (see $ws/run-gates-analyze.txt)" >&2
+  exit 2
+fi
+
+echo "RUN-GATES: all gates passed"
+exit 0

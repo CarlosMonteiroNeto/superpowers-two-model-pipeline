@@ -27,27 +27,53 @@ WHAT THIS FORK ADDS
 3. flutter-app-pipeline (new skill, layered on top)
    A Flutter/Dart specialization that adds package research with a
    corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts,
-   and the Graphify-before-LLM ordering rule. It delegates the per-task
-   implementation loop back to two-model-sdd-pipeline.
+   and the RTK-compression + Graphify-before-LLM ordering rules. It
+   delegates the per-task implementation loop back to two-model-sdd-pipeline.
 
 PRINCIPLES
 ----------
 
 - LLMs reason; scripts decide. Mechanical steps (download, dependency
-  resolution, test execution, lint, commit, graph rebuild, task routing)
-  are chained into deterministic scripts whose verdict is an exit code or
-  a stdout action line.
+  resolution, test execution, lint, commit, task routing) are chained into
+  deterministic scripts whose verdict is an exit code or a stdout action
+  line.
+- Every command line is scripted and RTK-compressed. All LLM-invoked
+  commands run through scripts/cmd: full output is saved to a workspace
+  file (gates and escalation read the file) and the LLM sees the
+  RTK-compressed view on stdout. Raw command output never enters an LLM
+  context window.
 - Cache-aware LLM calls with curated context; same-tier, same-task
   resume is allowed (prefix-cached); fresh dispatch when role or task
   changes. The ledger + git are the source of truth.
-- Graphify-before-LLM: newly downloaded or changed code is indexed into a
-  knowledge graph before any LLM reads it, minimizing token consumption.
+- Graphify-before-LLM (Controller-side, lazy): the Controller queries the
+  code knowledge graph (graphify explain / path) when writing briefs and
+  rebuilds it only when stale. It is no longer chained into the gates.
 - No approval after decisions: approval happens at the gate (once per
   branch) and at solution selection; from Phase 2c onward the branch runs
   to completion without check-ins. The ledger is the compaction-safe state
   checkpoint.
 - All responses and internal artifacts are in English; only the software
   UI uses the developer's language.
+
+TOOLS (one-time setup)
+----------------------
+
+- RTK (Rust Token Killer): CLI proxy that compresses command output before
+  it reaches the LLM context. Install and enable the OpenCode plugin:
+
+      winget install --id rtk-ai.rtk
+      rtk init -g --opencode     # installs ~/.config/opencode/plugins/rtk.ts
+      # restart OpenCode; verify: rtk --version && rtk gain
+
+- Graphify (graphifyy): on-device code knowledge graph for the Controller's
+  structure queries. Python 3.10+ required:
+
+      python -m pip install graphifyy
+      graphify --version
+
+  Graphify is optional (best-effort); RTK_ENABLED=0 disables compression
+  and GRAPHIFY_ENABLED=0 disables graphify chains. RTK_BIN / GRAPHIFY_BIN
+  override the binaries.
 
 INSTALL (OpenCode)
 ------------------
@@ -103,6 +129,10 @@ skills/flutter-app-pipeline/scripts/:
 skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace
   ledger-append        append one structured JSONL ledger entry
+  cmd                  generic command runner: saves FULL output to a file,
+                       prints the RTK-compressed view on stdout, returns the
+                       command's true exit code (RTK_ENABLED=0 / RTK_BIN)
+  run-gates            generic green approval: full suite + analysis via cmd
   review-package       build a review bundle (commits + diff)
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / ESCALATE /
@@ -122,11 +152,18 @@ skills/brainstorming/scripts/:
                        README-LLM.md (the agent-facing harness reference)
                        before work starts (exit 0 printed; 1 missing; 2 usage)
 
-Graphify is chained automatically into the gates at the script->LLM
-boundaries: pub-sync indexes each newly added package, red-gate rebuilds
-the project graph after RED is verified, green-gate rebuilds it after a
-commit. The chains are best-effort (a graphify failure never fails a gate)
-and can be disabled with GRAPHIFY_ENABLED=0.
+Every LLM-invoked command line runs through scripts/cmd, so no raw command
+output ever enters an LLM context window. Deterministic gates keep reading
+full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
+escalation packages, red-integrity byte-compare) is ever compressed.
+
+Graphify is Controller-side and lazy: pub-sync still indexes each newly
+added package (a Controller feed) and the Controller queries the graph
+(graphify explain / path) at brief time, rebuilding only when stale. The
+eager graphify chains in red-gate and green-gate are gone - those gates
+never read the graph, and RTK now covers the context-compression job they
+used to aim at. All graphify invocations are best-effort (a failure never
+fails a gate) and can be disabled with GRAPHIFY_ENABLED=0.
 
 Routing is scripted too: after every ledgered outcome the Orchestrator
 runs `route-next` and executes the action it emits - the LLM never decides

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Deterministic command runner with RTK-compressed LLM-facing stdout.
+#
+# Runs a command, writes its FULL output to --full-file (gates, escalation
+# packages and round-2 context read the file - never the compressed view),
+# prints the RTK-compressed output to stdout (what an LLM sees), and returns
+# the command's TRUE exit code (RTK never decides a verdict).
+#
+# This is the generic wrapper the pipeline uses for every LLM-invoked
+# command line, so no raw command output ever reaches an LLM context window
+# uncompressed. Deterministic gates keep reading full files, so nothing they
+# depend on (red-gate's EXPECTED-RED substring, escalation packages,
+# red-integrity byte-compare) is ever compressed.
+#
+# Usage: cmd --full-file FILE -- COMMAND [ARGS...]
+#   --full-file FILE   path to write the FULL unfiltered output
+#   COMMAND [ARGS...]  the command to run
+#
+# Env:
+#   RTK_ENABLED  set to "0" to disable RTK compression (plain passthrough)
+#   RTK_BIN      override the rtk binary path (default: rtk)
+#
+# Exit codes: the command's own exit code; 2 = usage error.
+set -euo pipefail
+
+full_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --full-file)
+      full_file="${2:-}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      echo "cmd: unexpected argument: $1 (expected --full-file FILE -- CMD...)" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -z "$full_file" ]; then
+  echo "cmd: --full-file FILE is required" >&2
+  exit 2
+fi
+if [ $# -eq 0 ]; then
+  echo "cmd: no command given" >&2
+  exit 2
+fi
+
+mkdir -p "$(dirname "$full_file")"
+
+RTK_BIN="${RTK_BIN:-rtk}"
+RTK_ENABLED="${RTK_ENABLED:-1}"
+
+# Infer an RTK pipe filter for commands RTK compresses reliably. "" = no
+# filter -> pass the full output through unchanged (nothing is ever lost).
+filter=""
+case "${1:-}" in
+  git)
+    case "${2:-}" in
+      status) filter="git-status" ;;
+      diff)   filter="git-diff" ;;
+      log)    filter="git-log" ;;
+    esac
+    ;;
+  grep)   filter="grep" ;;
+  rg)     filter="rg" ;;
+  find)   filter="find" ;;
+  pytest) filter="pytest" ;;
+  go)     [ "${2:-}" = "test" ] && filter="go-test" ;;
+esac
+
+use_rtk=0
+if [ "$RTK_ENABLED" != "0" ] && [ -n "$filter" ] \
+    && command -v "$RTK_BIN" >/dev/null 2>&1; then
+  use_rtk=1
+fi
+
+# Run once: full output teed to the file, compressed view on stdout.
+set +e
+if [ "$use_rtk" = "1" ]; then
+  "$@" 2>&1 | tee "$full_file" | "$RTK_BIN" pipe -f "$filter"
+else
+  "$@" 2>&1 | tee "$full_file"
+fi
+rc=${PIPESTATUS[0]}
+set -e
+
+exit "$rc"

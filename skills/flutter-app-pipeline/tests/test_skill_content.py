@@ -28,6 +28,22 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         self.assertIn("graphify-regen", text)
         self.assertIn("graphify-package", text)
 
+    def test_graphify_is_controller_side_lazy(self):
+        """Graphify is a Controller-side lazy optimization: the eager chains
+        in red-gate/green-gate are gone; the skill must say graphify is no
+        longer chained into them."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("no longer chained", text)
+        self.assertIn("Controller-side and lazy", text)
+
+    def test_rtk_compression_invariant(self):
+        """Every LLM-invoked command runs through scripts/cmd: full output to
+        a file, RTK-compressed stdout, RTK_ENABLED/RTK_BIN envs documented."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("scripts/cmd", text)
+        self.assertIn("RTK_ENABLED", text)
+        self.assertIn("RTK_BIN", text)
+
     def test_deterministic_gate_scripts_referenced(self):
         text = self.skill.read_text(encoding="utf-8")
         for script in ("green-gate", "red-gate", "pub-sync", "pkg-score"):

@@ -26,8 +26,11 @@ if ! "$FLUTTER_BIN" pub upgrade --dry-run > "$REPORT" 2>&1; then
   exit 1
 fi
 
-# Graphify chain: index each newly downloaded package before any LLM reads it.
-# Best-effort: never fails the gate; only runs when packages were added.
+# Graphify chain: index each newly downloaded package so the Controller can
+# query its API structure when writing briefs for consuming tasks. This is
+# the one justified Graphify insertion (a Controller-side feed, not a
+# per-task gate side effect). Best-effort: never fails the gate; only runs
+# when packages were added.
 if [ "${GRAPHIFY_ENABLED:-1}" != "0" ] && [ $# -gt 0 ]; then
   for pkg in "$@"; do
     "$SCRIPT_DIR/graphify-package" "$pkg" \

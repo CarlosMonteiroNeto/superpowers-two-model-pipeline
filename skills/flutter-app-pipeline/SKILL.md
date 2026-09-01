@@ -1,13 +1,13 @@
 ---
 name: flutter-app-pipeline
-description: Flutter/Dart specialization layered on top of two-model-sdd-pipeline. Adds package research with the corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts (pub-sync, red-gate, green-gate, graphify-regen/package), and the Graphify-before-LLM ordering rule. Use when building a Flutter/Dart app with the two-tier pipeline opted in.
+description: Flutter/Dart specialization layered on top of two-model-sdd-pipeline. Adds package research with the corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts (pub-sync, red-gate, green-gate, graphify-regen/package), the RTK-compression invariant (every command runs through scripts/cmd), and the Graphify-before-LLM ordering rule (Controller-side, lazy). Use when building a Flutter/Dart app with the two-tier pipeline opted in.
 ---
 
 # Flutter App Pipeline (layered on two-model-sdd-pipeline)
 
 ## 0. Relationship to two-model-sdd-pipeline
 
-This is the Flutter/Dart specialization. It does **not** replace the generic engine; it layers on it. Read `two-model-sdd-pipeline` first — the gate (opt-in, tier models, test/analyze commands), worktree, ledger, and the Controller/Coder/Strategic Coder/Reviewer roles all come from there. This skill adds the Flutter phases and the deterministic script set below, and overrides the Phase 2/3 details.
+This is the Flutter/Dart specialization. It does **not** replace the generic engine; it layers on it. Read `two-model-sdd-pipeline` first — the gate (opt-in, tier models, test/analyze commands), worktree, ledger, the `scripts/cmd` command runner (RTK compression), and the Controller/Coder/Strategic Coder/Reviewer roles all come from there. This skill adds the Flutter phases and the deterministic script set below, and overrides the Phase 2/3 details.
 
 ## 1. Phase 1 — Requirements (once, project-level)
 
@@ -71,12 +71,9 @@ Flutter-specific additions to the per-task loop:
 2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment). Materializes the brief's RED tests and verifies the expected failure **for the expected reason**: the brief's `EXPECTED-RED:` block holds a verbatim substring the failing output must contain. Exit code is the verdict; a RED test that passes before implementation, or that fails for the wrong reason (e.g. a compile error in test setup instead of the missing symbol), means the brief is defective → back to the Controller.
 3. **Coder rounds** — as in two-model (Operational tier; escalation after 2 rounds).
 4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green → commits and ledger-appends; not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix.
-5. **Graphify invariant — before any LLM reads.** Enforced automatically at the script→LLM boundaries, where an LLM reads code right after a script changed files:
-   - `pub-sync` chains `graphify-package` for each newly added package;
-   - `red-gate` chains `graphify-regen` after verifying RED (before the Coder reads the materialized tests);
-   - `green-gate` chains `graphify-regen` after committing (before the Reviewer / next task reads).
-   The chains invoke the real CLI form — `graphify update <path>` (the `update` subcommand re-extracts code locally, no LLM API key) — never the old `graphify <path> --update` form, which the real CLI rejects. Chains are best-effort — a graphify failure never fails a gate — and can be disabled with `GRAPHIFY_ENABLED=0`. The Controller queries the graph (`graphify explain` / `graphify path`) for structure and interfaces when writing task briefs; other roles read only the curated artifacts (brief, diff, interfaces file). The graph exposes structure, not method bodies — that is what keeps entry token/context consumption low.
-6. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
+5. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops, graphify queries): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
+6. **Graphify invariant — Controller-side and lazy.** The Controller queries the graph (`graphify explain` / `graphify path`) when writing task briefs and rebuilds it only when stale (best-effort, `GRAPHIFY_ENABLED=0` to disable). Graphify is **no longer chained into `red-gate`/`green-gate`** — those gates never read the graph; RTK covers the context-compression job the eager chains used to aim at. `pub-sync` still indexes newly added packages (a Controller feed). The graph exposes structure, not method bodies — that is what keeps the Controller's brief-writing context low.
+7. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
 
 ## 4. Phase 4 — Project-Wide Review
 
@@ -93,11 +90,19 @@ Flutter-specific additions to the per-task loop:
 | `pub-sync [PACKAGE]` | AI-driven download + AI reasoning about version conflicts + AI reconciling the lockfile |
 | `red-gate WORKSPACE TASK` | AI judging whether the RED test failed for the expected reason (verifies the brief's `EXPECTED-RED:` text against the report) |
 | `green-gate [--no-commit] [-m MSG]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries |
-| `graphify-regen [ROOT]` | AI parsing raw file diffs for context (invokes `graphify update <root>`) |
-| `graphify-package PACKAGE` | AI reading downloaded package source before the graph exists (invokes `graphify update <pkg_dir>`) |
+| `cmd --full-file FILE -- CMD` (two-model) | AI seeing raw command output in context (saves FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code) |
+| `run-gates WS TEST ANALYZE` (two-model) | AI running/reading the gate-recorded test + analyze commands in the generic engine |
+| `graphify-regen [ROOT]` | AI parsing raw file diffs for context (invokes `graphify update <root>`); now Controller-side lazy only |
+| `graphify-package PACKAGE` | AI reading downloaded package source before the graph exists (invokes `graphify update <pkg_dir>`); feeds the Controller |
 | `route-next WORKSPACE TASK [TOTAL]` (two-model) | AI deciding "review passed → next task / failed → fix round" — the router emits the next action deterministically |
 
-All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env overrides (used by tests and unusual setups). `pub-sync`, `red-gate` and `green-gate` auto-chain the graphify rebuild at the script→LLM boundaries (non-fatal; disable with `GRAPHIFY_ENABLED=0`). AI is reserved for semantic decisions only: which solution fits a task, what to build from scratch, RED-test authoring from a natural-language spec, and code review.
+All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`
+env overrides (used by tests and unusual setups). `cmd` respects `RTK_ENABLED=0`
+(passthrough) and `RTK_BIN` (override). `pub-sync` keeps the graphify-package
+chain (Controller feed, non-fatal; disable with `GRAPHIFY_ENABLED=0`); `red-gate`
+and `green-gate` no longer chain graphify — they never read the graph. AI is
+reserved for semantic decisions only: which solution fits a task, what to build
+from scratch, RED-test authoring from a natural-language spec, and code review.
 
 ## 6. Data Sources for Score Computation (all scriptable, no LLM)
 

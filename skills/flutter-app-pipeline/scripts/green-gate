@@ -12,8 +12,6 @@
 # Reports are written to ${GREEN_GATE_REPORT:-green-gate-report.txt}(.analyze|.format).
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 DART_BIN="${DART_BIN:-dart}"
 GIT_BIN="${GIT_BIN:-git}"
@@ -72,10 +70,10 @@ else
   echo "GREEN-GATE: nothing to commit" >&2
 fi
 
-# Graphify chain: the Reviewer / next task (LLM) reads the committed code next,
-# so rebuild the project graph now. Best-effort: never fails the gate.
-if [ "${GRAPHIFY_ENABLED:-1}" != "0" ]; then
-  "$SCRIPT_DIR/graphify-regen" . || echo "GREEN-GATE: warning - graphify-regen failed (continuing)" >&2
-fi
+# Graphify is NOT chained here: the Reviewer reads the review package (diff),
+# not the graph; graphify rebuilds are a Controller-side lazy optimization at
+# brief time. Removing the chain keeps the gate fast and deterministic. RTK
+# (via scripts/cmd) now covers the LLM-facing context compression the eager
+# chain used to aim at.
 
 exit 0

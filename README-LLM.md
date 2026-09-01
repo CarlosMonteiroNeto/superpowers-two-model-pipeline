@@ -29,8 +29,8 @@ end to end.
   memory.
 - **`flutter-app-pipeline`** (Flutter layer, on top): adds package research with
   a corrected Quality Score, the deterministic Flutter scripts, and the
-  **Graphify-before-LLM** ordering rule. It delegates the per-task implementation
-  loop back to `two-model-sdd-pipeline`.
+  **RTK-compression + Graphify-before-LLM** ordering rules. It delegates the
+  per-task implementation loop back to `two-model-sdd-pipeline`.
 
 ## 3. Environment and tools
 
@@ -38,7 +38,8 @@ end to end.
 |---|---|
 | OpenCode | Harness (CLI + agent runtime) |
 | Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline |
-| Graphify (`graphifyy`) | On-device code knowledge graph; LLM queries structure instead of reading raw files |
+| RTK (`rtk`) | CLI proxy that compresses command output before it reaches an LLM context window (60-90% token savings); OpenCode plugin auto-rewrites bash tool calls |
+| Graphify (`graphifyy`) | On-device code knowledge graph; the Controller queries structure instead of reading raw files (Controller-side, lazy) |
 | Tavily | Programmatic web search for solution research |
 | pub.dev API | Package metadata, score, popularity, SDK constraints |
 | GitHub REST | Commit recency, issue counts, dependents fallbacks |
@@ -55,7 +56,8 @@ end to end.
    `writing-plans` (no code downloaded; lockfile only). Pure planning.
 3. **Phase 3 — TDD Implementation.** Delegated to `two-model-sdd-pipeline`
    (per-task loop). Flutter additions: `pub-sync` -> `red-gate` -> Coder ->
-   `green-gate`; Graphify rebuild before any LLM read.
+   `green-gate`; every LLM-invoked command runs through `scripts/cmd` (RTK
+   compression); the Controller queries the graph lazily at brief time.
 4. **Phase 4 — Project-Wide Review.** Revalidate with `green-gate --no-commit`,
    full code review, corrections re-enter Phase 3.
 
@@ -76,40 +78,52 @@ silently inherits the expensive session model.
 
 | Script | Purpose | Verdict |
 |---|---|---|
+| `cmd --full-file FILE -- CMD...` (two-model) | Generic command runner: runs any LLM-invoked command, saves the FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code | exit = command's exit code; 2 usage |
+| `run-gates WS TEST ANALYZE` (two-model) | Generic green approval: full suite + analysis through `cmd` (language-agnostic mirror of green-gate) | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
 | `orient-llm [REPO]` | Brainstorming pre-flight: locate and print this repo's `README-LLM.md` so the agent is oriented on how to run the pipeline | exit 0 printed; 1 missing (gate — stop); 2 usage |
 | `pkg-score PACKAGE` | Fetch pub.dev + GitHub, compute the corrected Quality Score | JSON + gate verdict (AUTO_APPROVE / DEVELOPER_DECISION / AUTO_REJECT) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
 | `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report) | exit 0 RED verified; exit 1 defective brief (passes, or fails for the wrong reason); exit 2 usage |
 | `green-gate [--no-commit] [-m MSG]` | Chain `flutter test` + `flutter analyze` + format + commit | exit 0 green (+ commit); 1 tests; 2 analyze; 3 format; `--no-commit` never commits |
-| `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form) | exit code of graphify |
-| `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` | resolves dir from `.dart_tool/package_config.json` |
+| `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form); Controller-side, lazy — no longer chained into the gates | exit code of graphify |
+| `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` (Controller feed from `pub-sync`) | resolves dir from `.dart_tool/package_config.json` |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER N ROUND / ESCALATE / STRATEGIC / REVIEW / FIX / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
 | `red-integrity WORKSPACE TASK` | Byte-compare committed tests vs brief RED-TESTS | exit 0 intact; 1 tampered; 2 usage/missing |
 | `keep-discard WORKSPACE TASK` | Escalation pre-gate: empty diff / out-of-scope files → DISCARD; else KEEP | exit 0 KEEP; 1 DISCARD; 2 usage |
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-holistic: all complete + no unresolved verdicts + no blocking parked + tests/analyze green | exit 0 ready; 1 blockers; 2 usage |
 
-All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN` env
-overrides. `pub-sync`, `red-gate` and `green-gate` auto-chain the graphify
-rebuild at the script→LLM boundaries (non-fatal; disable with
-`GRAPHIFY_ENABLED=0`). Tests live in `skills/flutter-app-pipeline/tests/`
-(flutter scripts) and `skills/two-model-sdd-pipeline/tests/` (router), run
-with `run-tests.sh` (`python3 -m unittest discover`).
+All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`
+env overrides. `cmd` also respects `RTK_ENABLED=0` (passthrough) and `RTK_BIN`
+(binary override); if RTK has no filter for a command it passes the full
+output through — nothing is lost. `pub-sync` keeps the graphify-package chain
+(Controller feed, non-fatal; disable with `GRAPHIFY_ENABLED=0`); `red-gate` and
+`green-gate` no longer chain graphify. Tests live in
+`skills/flutter-app-pipeline/tests/` (flutter scripts) and
+`skills/two-model-sdd-pipeline/tests/` (router + cmd runner), run with
+`run-tests.sh` (`python3 -m unittest discover`).
 
 ## 7. Ordering invariants (do not violate)
 
-- **Graphify-before-LLM:** enforced automatically at the script→LLM boundaries.
-  `pub-sync` chains `graphify-package` for each newly added package; `red-gate`
-  chains `graphify-regen` after verifying RED (before the Coder reads the
-  materialized tests); `green-gate` chains `graphify-regen` after committing
-  (before the Reviewer / next task reads). The chains invoke the real CLI form
-  — `graphify update <path>` — never the old `graphify <path> --update` (which
-  the real CLI rejects and previously required a translation wrapper). The
-  chains are best-effort — a graphify failure never fails a gate — and can be
-  disabled with `GRAPHIFY_ENABLED=0`. The Controller queries the graph
-  (`graphify explain` / `graphify path`) for structure/interfaces when writing
-  briefs; other roles read only the curated artifacts (brief, diff, interfaces
-  file). The graph exposes structure, not method bodies.
+- **Commands are scripted and RTK-compressed:** every LLM-invoked command
+  line (test runs, analysis, git ops, graphify queries) runs through
+  `scripts/cmd` — the generic runner saves the FULL output to a workspace
+  file and prints the RTK-compressed view on stdout. Raw command output
+  never enters an LLM context window. Deterministic gates keep reading full
+  files, so nothing a verdict depends on (red-gate `EXPECTED-RED`,
+  escalation packages, `red-integrity` byte-compare) is ever compressed.
+  `RTK_ENABLED=0` disables compression (passthrough); `RTK_BIN` overrides
+  the binary. If RTK has no filter for a command, `cmd` passes full output
+  through — nothing is lost.
+- **Graphify-before-LLM is now Controller-side and lazy:** the Controller
+  queries the graph (`graphify explain` / `graphify path`) for
+  structure/interfaces when writing briefs and rebuilds it only when stale
+  (`graphify update <path>`, the real CLI form, best-effort, no LLM API key
+  for code). Graphify is no longer chained into `red-gate`/`green-gate` —
+  those gates never read the graph; RTK covers the context-compression job
+  the eager chains used to aim at. `pub-sync` still indexes newly added
+  packages (a Controller feed; disable with `GRAPHIFY_ENABLED=0`). The graph
+  exposes structure, not method bodies.
 - **Gates are exit codes:** never judge "did the test fail for the expected
   reason" or "are tests green" by reading output — run the gate script and read
   its exit code. The red-gate additionally verifies the failure reason against
@@ -215,7 +229,7 @@ skills/flutter-app-pipeline/SKILL.md
 skills/flutter-app-pipeline/scripts/     <- deterministic scripts (bash + python3)
 skills/flutter-app-pipeline/tests/       <- python unittest suite (run-tests.sh)
 skills/two-model-sdd-pipeline/SKILL.md
-skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, review-package
+skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, cmd, run-gates, review-package
 ```
 
 ## 13. How to work with this harness
@@ -229,10 +243,11 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, r
    branch — and ask about tiers only when the local pipeline is not installed.
 3. Per task: `pkg-score` candidates -> select with the developer -> `writing-plans`
    tasks -> `pub-sync` -> `red-gate` (expected-reason check) -> `red-integrity`
-   (byte-compare) -> Coder rounds (resumable same-tier/same-task) ->
-   `green-gate` (chains graphify) -> `interface-check` (post-commit) ->
-   `route-next` -> review. Before escalation: `keep-discard` gate. After all
+   (byte-compare) -> Coder rounds (resumable same-tier/same-task; commands via
+   `scripts/cmd`) -> `run-gates`/`green-gate` -> `interface-check` (post-commit)
+   -> `route-next` -> review. Before escalation: `keep-discard` gate. After all
    tasks: `final-gate` (pre-holistic) then Controller final review. The
-   router, not the LLM, decides every transition.
+   router, not the LLM, decides every transition. All command lines go through
+   `scripts/cmd`; Graphify is a lazy Controller-side query, not a gate chain.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.
