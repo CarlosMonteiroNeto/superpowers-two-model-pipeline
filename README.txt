@@ -117,6 +117,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        verdicts + no blocking parked + tests/analyze green
                        (exit 0 ready; 1 blockers; 2 usage)
 
+skills/brainstorming/scripts/:
+  orient-llm           pre-flight orientation gate: locate and print
+                       README-LLM.md (the agent-facing harness reference)
+                       before work starts (exit 0 printed; 1 missing; 2 usage)
+
 Graphify is chained automatically into the gates at the script->LLM
 boundaries: pub-sync indexes each newly added package, red-gate rebuilds
 the project graph after RED is verified, green-gate rebuilds it after a

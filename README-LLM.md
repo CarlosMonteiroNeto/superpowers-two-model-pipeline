@@ -76,6 +76,7 @@ silently inherits the expensive session model.
 
 | Script | Purpose | Verdict |
 |---|---|---|
+| `orient-llm [REPO]` | Brainstorming pre-flight: locate and print this repo's `README-LLM.md` so the agent is oriented on how to run the pipeline | exit 0 printed; 1 missing (gate — stop); 2 usage |
 | `pkg-score PACKAGE` | Fetch pub.dev + GitHub, compute the corrected Quality Score | JSON + gate verdict (AUTO_APPROVE / DEVELOPER_DECISION / AUTO_REJECT) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
 | `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report) | exit 0 RED verified; exit 1 defective brief (passes, or fails for the wrong reason); exit 2 usage |
@@ -219,7 +220,9 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, r
 
 ## 13. How to work with this harness
 
-1. New dev request -> invoke `brainstorming` before any code.
+1. New dev request -> invoke `brainstorming` before any code. Its pre-flight
+   runs `scripts/orient-llm` deterministically, which prints this
+   `README-LLM.md` as orientation before anything is classified or designed.
 2. Flutter/Dart work -> run `flutter-app-pipeline`; on the two-tier gate default
    to YES. Tiers are pre-configured locally (`two-model-controller` /
    `two-model-coder` agents); ask only for the test/analyze commands, once per

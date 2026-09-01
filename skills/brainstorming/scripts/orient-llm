@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Deterministic pre-run orientation gate for the brainstorming skill.
+# Locates the pipeline's README-LLM.md (the agent-facing harness reference)
+# and prints it, so any LLM that is about to start work is oriented on how
+# to run the pipeline before it does anything.
+#
+# Usage: orient-llm [REPO]    (defaults to the pipeline repo this skill ships in)
+# Exit codes: 0 = README-LLM.md found and printed
+#             1 = README-LLM.md missing / unreadable (deterministic gate)
+#             2 = usage error
+set -euo pipefail
+
+repo=${1:-$(cd "$(dirname "$0")/../../.." && pwd)}
+[ -d "$repo" ] || { echo "ORIENT-LLM: no such repo: $repo" >&2; exit 2; }
+
+readme="$repo/README-LLM.md"
+if [ ! -f "$readme" ]; then
+  echo "ORIENT-LLM: README-LLM.md not found in $repo" >&2
+  echo "ORIENT-LLM: the pipeline cannot orient without its harness reference" >&2
+  exit 1
+fi
+
+cat "$readme"
+exit 0

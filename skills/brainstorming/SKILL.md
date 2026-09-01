@@ -19,6 +19,18 @@ to EVERY task on EVERY path below — the ceremony scales with the task;
 the approval gate never does.
 </HARD-GATE>
 
+## Pre-flight: orient on the pipeline (deterministic)
+
+Before classifying anything, if this skill's `scripts/orient-llm` exists,
+run it: `scripts/orient-llm`. Its stdout is the pipeline's orientation
+(the agent-facing harness reference, README-LLM.md) — read it before doing
+work. The script is a deterministic gate: exit 0 means oriented and
+printed; exit 1 means the harness reference is missing — STOP and report
+that instead of proceeding; exit 2 is a usage error, fix the invocation.
+
+This keeps the orientation mechanical: the LLM never decides "I already
+know the pipeline" by reasoning — the script decides.
+
 ## Three Paths
 
 Before your first question, classify the request and say the
