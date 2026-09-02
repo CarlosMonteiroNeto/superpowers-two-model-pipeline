@@ -1,101 +1,57 @@
-# Controller Brief Prompt Template (just-in-time)
+# Brief-Writing Guidance for the Strategist Session (B)
 
-Use this template to dispatch the Controller for ONE task's brief,
-including its RED test, immediately before that task starts. Never batch
-briefs for the whole plan upfront.
+This is NOT a dispatch template anymore. The strategist is the interactive
+session (B) itself — you write task briefs directly, no Controller subagent
+(Item 1). Script A consumes your brief verbatim: it materializes the RED tests,
+verifies the expected failure, and dispatches the Coder.
+
+## When you write a brief
+
+B writes one brief per task, just-in-time (never batched upfront — tests must
+not go stale against interface changes made by earlier tasks). Script A feeds
+you the affected-dependency subgraph (`graphify-subgraph` output,
+`<ws>/task-N-interfaces.md`) and the review side-effects before you write the
+next brief.
+
+## Brief structure (in order)
+
+1. **Task statement** — what to build and why it matters, in 3-6 sentences an
+   Operational-tier coder can act on without asking questions.
+2. **Exact values** — every number, magic string, file path, signature, and
+   format the task needs, stated once, verbatim.
+3. **RED test** — complete, runnable, BLACK-BOX behavioral test code (per the
+   pipeline's TDD rule: integration/behavior, never internal implementation
+   details — do not constrain the Coder's internals). Fails today for the
+   expected reason; passes when the task is done correctly. Follow the
+   project's existing test conventions and file layout. If several files are
+   needed, provide each in full.
+4. **Expected RED failure** — the short verbatim substring the failing output
+   must contain (a few words). The red-gate verifies it.
+5. **Out of scope** — what this task must NOT do (YAGNI fence).
+
+The brief's RED-TESTS block MUST be followed by an EXPECTED-RED block:
 
 ```
-Subagent (general-purpose):
-  description: "Write Task N brief + RED test"
-  model: [STRATEGIC TIER - REQUIRED]
-  prompt: |
-    You are the Controller of a two-model pipeline. You produce exactly one
-    artifact: a self-contained task brief with a RED test. You do not see
-    or write code, and you never converse beyond this one reply.
+RED-TESTS:
+<workspace>/task-N-test.dart -> test/task_N_test.dart
 
-    ## Feature Context
-
-    [2-5 sentences: what the feature is and where it is going. The spec doc
-    path if one exists.]
-
-    ## Global Constraints
-
-    [Copied verbatim from the plan's global_constraints]
-
-    ## Interfaces Established by Earlier Tasks
-
-    [Signatures/contracts this task consumes or extends, gathered from the
-    committed code. "None yet." is a valid answer.]
-
-    ## Your Task
-
-    Write the brief for Task N from this plan entry:
-
-    ```json
-    [THE TASK'S PLAN ENTRY VERBATIM]
-    ```
-
-    The brief must contain, in order:
-
-    1. **Task statement** - what to build and why it matters, in 3-6
-       sentences an Operational-tier coder can act on without asking
-       questions.
-    2. **Exact values** - every number, magic string, file path, signature,
-       and format the task needs, stated once, verbatim.
-    3. **RED test** - complete, runnable test code that fails today for the
-       expected reason and passes when the task is done correctly. Real
-       behavior assertions only; no mocks asserting themselves; follow the
-       project's existing test conventions and file layout. If the task
-       needs several test files, provide each in full.
-    4. **Expected RED failure** - the error/message the suite shows before
-       implementation exists. State the expected reason as a short verbatim
-       substring (a few words, not a paragraph) that the failing output
-       must contain.
-    5. **Out of scope** - what this task must NOT do (YAGNI fence).
-
-    The brief's RED-TESTS block MUST be followed by an EXPECTED-RED block
-    (the red-gate verifies the failure reason against it):
-
-    ```
-    RED-TESTS:
-    <workspace>/task-N-test.dart -> test/task_N_test.dart
-
-    EXPECTED-RED:
-    <verbatim substring the failing output must contain>
-    ```
-
-    Rules:
-    - English only, regardless of the developer's language. (Exception:
-      user-facing UI strings inside test fixtures may use the product's
-      established locale.)
-    - The coder who reads this will NOT edit tests. Make the tests final:
-      correct, conventional, complete.
-    - If an interface you need does not exist yet, define it in the brief's
-      Exact Values section as a binding contract.
-    - **Query the project graph for structure and interfaces first.** When
-      a Graphify graph exists (project root `graphify-out/graph.json` or
-      the workspace's graph output), run the graphify query commands through
-      the pipeline runner: `scripts/cmd --full-file
-      <workspace>/task-N-graphify.txt -- graphify explain "Node"` /
-      `scripts/cmd --full-file <workspace>/task-N-graphify.txt --
-      graphify path "A" "B"` to discover the signatures and dependencies
-      the task touches before writing the brief. Never read whole files to
-      find a signature; read only the file(s) the graph points you to.
-      **If no graph exists, or it is stale** (older than the last commit
-      whose code you need), rebuild it first with `scripts/cmd --full-file
-      <workspace>/task-N-graphify.txt -- graphify update <project_root>`
-      (best-effort, no LLM API key for code) and then query. Graphify is a
-      Controller-side optimization only - if it is unavailable, write the
-      brief from the interfaces you are given and the files the plan names.
-
-    Return ONLY the brief markdown, no preamble, no closing commentary.
+EXPECTED-RED:
+<verbatim substring the failing output must contain>
 ```
 
-**Placeholders:**
-- `[STRATEGIC TIER]` - the model recorded at the gate
-- `[THE TASK'S PLAN ENTRY VERBATIM]` - one element of `plan.json.tasks`
+## Rules
 
-**Orchestrator after the dispatch:** save output verbatim to
-`<workspace>/task-N-brief.md`; materialize the test files; run the suite;
-confirm failure matches section 4. Mismatch = defective brief: ledger
-`arbitration`, re-dispatch the Controller naming the defect.
+- English only, regardless of the developer's language. (Exception: user-facing
+  UI strings inside test fixtures may use the product's established locale.)
+- The Coder who reads this will NOT edit tests and will NOT run commands.
+  Make the tests final and the brief self-contained.
+- If an interface you need does not exist yet, define it in Exact Values as a
+  binding contract.
+- Query the graph subgraph first (via `scripts/cmd --full-file
+  <ws>/task-N-graphify.txt -- graphify explain "Node"`) for the interfaces
+  earlier tasks established; write from the subgraph + the plan entry, never
+  whole files.
+- TEST_DEFECT care: if the Coder reports TEST_DEFECT (or red-gate flags a
+  defective brief), re-examine the RED test you wrote — a compile error in
+  test setup instead of the missing symbol means the brief is defective.
+  Reissue via arbitration, never silently "fix" the test through the Coder.

@@ -51,15 +51,34 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("run-gates", text)
 
-    def test_coder_prompt_routes_commands_through_cmd(self):
+    def test_coder_prompt_is_write_only(self):
+        """The Coder is write-only (ADR-0002): it must NOT route commands
+        through scripts/cmd — Script A runs all gates. The prompt must say
+        NEVER run test/analysis commands and preserve the TEST_DEFECT rule."""
         prompt = (self.dir / "coder-prompt.md").read_text(encoding="utf-8")
-        self.assertIn("scripts/cmd", prompt)
-        self.assertIn("--full-file", prompt)
+        self.assertIn("Write code ONLY", prompt)
+        self.assertIn("NEVER run test", prompt)
+        self.assertIn("TEST_DEFECT", prompt)
 
-    def test_strategic_coder_prompt_routes_commands_through_cmd(self):
-        prompt = (self.dir / "strategic-coder-prompt.md").read_text(encoding="utf-8")
-        self.assertIn("scripts/cmd", prompt)
-        self.assertIn("--full-file", prompt)
+    def test_strategic_coder_prompt_removed(self):
+        """The Strategic Coder role is removed (ADR-0001): escalation is B
+        arbitration (ARBITRATE), so the prompt template must not exist."""
+        self.assertFalse((self.dir / "strategic-coder-prompt.md").exists())
+
+    def test_reviewer_prompt_is_json_verdict(self):
+        """The Reviewer (D) returns a structured JSON verdict (Item 2/3) and
+        reviews compiler-approved code only — never runs test/analyze."""
+        prompt = (self.dir / "reviewer-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("JSON", prompt)
+        self.assertIn("compiler-approved", prompt)
+        self.assertIn("verdict", prompt)
+
+    def test_controller_brief_is_b_side_guidance(self):
+        """Brief writing moved into the strategist session (Item 1): the
+        controller-brief template is guidance for B, not a dispatch template."""
+        text = (self.dir / "controller-brief-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("NOT a dispatch template", text)
+        self.assertIn("Strategist Session", text)
 
     def test_graphify_is_controller_side_lazy(self):
         """Graphify is a Controller-side lazy optimization: the skill must say
