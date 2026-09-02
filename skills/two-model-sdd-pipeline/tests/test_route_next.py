@@ -84,15 +84,15 @@ class TestRouteNextRounds(RouteNextTestBase):
         r = run_route(self.ws, 3)
         self.assert_action(r, "CODER 3 2")
 
-    def test_two_coder_rounds_emits_escalate(self):
+    def test_two_coder_rounds_emits_coder_round_three(self):
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
-            entry("coder_round", 3, "Coder", round="1/2"),
-            entry("coder_round", 3, "Coder", round="2/2"),
+            entry("coder_round", 3, "Coder", round="1/4"),
+            entry("coder_round", 3, "Coder", round="2/4"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "ESCALATE 3")
+        self.assert_action(r, "CODER 3 3")
 
 
 class TestRouteNextWrapUp(RouteNextTestBase):
@@ -132,7 +132,7 @@ class TestRouteNextWrapUp(RouteNextTestBase):
 
 
 class TestRouteNextFixAndEscalation(RouteNextTestBase):
-    def test_review_send_back_emits_fix(self):
+    def test_review_send_back_emits_corrective(self):
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
@@ -141,9 +141,9 @@ class TestRouteNextFixAndEscalation(RouteNextTestBase):
             entry("review_outcome", 3, "SEND_BACK", findings="1", severity="Critical"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "FIX 3")
+        self.assert_action(r, "CORRECTIVE 3")
 
-    def test_review_escalate_emits_strategic(self):
+    def test_review_escalate_emits_arbitrate(self):
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
@@ -152,18 +152,41 @@ class TestRouteNextFixAndEscalation(RouteNextTestBase):
             entry("review_outcome", 3, "ESCALATE"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "STRATEGIC 3")
+        self.assert_action(r, "ARBITRATE 3")
 
-    def test_escalated_without_commit_emits_strategic(self):
+    def test_escalated_without_commit_emits_arbitrate(self):
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
             entry("coder_round", 3, "Coder"),
             entry("coder_round", 3, "Coder"),
-            entry("escalated", 3, "coder failed 2 rounds"),
+            entry("escalated", 3, "coder failed rounds"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "STRATEGIC 3")
+        self.assert_action(r, "ARBITRATE 3")
+
+    def test_three_coder_rounds_emits_coder_round_four(self):
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("red_check", 3, "RED"),
+            entry("coder_round", 3, "Coder", round="1/4"),
+            entry("coder_round", 3, "Coder", round="2/4"),
+            entry("coder_round", 3, "Coder", round="3/4"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assert_action(r, "CODER 3 4")
+
+    def test_four_coder_rounds_emits_arbitrate(self):
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("red_check", 3, "RED"),
+            entry("coder_round", 3, "Coder", round="1/4"),
+            entry("coder_round", 3, "Coder", round="2/4"),
+            entry("coder_round", 3, "Coder", round="3/4"),
+            entry("coder_round", 3, "Coder", round="4/4"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assert_action(r, "ARBITRATE 3")
 
 
 class TestRouteNextUsage(RouteNextTestBase):
