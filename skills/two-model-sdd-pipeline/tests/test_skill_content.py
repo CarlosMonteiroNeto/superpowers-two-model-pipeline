@@ -13,15 +13,14 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("Resume rule", text)
 
-    def test_resume_limited_to_same_tier_and_task(self):
+    def test_resume_limited_to_within_task(self):
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("same tier", text)
-        self.assertIn("same task", text)
+        self.assertIn("WITHIN a task", text)
 
-    def test_fresh_dispatch_when_role_or_task_changes(self):
+    def test_fresh_dispatch_when_task_changes(self):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("fresh", text.lower())
-        self.assertIn("role or task changes", text)
+        self.assertIn("task changes", text)
 
     def test_arbitration_and_final_review_stay_fresh(self):
         text = self.skill.read_text(encoding="utf-8")
@@ -80,11 +79,13 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("NOT a dispatch template", text)
         self.assertIn("Strategist Session", text)
 
-    def test_graphify_is_controller_side_lazy(self):
-        """Graphify is a Controller-side lazy optimization: the skill must say
-        it is no longer chained into red-gate/green-gate."""
+    def test_graphify_is_post_commit_subgraph(self):
+        """Graphify is post-commit only (ADR-0004): the skill must say the
+        graph rebuilds after an approved task's commit and that subgraph
+        extraction feeds B/D - never per-Coder-iteration, never whole source."""
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("Controller-side and lazy", text)
+        self.assertIn("post-commit", text)
+        self.assertIn("graphify-subgraph", text)
 
 
 if __name__ == "__main__":

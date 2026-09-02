@@ -1,14 +1,16 @@
 ---
 name: two-model-sdd-pipeline
-description: Use instead of subagent-driven-development when the human partner opts into a deterministic two-tier pipeline - an expensive Strategic model handles reasoning (plan, briefs, reviews) while a cheap Operational model writes code, every LLM call is stateless, a script maintains the ledger, and every command line runs through the scripts/cmd runner (RTK-compressed LLM-facing output, full output to files). Ask about tiers before brainstorming starts.
+description: Use instead of subagent-driven-development when the human partner opts into a deterministic two-tier pipeline - a script-autonomous orchestrator (Script A) dispatches a cheap Operational Coder and an expensive Strategic Reviewer headlessly, every LLM call is stateless, a script maintains the ledger, and every command line runs through the scripts/cmd runner (RTK-compressed LLM-facing output, full output to files). Ask about tiers before brainstorming starts.
 ---
 
-# Two-Model SDD Pipeline (Hybrid Orchestrated Architecture)
+# Two-Model SDD Pipeline (Script-Autonomous Orchestration)
 
 Custom fork of superpowers:subagent-driven-development. A deterministic
-orchestrator owns state and dispatch; every LLM call is an isolated,
-stateless invocation fed exactly the context it needs. No agent holds a
-continuous session across the branch.
+orchestrator (**Script A**) owns state, gates, dispatch, and routing; every LLM
+call is an isolated, stateless invocation fed exactly the context it needs. The
+interactive session (**B**) is the strategist — it writes the plan and briefs,
+receives feedback only through script outputs, and never sits in the dispatch
+chain.
 
 **Layering:** this is the generic orchestration engine. Flutter/Dart projects
 use `flutter-app-pipeline` on top of it — that skill adds the package research
@@ -18,28 +20,23 @@ per-task loop back to this skill.
 
 **Why this exists:** native SDD keeps one controller conversation alive for
 the whole branch and lets each implementer resume itself mid-loop. That
-couples quality to context endurance. Here the controller session is a
-bookkeeper — scripts hold state, git holds history, the ledger holds
-decisions — and every reasoning role starts cold with curated inputs. This
-prevents both context exhaustion and context-pollution-driven review bias.
+couples quality to context endurance. Here the deterministic layer holds the
+books — scripts own state, git holds history, the ledger holds decisions —
+and every reasoning role starts cold with curated inputs. This prevents both
+context exhaustion and context-pollution-driven review bias, and keeps the
+interactive session's context clean for what only a human strategist can do.
 
 ## 0. Pre-Pipeline Gate
 
 Before `brainstorming` starts:
 
 - The tiers are **pre-configured locally** (e.g. `~/.config/opencode/agent/`
-  defines `two-model-controller` as Strategic and `two-model-coder` as
-  Operational). When they exist, do **not** ask which model maps to which
-  tier — the gate is: "use this pipeline? (default YES) + test command +
-  analyze command", asked once per branch.
+  defines `two-model-coder` as Operational and `two-model-reviewer` as
+  Strategic, both `mode: all`). When they exist, do **not** ask which model
+  maps to which tier — the gate is: "use this pipeline? (default YES) + test
+  command + analyze command", asked once per branch.
 - Ask about tier models **only when the local pipeline is not installed**
-  (no pre-configured tier agents found). Then ask:
-  1. Should this branch use this pipeline at all?
-  2. Which model is the **Strategic tier** (expensive) and which is the
-     **Operational tier** (cheap)? Same API, different model selection.
-  3. What command runs the test suite, and what command runs static analysis
-     (e.g. `flutter analyze`)? Needed because the Orchestrator — not the
-     workers — executes both.
+  (no pre-configured tier agents found).
 
 If declined, fall back to native superpowers:subagent-driven-development
 behavior. Do not run both pipelines on one branch.
@@ -55,34 +52,32 @@ depends on them, and they must survive compaction.
   check-ins** — the per-task loop, fix rounds, escalation, and final review
   are continuous. "Should I continue?" prompts waste the human partner's
   time; the ledger and `route-next` carry the state.
-- Deterministic routing: after each review outcome, run
-  `scripts/route-next WORKSPACE TASK [TOTAL_TASKS]` — it emits the next
-  action (`BRIEF` / `RED` / `CODER N ROUND` / `ESCALATE` / `STRATEGIC` /
-  `REVIEW` / `FIX` / `NEXT` / `FINAL_REVIEW`). The Orchestrator executes the
+- Deterministic routing: `scripts/route-next WORKSPACE TASK [TOTAL_TASKS]`
+  emits the next action (`BRIEF` / `RED` / `CODER N ROUND` / `REVIEW` /
+  `CORRECTIVE` / `ARBITRATE` / `NEXT` / `FINAL_REVIEW`). Script A executes the
   emitted action; it never decides "APPROVED → next task" by reasoning.
 
 ## State Checkpoint (compaction)
 
 - The ledger is the compression: every decision is written incrementally by
-  `scripts/ledger-append` at the moment it happens. There is no separate
-  "compress now" step — stateless dispatches plus the ledger make the branch
-  safe under harness auto-compaction at any point.
+  `scripts/ledger-append` at the moment it happens. Stateless dispatches plus
+  the ledger make the branch safe under harness auto-compaction at any point.
 - After compaction, re-read the ledger and `scripts/cmd --full-file
   <workspace>/recovery-log.txt -- git log --oneline -20`; resume at the
   first task without a `task_complete` line, routing via `route-next`.
 
 ## Core Principles
 
-- **Hybrid orchestration:** the Orchestrator manages state, git worktrees,
-  task transitions, test execution, and retry-loop tracking. LLMs reason;
-  they never keep books.
+- **Script-autonomous orchestration:** Script A (a thin `orchestrator` driver
+  plus specialized scripts) runs the per-task loop autonomously once B hands
+  over a brief. It dispatches C and D headlessly via `opencode run --agent`;
+  the interactive session is never a link in the dispatch chain (ADR-0001).
 - **Stateless LLM calls, cache-aware:** no role is a persistent chat session
   across the branch. Every dispatch is fed curated context (a task brief, a
   diff, a ledger excerpt), never an accumulating conversation.
-  **Resume rule:** resuming a dispatched agent is allowed only for the **same
-  tier** and the **same task** — the resumed session appends deltas to a
-  stable prefix (system + plan + brief + interfaces) that the provider
-  cache-bills; when the **role or task changes**, the dispatch is **fresh**.
+  **Resume rule:** C and D retain their sessions WITHIN a task until D
+  approves (fix/correction rounds resume via `--continue --session`); when
+  the task changes, the dispatch is **fresh** (ADR-0003).
 - **Git + plan + ledger as source of truth:** continuity comes from the
   JSON plan, git history, and the script-maintained ledger — not from any
   LLM's memory.
@@ -90,104 +85,105 @@ depends on them, and they must survive compaction.
   runs through `scripts/cmd` (full output to a workspace file, RTK-compressed
   stdout), so raw command output never enters an LLM context window. LLMs
   never run bare commands.
+- **C is write-only (ADR-0002):** the Coder never runs tests or analysis.
+  Script A runs task tests → full suite → analyze, deciding each by exit
+  code inside the script, and feeds failures back to C for fix rounds.
+- **The Reviewer reviews compiler-approved code only (Item 2):** D never
+  runs or re-runs test/analyze; its scope is design, architecture, spec
+  compliance, and interface discipline on the committed diff.
 
 ## Tier Assignment
 
 | Role | Tier | Rationale |
 |---|---|---|
-| Orchestrator | none — deterministic script + your session | no judgment |
-| Controller | Strategic | design, planning, arbitration |
-| Coder | Operational | bounded implementation against a RED test |
-| Strategic Coder | Strategic | unblocks what the cheap tier cannot |
-| Code Reviewer | Strategic | uniform strict review of every task |
-| Final branch review | Strategic | whole-branch holistic judgment |
+| Script A | none — deterministic | gates, dispatch, routing, commits, graph |
+| B (strategist session) | Strategic (human) | plan, briefs + RED tests, arbitration, final review |
+| C (Coder) | Operational (`two-model-coder`, `mode: all`) | write-only implementation against a RED test |
+| D (Code Reviewer) | Strategic (`two-model-reviewer`, `mode: all`) | JSON verdict on compiler-approved code |
+| Strategic Coder | REMOVED | escalation is B arbitration (`ARBITRATE`), not a coder tier |
 
-**Always specify the model explicitly on every dispatch**, using the tier
-recorded at the gate. An omitted model inherits your session's model —
-usually the expensive one — silently defeating the pipeline.
+**Always specify the agent explicitly on every dispatch.** Omitted model
+silently inherits the session's — usually the expensive one — silently
+defeating the pipeline. Dispatch happens via `scripts/dispatch`, which targets
+the named agent definition; both tier agents must be `mode: all` (verified in
+the spike: subagent-mode agents cannot be targeted headlessly by
+`opencode run --agent`).
 
 ## Roles
 
-### Orchestrator (deterministic — your session, plus scripts)
+### Script A (deterministic — bash, no LLM)
 
-- Manages the git worktree and branch state (superpowers:using-git-worktrees).
-- Iterates the task plan, dispatching each role with curated context.
-- Materializes the Controller's RED tests verbatim into the working tree and
-  verifies they fail before any Coder round.
-- Runs the test suite and the analysis command recorded at the gate **via
-  `scripts/run-gates`** (which chains them through `scripts/cmd`); reports
-  pass/fail back to whichever role needs it.
-- Runs every command line through `scripts/cmd` — the pipeline's generic
-  runner — so no raw command output reaches an LLM context window
-  uncompressed. Full output is always saved to workspace files (gates,
-  escalation packages and round-2 context read those); the LLM sees the
-  RTK-compressed view.
-- Tracks retry loops; triggers escalation after 2 failed Coder rounds.
+- **`orchestrator WS TASK [TOTAL]`** — thin driver: runs `route-next`, executes
+  the emitted action, re-routes, prints `OUTCOME:` for B.
+- **`red-gate WS TASK`** — materializes the brief's RED tests and verifies the
+  expected failure for the expected reason (`EXPECTED-RED:` substring). On
+  success it dispatches C headlessly (Item 4). Defective brief → exit 1,
+  no dispatch, back to B.
+- **`green-gate`** — chains full suite + `flutter analyze` + format + commit.
+  On success: post-commit `graphify-update`, builds the review package, and
+  dispatches D headlessly (Item 3). `--no-commit` validates only.
+- **`dispatch`** — headless launcher: `opencode run --agent <def> --format
+  json --file <prompt> [--continue --session <id>]`, tees the JSON event
+  stream to `<ws>/task-N-coder.log` / `task-N-reviewer.log` (observability —
+  the developer can tail them; the session history stays clean), records the
+  session id for resume.
+- **`route-next`** — deterministic router (see Approval Policy).
+- **`cmd`** — generic command runner (RTK compression; flutter test → `rtk
+  test`, flutter analyze → `rtk err` wrapper derivation, verdict from the
+  raw run).
+- **`token-kill`** — RTK minification: error logs, source payloads to C/D,
+  JSON reports.
+- **`graphify-update`** — post-commit graph rebuild only (ADR-0004).
+- **`graphify-subgraph WS TASK`** — affected-dependency subgraph extraction →
+  `<ws>/task-N-interfaces.md` for B's next brief and D's review.
+- **`review-package` / `ledger-append` / `red-integrity` / `final-gate` /
+  `doc-check`** — as before.
+- Runs the gate sequence (task tests → full suite → analyze) and reports
+  pass/fail back to whichever role needs it — **the test/analyze decision
+  lives in the script (Item 2)**.
 - Performs all commits and the final merge. Workers never commit.
-- Appends every decision to the ledger **via `scripts/ledger-append`** — the
-  ledger is written by the script from structured LLM output, never
-  free-handed by an LLM as prose.
+- Appends every decision to the ledger via `scripts/ledger-append`.
 
-You do not implement, review, or fix anything yourself. Your context stays
-clean for coordination.
+Script A never implements, reviews, or fixes anything itself.
 
-### Controller (Strategic, session for plan + briefs)
+### B (Strategist — the interactive session)
 
-- Holds a session for plan writing and just-in-time task briefs — same tier,
-  and the plan + accumulated interfaces form a stable **cached prefix**; each
-  brief only **append**s the current task's slice. Brief composition is
-  near-mechanical, so the session's growing context is a cache hit, not a
-  pollution risk.
-- JIT briefs with the RED test are generated immediately before each task is
-  dispatched — never batched upfront, so tests cannot go stale against
-  interface changes made by earlier tasks.
-- **Arbitration and final branch review are FRESH dispatches** (judgment;
-  anti-bias beats cache here), fed only the relevant slice — never the
-  session's accumulated history.
+- Owns brainstorming, the JSON plan, task breakdown, and per-task briefs +
+  RED tests — written directly, no Controller subagent (Item 1).
+- Receives feedback only through Script A's outputs (stdout, ledger, gate
+  reports, the subgraph feed).
+- Writes corrective briefs on `CORRECTIVE` (SEND_BACK), arbitrates
+  TEST_DEFECT / defective briefs / coder overflow on `ARBITRATE`, and
+  documents minor findings (PARKED — never fix loops).
+- Final holistic review runs in a **fresh `/new` session** fed only the
+  original plan + consolidated diff + ledger (Item 5).
 
-### Coder (Operational, per task — resumable within the task)
+### C (Coder — Operational, `two-model-coder`)
 
-- Implements code to satisfy the RED test. Up to 2 rounds per task.
-- Rounds and fix rounds may **resume the same Coder dispatch** (same tier,
-  same task): round 2 / fix rounds append the round-1 diff and the failing
-  test output to the session whose brief + interfaces prefix is already
-  cache-billed. Fresh when the task or the role changes.
-- Never writes or edits tests — including "fixing" a failing test to pass.
-- On success: reports back; the Orchestrator runs the standard wrap-up
-  (tests, analysis, commit) and review.
-- On failure after 2 rounds: escalation trigger. No task is pre-classified
-  as complex — the process reveals it organically.
+- Write-only: implements code to satisfy the brief + RED tests. Never runs
+  tests, analysis, or git commands (ADR-0002).
+- Never writes or edits tests — "fixing" a failing test is tampering. If a
+  test looks wrong: report `TEST_DEFECT`; B arbitrates (Item 6 — EXPECTED-RED
+  already catches compile-error reds at the gate).
+- Context zeroed per task; fix rounds resume the same session
+  (`--continue --session`). Budget: round 1 + 3 fixes (4 attempts) → then
+  `ARBITRATE` to B.
 
-### Strategic Coder (Strategic, spawned on demand)
+### D (Code Reviewer — Strategic, `two-model-reviewer`)
 
-- Invoked only on escalation. Receives the current diff and the list of
-  failing tests.
-- Explicitly decides whether to KEEP or DISCARD the Coder's partial work —
-  never automatic in either direction — then implements.
-- Follows the same no-test-edit rule as the Coder. If it judges a RED test
-  defective, it reports `TEST_DEFECT` instead of touching the test; the
-  Controller arbitrates and reissues the brief.
-- Its output goes through the same Code Reviewer as any other task.
-
-### Code Reviewer (Strategic, ephemeral — fresh per task)
-
-- Spawned fresh for every task review, strict read-only mode.
-- Context is built by the Orchestrator: the review package (diff) plus
-  affected interface dependencies — never raw conversation history, never
-  accumulated context from other tasks.
-- Reviews every task's diff uniformly, including escalated ones. Because
-  the Reviewer is never the same dispatch as whoever implemented the code,
-  this structurally prevents grading one's own work — no special-casing.
-- Returns exactly one verdict: `APPROVED`, `SEND_BACK` (findings), or
-  `ESCALATE`.
+- Reviews compiler-approved code (tests + syntax already green) — design,
+  architecture, spec compliance, interface discipline.
+- Returns exactly one structured JSON verdict: `APPROVED` / `SEND_BACK` /
+  `ESCALATE` + findings + minors.
+- Context kept during the task's correction loops (same session resumed);
+  zeroed after D approves (ADR-0003). Minor findings → documented by B only.
 
 ## Workspace and Ledger
 
 At skill start, run this skill's `scripts/pipeline-workspace PLAN_FILE`.
 It creates and prints the plan's git-ignored directory
 (`<repo-root>/.superpowers/two-model/<plan-basename>/`) — home to the plan
-copy, briefs, RED test files, review packages, and the ledger. Another
-plan's directory is never yours to read or write.
+copy, briefs, RED test files, review packages, logs, and the ledger.
 
 The ledger lives at `<workspace>/ledger.jsonl` — one JSON object per line,
 written only through the script:
@@ -200,16 +196,16 @@ Entry types and when to append them:
 
 | Type | When |
 |---|---|
-| `gate` | tier models, test command, analyze command recorded |
-| `brief_ready` | Controller returned a task brief (+ RED test path) |
+| `gate` | tier agents, test command, analyze command recorded |
+| `brief_ready` | B wrote a task brief (+ RED test path) |
 | `red_check` | RED tests materialized; expected FAIL confirmed |
-| `coder_round` | after each Coder round (STATUS=..., ROUND=n/N) |
-| `escalated` | Coder failed 2 rounds; Strategic Coder dispatched |
-| `keep_decision` | keep-discard gate verdict (KEEP / DISCARD) |
-| `review_outcome` | APPROVED / SEND_BACK / ESCALATE + finding count |
-| `commit` | Orchestrator committed the task (COMMITS=a7b..c9d) |
-| `task_complete` | task closed (verdict, parked findings if any) |
-| `arbitration` | Controller ruling on a deadlock or TEST_DEFECT |
+| `coder_round` | after each Coder round (STATUS=..., ROUND=n/4) |
+| `commit` | Script A committed the task (COMMITS=a7b..c9d) |
+| `review_outcome` | D's JSON verdict (APPROVED / SEND_BACK / ESCALATE + finding count) |
+| `review_json` | path to D's parsed JSON verdict file |
+| `corrective` | B wrote a corrective brief (SEND_BACK) |
+| `arbitrate` | B ruling on TEST_DEFECT / defective brief / coder overflow |
+| `task_complete` | task closed (verdict, parked minors if any) |
 | `interface_change` | an interface other tasks consume changed (interface-check exit 1) |
 | `final_review` | verdict of the whole-branch review |
 
@@ -223,26 +219,25 @@ your recollection. Resume at the first task without a `task_complete` line.
 digraph pipeline {
     rankdir=TB;
     "Gate: opt-in + tiers + commands" -> "Worktree + workspace + ledger";
-    "Worktree + workspace + ledger" -> "Controller: brainstorm + JSON plan";
-    "Controller: brainstorm + JSON plan" -> "Next task";
-    "Next task" -> "Controller: JIT brief + RED test";
-    "Controller: JIT brief + RED test" -> "Materialize RED, verify it fails";
-    "Materialize RED, verify it fails" -> "Coder round (max 2)";
-    "Coder round (max 2)" -> "Tests green?";
-    "Tests green?" -> "Orchestrator: analyze + commit" [label="yes"];
-    "Tests green?" -> "Escalate: Strategic Coder" [label="no, 2 rounds"];
-    "Escalate: Strategic Coder" -> "Keep or discard partial work?";
-    "Keep or discard partial work?" -> "Implement against RED";
-    "Implement against RED" -> "Review package + interfaces -> Reviewer";
-    "Orchestrator: analyze + commit" -> "Review package + interfaces -> Reviewer";
-    "Review package + interfaces -> Reviewer" -> "APPROVED?";
-    "APPROVED?" -> "Ledger outcome, next task" [label="yes"];
-    "APPROVED?" -> "Fix round by implementer tier" [label="SEND_BACK"];
-    "APPROVED?" -> "Strategic Coder now" [label="ESCALATE"];
-    "Ledger outcome, next task" -> "More tasks?";
-    "More tasks?" -> "Next task" [label="yes"];
-    "More tasks?" -> "Final branch review (diff + ledger)";
-    "Final branch review (diff + ledger)" -> "Merge";
+    "Worktree + workspace + ledger" -> "B: brainstorm + JSON plan";
+    "B: brainstorm + JSON plan" -> "B: JIT brief + RED test (task N)";
+    "B: JIT brief + RED test (task N)" -> "red-gate: materialize + verify RED";
+    "red-gate: materialize + verify RED" -> "defective? ARBITRATE to B" [label="no (exit 1)"];
+    "red-gate: materialize + verify RED" -> "dispatch C (headless, fresh)" [label="yes"];
+    "dispatch C (headless, fresh)" -> "Script A: task tests -> full suite -> analyze";
+    "Script A: task tests -> full suite -> analyze" -> "fail -> resume C (--continue)" [label="red"];
+    "Script A: task tests -> full suite -> analyze" -> "green-gate: commit + graphify-update" [label="green"];
+    "green-gate: commit + graphify-update" -> "dispatch D (headless, fresh) + review package";
+    "dispatch D (headless, fresh) + review package" -> "D JSON verdict: APPROVED / SEND_BACK / ESCALATE";
+    "D JSON verdict: APPROVED / SEND_BACK / ESCALATE" -> "route-next";
+    "route-next" -> "APPROVED -> NEXT (minors PARKED)" [label="APPROVED"];
+    "route-next" -> "SEND_BACK -> CORRECTIVE: B brief -> resume C" [label="SEND_BACK"];
+    "route-next" -> "ESCALATE / overflow -> ARBITRATE: B rules" [label="ESCALATE"];
+    "APPROVED -> NEXT (minors PARKED)" -> "more tasks? -> B: next brief" [label="yes"];
+    "more tasks? -> B: next brief" -> "red-gate: materialize + verify RED";
+    "more tasks? -> B: next brief" -> "FINAL_REVIEW" [label="no"];
+    "FINAL_REVIEW" -> "B fresh /new session: plan + diff + ledger";
+    "B fresh /new session: plan + diff + ledger" -> "Merge";
 }
 ```
 
@@ -252,18 +247,17 @@ digraph pipeline {
    main/master without explicit consent.
 2. Resolve the workspace, create the ledger, append the `gate` entry.
 3. Brainstorm and design with the human partner (native brainstorming,
-   enriched per its Incremental Persistence section), then dispatch the
-   Controller to produce the JSON plan.
+   enriched per its Incremental Persistence section), then B writes the JSON
+   plan.
 
 ### The JSON Plan
 
-The Controller returns the plan as JSON. Keep it compact — metadata, not
-prose. Schema:
+B writes the plan directly. Keep it compact — metadata, not prose. Schema:
 
 ```json
 {
   "feature": "one-line feature statement",
-  "spec_doc": "docs/superpowers/specs/2026-08-25-topic-design.md",
+  "spec_doc": "docs/superpowers/specs/2026-09-02-topic-design.md",
   "global_constraints": ["binding rules every task inherits"],
   "tasks": [
     {
@@ -286,84 +280,53 @@ constraints and dependencies. Create one todo per task.
 For each task in order:
 
 0. **Route.** Run `scripts/route-next <workspace> TASK [TOTAL_TASKS]` and
-   execute its emitted action. The router, not the LLM, decides the
-   transition after every ledgered outcome (including after reviews:
-   APPROVED → NEXT, SEND_BACK → FIX, ESCALATE → STRATEGIC).
+   execute its emitted action via `scripts/orchestrator` (or inline). The
+   router, not the LLM, decides every transition.
 
-1. **JIT brief.** Dispatch the Controller (template:
-   [controller-brief-prompt.md](controller-brief-prompt.md)) with the task's
-   plan entry, the interfaces earlier tasks established, and global
-   constraints. Save its output verbatim to
-   `<workspace>/task-N-brief.md`; it must contain the RED test as runnable
-   code. Ledger: `brief_ready`.
+1. **JIT brief (B).** B writes `<workspace>/task-N-brief.md` per the
+   [controller-brief-prompt.md](controller-brief-prompt.md) guidance — task
+   statement, exact values, BLACK-BOX RED tests, `EXPECTED-RED:`, out of
+   scope. Ledger: `brief_ready`.
 
-2. **RED check.** Materialize the brief's test files verbatim into the
-   working tree, run the test command **via `scripts/cmd`** (full output to
-   `<workspace>/task-N-red-out.txt`), and confirm the new tests FAIL for
-   the expected reason. A RED test that passes before implementation means
-   the brief is defective — back to the Controller, ledger `arbitration`.
-   Commit the RED tests separately (`test:` prefix). Ledger: `red_check`.
-   Flutter layer: use `scripts/red-gate`, which additionally verifies the
-   failure reason against the brief's `EXPECTED-RED:` text — a RED that
-   fails for the wrong reason (e.g. a compile error in test setup instead
-   of the missing symbol) is a defective brief, not a verified RED.
+2. **RED check.** Run `scripts/red-gate <workspace> TASK`. It materializes
+   the brief's test files verbatim, runs the test command, and verifies the
+   failure reason against `EXPECTED-RED:` — a RED that passes, or that fails
+   for the wrong reason (e.g. a compile error in test setup instead of the
+   missing symbol), is a defective brief: exit 1, no dispatch, back to B
+   (`arbitrate`). On success red-gate dispatches C. Ledger: `red_check`.
 
-3. **Coder rounds.** Dispatch the Coder (template: [coder-prompt.md](coder-prompt.md))
-   on the Operational tier. Round 1 gets the brief path only. If tests stay
-   red, Round 2 may **resume the round-1 Coder session** (same tier, same
-   task) with the round-1 diff and the failing test output appended — the
-   brief + interfaces prefix is cache-billed. Two rounds maximum — a third
-   Coder attempt is forbidden; escalation is the answer, not persistence.
-   Ledger: `coder_round` each.
+3. **Coder rounds.** C (Operational, `two-model-coder`) writes code only —
+   it never runs commands (ADR-0002). Script A runs task tests → full suite →
+   `flutter analyze`; any failure resumes the same C session
+   (`dispatch --continue --session`) with the failure output (minified by
+   `token-kill`) for the next fix round. Budget: round 1 + 3 fixes (4
+   attempts). Ledger: `coder_round` each.
 
-4. **Wrap-up on success.** Run `scripts/run-gates <workspace> "<test_cmd>"
-   "<analyze_cmd>"` (full suite + analysis through `scripts/cmd`, full
-   reports to `<workspace>/run-gates-*.txt`). Both clean: commit the
-   implementation (`Task N: <title>`), ledger `commit`. Run
-   `scripts/interface-check <workspace> TASK BASE`; on
-   exit 1 it prints the consumed file(s) and dependent task(s) — ledger
-   `interface_change` from the script output (the semantic "did it break the
-   contract" stays with the Reviewer). Failing analysis is a finding for
-   review, not a silent fix — never repair code yourself.
+4. **Wrap-up on success.** All gates green → `green-gate` commits, appends
+   the `commit` ledger entry, runs `graphify-update` (post-commit, ADR-0004),
+   builds the review package, and dispatches D. Run
+   `scripts/interface-check <workspace> TASK BASE`; on exit 1 ledger
+   `interface_change` (the semantic "did it break the contract" stays with
+   D).
 
-5. **Review.** Run `scripts/red-integrity <workspace> TASK` first — the
-   committed tests must match the brief's RED-TESTS byte-for-byte; exit 1 is
-   test tampering, an automatic Critical finding (reject before review).
-   Then build the review package
-   (`scripts/review-package <workspace> BASE HEAD` — record BASE before
-   the task's first dispatch) and the interface context: the signatures and
-   contracts this task's `touches` and `depends_on` declare or consume,
-   gathered from the committed code, capped at ~100 lines, written to
-   `<workspace>/task-N-interfaces.md`. Dispatch the Reviewer (template:
-   [reviewer-prompt.md](reviewer-prompt.md)) on the Strategic tier with
-   those two paths plus the brief path. Fresh dispatch every time —
-   including for escalated tasks.
+5. **Review.** `scripts/red-integrity <workspace> TASK` first — committed
+   tests must match the brief's RED-TESTS byte-for-byte; exit 1 is test
+   tampering, an automatic Critical finding. D (`two-model-reviewer`,
+   Strategic, headless via green-gate) reviews the review package + the
+   interfaces file (`graphify-subgraph` output) and returns a JSON verdict.
+   Script A parses it to `<workspace>/task-N-review.json`. D never runs
+   test/analyze (Item 2).
 
-6. **Outcome.** Ledger `review_outcome`, then:
-   - `APPROVED` → ledger `task_complete`, next task.
-   - `SEND_BACK` → one fix round by the implementing tier that still has
-     budget (Coder if any of its 2 rounds remain, otherwise Strategic
-     Coder), fed the findings verbatim; then wrap-up + a fresh Reviewer.
-     No budget left and findings persist → treat as escalation.
-   - `ESCALATE` → Strategic Coder now (step 7).
-   Minor findings are ledgered as deferred minors
-   (`task_complete` PARKED=k/v notes); the final review triages them.
+6. **Outcome.** Ledger `review_outcome`, then `route-next`:
+   - `APPROVED` → ledger `task_complete`, minors PARKED (documented by B),
+     next task.
+   - `SEND_BACK` → `CORRECTIVE`: B writes a corrective brief; the same C
+     session resumes with it (ADR-0003); then wrap-up + D re-review.
+   - `ESCALATE` → `ARBITRATE`: B validates the brief/test's viability and
+     reissues or re-plans.
+   No budget left and findings persist → treat as escalation.
 
-7. **Escalation.** Run `scripts/keep-discard <workspace> TASK` first — the
-   mechanical fate of the partial work is an exit code, not a judgment:
-   DISCARD (exit 1) → `scripts/cmd --full-file
-   <workspace>/task-N-discard.txt -- git checkout BASE -- .` + clean
-   untracked, start fresh; KEEP (exit 0) → the Strategic Coder still judges
-   approach soundness explicitly. Ledger `keep_decision` from the gate.
-   Then dispatch
-   the Strategic Coder (template:
-   [strategic-coder-prompt.md](strategic-coder-prompt.md)) with the current
-   diff and the failing test output. It implements and reports. Wrap-up,
-   review, outcome as above.
-   If the Strategic Coder also fails twice, or Reviewer and Strategic Coder
-   cycle twice with no convergence: **deadlock** — dispatch the Controller
-   for arbitration with the diff, failing tests, review findings, and the
-   relevant ledger excerpt. Its ruling binds; if the ruling is structural,
+7. **Arbitration.** B's ruling is binding; if the ruling is structural,
    reopen the plan (revise `plan.json` and remaining todos), never improvise.
 
 Batch exception: several tiny independent same-shape tasks may share one
@@ -374,70 +337,62 @@ change. Judgment-heavy work stays one-dispatch-per-task.
 
 | Part | Owner | Needs accumulated context? |
 |---|---|---|
-| Full test suite revalidation | Orchestrator | No — execution, not judgment |
-| Holistic final review | Controller (stateless dispatch) | Curated, not raw |
-| Merge | Orchestrator | No — deterministic |
+| Full test suite revalidation | Script A | No — execution, not judgment |
+| Holistic final review | B (fresh `/new` session) | Curated, not raw |
+| Merge | Script A | No — deterministic |
 
 1. Run `scripts/final-gate <workspace> TOTAL_TASKS` — the mechanical
    readiness verdict is an exit code: exit 0 (all tasks complete, no
    unresolved SEND_BACK/ESCALATE, no blocking parked findings, tests +
-   analysis green) is required before the holistic review is dispatched;
-   exit 1 lists the blockers to resolve first.
-2. Re-run `scripts/run-gates <workspace> "<test_cmd>" "<analyze_cmd>"` on
-   the finished branch. Fix nothing yourself; findings go to the step below.
+   analysis green) is required before the holistic review; exit 1 lists the
+   blockers to resolve first.
+2. Re-run `green-gate --no-commit` (Flutter) / `run-gates` (generic) on the
+   finished branch. Fix nothing yourself; findings go to the step below.
 3. Generate the whole-branch diff: `scripts/review-package <workspace>
-   MERGE_BASE HEAD` (`MERGE_BASE` from `scripts/cmd --full-file
-   <workspace>/merge-base.txt -- git merge-base main HEAD`).
-4. Dispatch the Controller ([final-review-prompt.md](final-review-prompt.md))
-   with that package plus the full ledger — two curated artifacts, not the
-   branch's conversation history. Point it at deferred-minor entries to
-   triage what blocks merge.
-5. Findings become escalation-at-task-scope: one targeted Strategic Coder
-   dispatch per coherent fix group, reviewed by a fresh Code Reviewer. Only
-   the part the diff flags is reprocessed — never the whole branch. If the
-   issue is structural, reopen the plan instead.
+   MERGE_BASE HEAD`.
+4. B starts a **fresh `/new` session** and reviews with the original plan +
+   consolidated diff + full ledger (Item 5) — three curated artifacts, not
+   the branch's conversation history. Triage deferred-minor entries.
+5. Findings become escalation-at-task-scope: one targeted C-dispatch per
+   coherent fix group, reviewed by D. Only the part the diff flags is
+   reprocessed. If the issue is structural, reopen the plan instead.
 6. Export every `Ruling`-bearing ledger line into your final message under
-   "Rulings I made" — each with what it costs if wrong. A ruling that dies
-   with the workspace was a decision made in secret.
+   "Rulings I made" — each with what it costs if wrong.
 7. Run `scripts/doc-check` — deterministic gate: if the branch changed
-   pipeline files (`skills/`) and `README.txt` / `README-LLM.md` were not
-   updated, exit 1. The Orchestrator must update them and amend the
-   commit before proceeding.
+   pipeline files (`skills/`, `agent/`, `scripts/`) and `README.txt` /
+   `README-LLM.md` were not updated, exit 1. Update them before proceeding.
 
 Then delete the workspace (git history is the record) and use
-superpowers:finishing-a-development-branch. The merge itself is the
-Orchestrator's — deterministic, no dispatch.
+superpowers:finishing-a-development-branch. The merge itself is Script A's —
+deterministic, no dispatch.
 
 ## Context and Cost Optimization Rules
 
 - **Cache-aware context:** keep the stable prefix (system + plan + brief +
   interfaces) front and **append** deltas at the end — a change in the middle
-  invalidates the **cached prefix** and bills the whole input fresh. Same-tier,
-  same-task resume is the only reuse; when the role or task changes, dispatch
-  fresh.
+  invalidates the **cached prefix** and bills the whole input fresh.
+  Within-task resume (`--continue --session`) is the only reuse; when the
+  task changes, dispatch fresh (ADR-0003).
 - The ledger carries continuity — written by the script from structured
   output, read by any role needing prior decisions (the final review reads
   all of it; nobody else needs more than excerpts).
-- RED tests are generated just-in-time, per task, never batched in advance.
-- The Reviewer's context is script-curated (diff + affected interfaces) to
-  avoid both under-informed review and attention dilution from unrelated
-  accumulated history.
-- Hand artifacts over as file paths, never pasted content — pasted content
-  sits in your context forever.
+- RED tests are generated just-in-time, per task, by B — never batched.
+- D's context is script-curated (review package + interfaces) to avoid both
+  under-informed review and attention dilution.
+- **Observability:** C/D progress is teed to workspace logs (`dispatch`); the
+  developer can tail them; headless sessions never pollute the main session
+  history.
+- Hand artifacts over as file paths, never pasted content.
 - **Every command line is scripted and RTK-compressed:** run all LLM-invoked
-  commands (test runs, analysis, git ops, graphify queries) through
-  `scripts/cmd --full-file <file> -- <cmd>` — it saves the FULL output to the
-  file and prints the RTK-compressed view on stdout. Nothing a gate depends
-  on (red-gate `EXPECTED-RED`, escalation packages, `red-integrity`
-  byte-compare) is ever compressed; only what an LLM sees on stdout is.
-  `RTK_ENABLED=0` disables compression (passthrough); `RTK_BIN` overrides
-  the binary. If RTK has no filter for a command, `cmd` passes the full
-  output through — nothing is lost.
-- **Graphify is Controller-side and lazy:** the Controller queries the graph
-  (`graphify explain` / `graphify path`) when writing briefs and rebuilds it
-  only when stale. It is no longer chained into `red-gate`/`green-gate` —
-  those gates never read the graph. RTK covers the context-compression job
-  the eager chains used to aim at.
+  commands through `scripts/cmd` — full output to a file, RTK-compressed
+  stdout. `flutter test`/`flutter analyze` are compressed via the `rtk test` /
+  `rtk err` wrappers derived from the full file (the verdict always comes
+  from the raw run — RTK wrappers mask child exit codes, verified).
+  `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
+- **Graphify is post-commit + subgraph-only (ADR-0004):** `graphify-update`
+  runs only after an approved task's commit; `graphify-subgraph` extracts the
+  affected-dependency slice for B's next brief and D's review. It is no
+  longer chained into per-Coder iteration, and never sends whole source.
 
 ## Language Policy
 
@@ -446,62 +401,47 @@ Orchestrator's — deterministic, no dispatch.
   summaries, review reports — regardless of the developer's own language.
 - Exception: the software's UI (user-facing strings, labels, copy) defaults
   to the developer's language, not English.
-- Rationale: English-only context artifacts measurably reduce tokens per
-  artifact, which serves this pipeline's cost/time goal directly.
 
 ## Common Rationalizations
 
 | Excuse | Reality |
-|--------|---------|
-| "Resuming the Coder's session is cheaper than a fresh dispatch" | Only same-tier, same-task resume is cache-safe. Resuming across roles or tasks reintroduces pollution — stay inside the Resume rule. |
-| "I'll just fix this one finding myself" | Orchestrator fixes skip review and dirty your coordination context. Route it to a tier. |
-| "One more Coder round will converge" | Two rounds is the budget. Round 3 is escalation denial — dispatch the Strategic Coder. |
-| "The Reviewer already saw task 3, reuse it" | A reused Reviewer grades with stale attention. Fresh dispatch, every task, no exceptions. |
-| "The RED test is slightly wrong, I'll adjust it" | Test files change only through Controller arbitration. You adjusting tests destroys the pipeline's ground truth. |
-| "Batching all RED tests upfront saves Controller calls" | Stale-test churn costs more than the saved calls. Just-in-time is the rule. |
+|---|---|
+| "I'll dispatch the Coder myself via the task tool" | Script A owns dispatch (`red-gate`/`green-gate`/`orchestrator`). You dispatching re-inserts the session into the hot path and pollutes your context — the thing the design removes. |
+| "C should run the tests to iterate faster" | Write-only Coder (ADR-0002) keeps C's context minimal and gates deterministic. Script A decides test/analyze passes; C gets failures fed back. |
+| "A fresh Reviewer per correction is safer" | Within-task D resume (ADR-0003) reuses prior findings; the final verdict is still a fresh judgment recorded in the ledger. |
+| "I'll rebuild the graph after each Coder round" | Post-commit only (ADR-0004). Per-iteration rebuilds are wasted overhead — the graph is consumed at brief/review time, not mid-edit. |
+| "One more Coder round will converge" | Four attempts is the budget. Round 5 is arbitration denial — dispatch `ARBITRATE` to B. |
+| "The RED test is slightly wrong, I'll adjust it" | Test files change only through B arbitration. You adjusting tests destroys the pipeline's ground truth. |
+| "I'll note the minor finding and fix it in this task" | Minor findings are documented by B (PARKED) — never a fix loop. The final review triages them. |
 | "The ledger can wait until the task finishes" | The ledger is what survives compaction. An unwritten escalation is a repeated one. |
-| "Strategic Coder can tweak the test, it's smart" | Smart does not mean exempt. TEST_DEFECT report, Controller arbitration, or nothing. |
+| "The Reviewer can run the suite once more to be sure" | D reviews compiler-approved code only (Item 2). Re-running tests in review duplicates the gate and wastes strategic tokens. |
 
 ## Example Workflow
 
 ```
 Human: Build the invoice export feature.
 
-You: Before brainstorming - should this branch use the two-model pipeline?
-     If yes: which model is Strategic (expensive), which is Operational (cheap)?
-     And what are the test and analyze commands?
-
-Human: Yes. Strategic: claude-opus-4. Operational: claude-haiku.
-       Tests: flutter test. Analyze: flutter analyze.
-
-You: [worktree verified] [scripts/pipeline-workspace plan.md -> .superpowers/two-model/plan/]
-     [scripts/ledger-append .../ledger.jsonl gate - "strategic=claude-opus-4 op=claude-haiku test=flutter_test analyze=flutter_analyze"]
-     [brainstorming with enrichment -> CONTEXT.md updated as terms resolve]
-     [Controller dispatch -> plan.json: 5 tasks]
+You (B): [gate: pipeline YES; tiers pre-configured; test/analyze recorded]
+You: [worktree verified] [scripts/pipeline-workspace plan.md -> workspace]
+You: [ledger-append gate -]
+You: [brainstorming -> CONTEXT.md updated as terms resolve]
+You: [write plan.json: 5 tasks; ledger]
 
 Task 1: Invoice model and serialization
 
-[Controller JIT dispatch -> task-1-brief.md with RED test]
-[scripts/cmd --full-file .../task-1-red-out.txt -- flutter test -> fails: Invoice class missing]
-[scripts/ledger-append ... red_check 1 "expected FAIL confirmed"]
-[Coder round 1 (haiku) -> report: DONE, 3 files]
-[scripts/run-gates .../ "flutter test" "flutter analyze" -> green]
-[git commit -m "Task 1: invoice model and serialization"; ledger commit]
-[scripts/review-package .../ BASE HEAD -> task-1.diff]
-[Reviewer dispatch (opus, fresh) -> APPROVED]
-[ledger review_outcome + task_complete]
+You: [write task-1-brief.md with BLACK-BOX RED test + EXPECTED-RED]
+[scripts/orchestrator ws 1 5]  -> red-gate verifies RED, dispatches C (headless)
+  C writes code (write-only)  -> Script A: task tests -> full suite -> analyze
+  green-gate commits + graphify-update + dispatches D (headless)
+  D returns JSON -> route-next -> OUTCOME: NEXT 2
+You: [read OUTCOME; minors PARKED; write task-2 brief]
 
-Task 2: CSV formatter  ... rounds 1-2 red ...
-[ledger escalated 2 "coder failed 2 rounds"]
-[Strategic Coder (opus): DECISION=KEEP, implements, DONE]
-[wrap-up, Reviewer -> APPROVED, ledger]
-
-...
+Task 2: CSV formatter ... C rounds 1-4 red ...
+[route-next -> ARBITRATE 2]  You: [validate brief/test; reissue corrective brief]
 
 All tasks complete:
-[full suite + analyze on branch]
-[scripts/review-package MERGE_BASE HEAD -> branch.diff]
-[Controller final review with branch.diff + ledger.jsonl -> clean, triaged minors]
-[Rulings exported] [workspace deleted]
+[final-gate -> green-gate --no-commit -> review-package MERGE_BASE HEAD]
+[/new fresh session: plan + diff + ledger -> clean, triaged minors]
+[Rulings exported] [doc-check] [workspace deleted]
 Use superpowers:finishing-a-development-branch.
 ```

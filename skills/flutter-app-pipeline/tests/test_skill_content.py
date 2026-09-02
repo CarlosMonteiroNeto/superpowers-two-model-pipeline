@@ -28,13 +28,14 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         self.assertIn("graphify-regen", text)
         self.assertIn("graphify-package", text)
 
-    def test_graphify_is_controller_side_lazy(self):
-        """Graphify is a Controller-side lazy optimization: the eager chains
-        in red-gate/green-gate are gone; the skill must say graphify is no
-        longer chained into them."""
+    def test_graphify_is_post_commit_and_subgraph(self):
+        """Graphify is post-commit only (ADR-0004): the graph is rebuilt only
+        after an approved task's commit, never per Coder iteration; the
+        subgraph extraction feeds B's briefs and D's review."""
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("no longer chained", text)
-        self.assertIn("Controller-side and lazy", text)
+        self.assertIn("post-commit", text)
+        self.assertIn("graphify-subgraph", text)
+        self.assertIn("never per Coder iteration", text)
 
     def test_rtk_compression_invariant(self):
         """Every LLM-invoked command runs through scripts/cmd: full output to

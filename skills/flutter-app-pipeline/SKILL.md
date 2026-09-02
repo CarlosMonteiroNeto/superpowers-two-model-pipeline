@@ -65,15 +65,18 @@ Gate logic (reported by `pkg-score` as the verdict):
 
 Delegate to `two-model-sdd-pipeline`. The gate records `flutter test` as the test command and `flutter analyze` as the analysis command.
 
-Flutter-specific additions to the per-task loop:
+Flutter-specific additions to the per-task loop (script-autonomous — the
+interactive session B writes the brief and receives feedback only through
+script outputs; Script A owns dispatch):
 
 1. **Download & resolve — `scripts/pub-sync`** (deterministic, no LLM). Download what Phase 2 decided, update the lockfile, report version conflicts from `pub upgrade --dry-run` to a file.
-2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment). Materializes the brief's RED tests and verifies the expected failure **for the expected reason**: the brief's `EXPECTED-RED:` block holds a verbatim substring the failing output must contain. Exit code is the verdict; a RED test that passes before implementation, or that fails for the wrong reason (e.g. a compile error in test setup instead of the missing symbol), means the brief is defective → back to the Controller.
-3. **Coder rounds** — as in two-model (Operational tier; escalation after 2 rounds).
-4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green → commits and ledger-appends; not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix.
-5. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops, graphify queries): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
-6. **Graphify invariant — Controller-side and lazy.** The Controller queries the graph (`graphify explain` / `graphify path`) when writing task briefs and rebuilds it only when stale (best-effort, `GRAPHIFY_ENABLED=0` to disable). Graphify is **no longer chained into `red-gate`/`green-gate`** — those gates never read the graph; RTK covers the context-compression job the eager chains used to aim at. `pub-sync` still indexes newly added packages (a Controller feed). The graph exposes structure, not method bodies — that is what keeps the Controller's brief-writing context low.
-7. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
+2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment). Materializes the brief's RED tests and verifies the expected failure **for the expected reason**: the brief's `EXPECTED-RED:` block holds a verbatim substring the failing output must contain. Exit code is the verdict; a RED test that passes before implementation, or that fails for the wrong reason (e.g. a compile error in test setup instead of the missing symbol), means the brief is defective → back to B for arbitration. **On success, red-gate dispatches the Coder headlessly** (Item 4 — `scripts/dispatch --agent two-model-coder`).
+3. **Coder rounds** — Operational tier (`two-model-coder`, write-only). C never runs tests/analysis (ADR-0002): Script A decides task tests → full suite → `flutter analyze` by exit code and feeds failures back. Round 1 + 3 fixes (4 attempts); resume via `--continue --session`; overflow → `ARBITRATE` to B.
+4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green → commits, ledger-appends, runs the **post-commit `graphify-update`**, builds the review package, and **dispatches the Reviewer headlessly** (Item 3 — `scripts/dispatch --agent two-model-reviewer`). Not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix. `--no-commit` validates only (no graphify, no dispatch).
+5. **Reviewer (D)** — `two-model-reviewer`, Strategic, reviews compiler-approved code only (Item 2 — never runs test/analyze). Returns a structured JSON verdict (APPROVED / SEND_BACK / ESCALATE + findings + minors). Context kept within the task's correction loops (ADR-0003); minors documented by B only.
+6. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops, graphify queries): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. `flutter test` → `rtk test` and `flutter analyze` → `rtk err` wrapper derivation (verdict always from the raw run — RTK wrappers mask child exit codes). Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
+7. **Graphify invariant — post-commit only, subgraph extraction (ADR-0004).** `graphify-update` rebuilds the graph ONLY after an approved task's commit (green-gate chain) — never per Coder iteration. `graphify-subgraph WS TASK` extracts the affected-dependency slice (`explain`/`path` on the task's `touches`) into `<ws>/task-N-interfaces.md` for B's next brief and D's review — never whole source. `pub-sync` still indexes newly added packages (a B feed). The graph exposes structure, not method bodies.
+8. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
 
 ## 4. Phase 4 — Project-Wide Review
 
@@ -88,21 +91,27 @@ Flutter-specific additions to the per-task loop:
 |---|---|
 | `pkg-score PACKAGE` | AI subjectively judging package quality |
 | `pub-sync [PACKAGE]` | AI-driven download + AI reasoning about version conflicts + AI reconciling the lockfile |
-| `red-gate WORKSPACE TASK` | AI judging whether the RED test failed for the expected reason (verifies the brief's `EXPECTED-RED:` text against the report) |
-| `green-gate [--no-commit] [-m MSG]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries |
-| `cmd --full-file FILE -- CMD` (two-model) | AI seeing raw command output in context (saves FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code) |
+| `red-gate WORKSPACE TASK` | AI judging whether the RED test failed for the expected reason (verifies the brief's `EXPECTED-RED:` text against the report; on success dispatches the Coder) |
+| `green-gate [--no-commit] [-m MSG] [-w WS -t TASK -b BASE]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries (on commit: graphify-update + reviewer dispatch) |
+| `graphify-update [ROOT]` | AI deciding when the graph is stale (post-commit only, ADR-0004) |
+| `graphify-subgraph WS TASK` | AI gathering interface signatures for B/D from raw files (extracts the affected-dependency subgraph into `<ws>/task-N-interfaces.md`) |
+| `cmd --full-file FILE -- CMD` (two-model) | AI seeing raw command output in context (saves FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code; flutter test/analyze via rtk test/err wrappers) |
+| `dispatch --agent NAME --task N [--continue SESSION] ...` (two-model) | AI launching subagents from the session (headless `opencode run`; JSON stream teed to a workspace log; session id recorded for resume) |
+| `orchestrator WS TASK [TOTAL]` (two-model) | AI deciding the per-task transition (executes route-next actions, hands `OUTCOME:` back to B) |
+| `token-kill err\|src\|json FILE` (two-model) | AI reading raw logs/source/reports into context (RTK minification, lossless) |
 | `run-gates WS TEST ANALYZE` (two-model) | AI running/reading the gate-recorded test + analyze commands in the generic engine |
-| `graphify-regen [ROOT]` | AI parsing raw file diffs for context (invokes `graphify update <root>`); now Controller-side lazy only |
-| `graphify-package PACKAGE` | AI reading downloaded package source before the graph exists (invokes `graphify update <pkg_dir>`); feeds the Controller |
-| `route-next WORKSPACE TASK [TOTAL]` (two-model) | AI deciding "review passed → next task / failed → fix round" — the router emits the next action deterministically |
+| `graphify-regen [ROOT]` | AI parsing raw file diffs for context (invokes `graphify update <root>`); now post-commit Script-A-side only |
+| `graphify-package PACKAGE` | AI reading downloaded package source before the graph exists (invokes `graphify update <pkg_dir>`); feeds B |
+| `route-next WORKSPACE TASK [TOTAL]` (two-model) | AI deciding "review passed → next task / failed → corrective / escalate → arbitrate" — the router emits the next action deterministically |
 
-All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`
-env overrides (used by tests and unusual setups). `cmd` respects `RTK_ENABLED=0`
-(passthrough) and `RTK_BIN` (override). `pub-sync` keeps the graphify-package
-chain (Controller feed, non-fatal; disable with `GRAPHIFY_ENABLED=0`); `red-gate`
-and `green-gate` no longer chain graphify — they never read the graph. AI is
-reserved for semantic decisions only: which solution fits a task, what to build
-from scratch, RED-test authoring from a natural-language spec, and code review.
+All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`,
+`DISPATCH_BIN`, `OPENCODE_BIN` env overrides (used by tests and unusual setups).
+`cmd` respects `RTK_ENABLED=0` (passthrough) and `RTK_BIN` (override). `pub-sync`
+keeps the graphify-package chain (B feed, non-fatal; disable with
+`GRAPHIFY_ENABLED=0`); `graphify-update` runs post-commit only; `red-gate` and
+`green-gate` dispatch C/D on success but never read the graph. AI is reserved
+for semantic decisions only: which solution fits a task, what to build from
+scratch, RED-test authoring from a natural-language spec, and code review.
 
 ## 6. Data Sources for Score Computation (all scriptable, no LLM)
 
@@ -128,6 +137,6 @@ GitHub REST rate limit is 60 req/h unauthenticated, 5000 req/h authenticated. Ba
 ```
 1a Commercial Requirements → 1b Generic Architecture
   → [per task] 2a Research + pkg-score → 2b Selection (developer) → 2c writing-plans tasks (lockfile only)
-  → 3 two-model loop (pub-sync → red-gate → Coder → green-gate; Graphify before any LLM read)
+  → 3 two-model loop, script-autonomous (pub-sync → red-gate → dispatch C → gates → green-gate → dispatch D → route-next)
   → 4 green-gate --no-commit + full review → done
 ```
