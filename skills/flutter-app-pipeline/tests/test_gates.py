@@ -231,6 +231,63 @@ class TestGreenGate(GateTestBase):
         calls = log.read_text(encoding="utf-8") if log.exists() else ""
         self.assertEqual(calls, "")
 
+    def _ws_with_plan(self):
+        ws = pathlib.Path(self._tmp) / "ws"
+        ws.mkdir(exist_ok=True)
+        (ws / "plan.json").write_text(
+            json.dumps({"feature": "t", "tasks": [
+                {"id": 3, "title": "t3", "touches": ["lib/app.dart"], "depends_on": []},
+            ]}),
+            encoding="utf-8",
+        )
+        return ws
+
+    def test_green_commits_updates_graph_and_dispatches_reviewer(self):
+        """On all-green + commit with a workspace/task/base, green-gate must:
+        commit the task, run the post-commit graph update (ADR-0004), build the
+        review package, and dispatch the Reviewer headlessly (Item 3)."""
+        repo = self._git_repo()
+        (repo / "lib" / "app.dart").write_text("void main() { print('done'); }\n", encoding="utf-8")
+        ws = self._ws_with_plan()
+        g_log = pathlib.Path(self._tmp) / "g.log"
+        d_log = pathlib.Path(self._tmp) / "d.log"
+        base = "HEAD"
+        r = run_script(
+            "green-gate",
+            ["-m", "Task 3: done", "-w", str(ws), "-t", "3", "-b", base],
+            cwd=repo,
+            env_extra={**self.env, "STUB_LOG": str(g_log), "STUB_DISPATCH_LOG": str(d_log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("Task 3: done", self._log(repo))
+        # post-commit graph update happened
+        calls = g_log.read_text(encoding="utf-8") if g_log.exists() else ""
+        self.assertTrue(any("update" in c for c in calls.splitlines()), calls)
+        # reviewer dispatched headlessly
+        dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
+        self.assertIn("two-model-reviewer", dcalls)
+        # review package built into the workspace
+        self.assertTrue((ws / "task-3-review-package.diff").exists())
+
+    def test_no_commit_skips_graphify_and_reviewer(self):
+        """--no-commit validation must not update the graph nor dispatch the
+        reviewer (nothing changed)."""
+        repo = self._git_repo()
+        ws = self._ws_with_plan()
+        g_log = pathlib.Path(self._tmp) / "g.log"
+        d_log = pathlib.Path(self._tmp) / "d.log"
+        r = run_script(
+            "green-gate",
+            ["--no-commit", "-w", str(ws), "-t", "3", "-b", "HEAD"],
+            cwd=repo,
+            env_extra={**self.env, "STUB_LOG": str(g_log), "STUB_DISPATCH_LOG": str(d_log)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = g_log.read_text(encoding="utf-8") if g_log.exists() else ""
+        self.assertEqual(calls, "")
+        dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
+        self.assertEqual(dcalls, "")
+
 
 class TestRedGate(GateTestBase):
     def setUp(self):

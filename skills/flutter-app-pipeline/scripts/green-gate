@@ -2,15 +2,24 @@
 # Deterministic green approval: full suite + analyze + format check, then commit.
 # The gate's verdict is an exit code, never an LLM judgment.
 #
-# Usage: green-gate [--no-commit] [-m MESSAGE] [-l LEDGER]
+# Usage: green-gate [--no-commit] [-m MESSAGE] [-l LEDGER] [-w WS] [-t TASK] [-b BASE]
 #   --no-commit   validate only (Phase 4 / final review); never commits
 #   -m MESSAGE    commit message (default "green")
 #   -l LEDGER     optional JSONL ledger; appends a `commit` entry when committing
+#   -w WS         pipeline workspace (for review package + reviewer dispatch)
+#   -t TASK       task number (for reviewer dispatch paths)
+#   -b BASE       base commit for the review package (default: HEAD~1)
+#
+# On all-green + commit, when -w/-t are given: runs the post-commit graph update
+# (ADR-0004), builds the review package, and dispatches the Reviewer headlessly
+# (Item 3). --no-commit short-circuits before all of that.
 #
 # Exit codes: 0 = all gates passed (and committed unless --no-commit),
 #             1 = tests failed, 2 = analyze found issues, 3 = format drift.
 # Reports are written to ${GREEN_GATE_REPORT:-green-gate-report.txt}(.analyze|.format).
 set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 DART_BIN="${DART_BIN:-dart}"
@@ -20,12 +29,18 @@ REPORT="${GREEN_GATE_REPORT:-green-gate-report.txt}"
 no_commit=0
 message="green"
 ledger=""
+ws=""
+task=""
+base=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-commit) no_commit=1 ;;
     -m|--message) message=${2:-}; shift ;;
     -l|--ledger) ledger=${2:-}; shift ;;
+    -w|--workspace) ws=${2:-}; shift ;;
+    -t|--task) task=${2:-}; shift ;;
+    -b|--base) base=${2:-}; shift ;;
     *) echo "unexpected argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -75,5 +90,26 @@ fi
 # brief time. Removing the chain keeps the gate fast and deterministic. RTK
 # (via scripts/cmd) now covers the LLM-facing context compression the eager
 # chain used to aim at.
+
+# Post-commit Script-A chain (ADR-0004, ADR-0001):
+# 1. graphify-update - rebuild the graph only after an approved task's commit
+#    (never per Coder iteration - that is wasted overhead).
+# 2. Build the review package for D (base..head, range-named file).
+# 3. Dispatch the Reviewer headlessly (Item 3): tests + syntax are already
+#    green, so D reviews design/architecture only (Item 2).
+if [ "$no_commit" = "0" ] && [ -n "$ws" ] && [ -n "$task" ]; then
+  if [ -x "$SCRIPT_DIR/graphify-update" ]; then
+    "$SCRIPT_DIR/graphify-update" "$(pwd)" || true
+  fi
+
+  base=${base:-HEAD~1}
+  pkg="$ws/task-$task-review-package.diff"
+  "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/review-package" \
+    "$ws" "$base" HEAD "$pkg" || true
+
+  DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/dispatch}"
+  "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
+    --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
+fi
 
 exit 0
