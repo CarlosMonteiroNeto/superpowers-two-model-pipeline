@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Deterministic token-killer: minify LLM-facing payloads so context windows
+# stay small. Three modes:
+#   token-kill err <file>   -> RTK-compressed error view of a log (rtk err)
+#   token-kill src <file>   -> source with comments/blank lines stripped
+#   token-kill json <file>  -> compact JSON re-serialization (rtk json shape)
+# Every mode is lossless-safe: if RTK is unavailable or the input is invalid,
+# the raw content passes through unchanged - nothing is ever lost.
+#
+# Usage: token-kill err|src|json FILE
+# Exit codes: 0 = ok, 2 = usage / missing file / bad mode.
+set -euo pipefail
+
+RTK_BIN="${RTK_BIN:-rtk}"
+
+if [ $# -ne 2 ]; then
+  echo "usage: token-kill err|src|json FILE" >&2
+  exit 2
+fi
+
+mode=$1
+file=$2
+
+[ -f "$file" ] || { echo "TOKEN-KILL: no such file: $file" >&2; exit 2; }
+
+case "$mode" in
+  err)
+    # RTK error view when available; raw cat otherwise (nothing lost).
+    if command -v "$RTK_BIN" >/dev/null 2>&1; then
+      "$RTK_BIN" err -- cat "$file" 2>/dev/null || cat "$file"
+    else
+      cat "$file"
+    fi
+    ;;
+  src)
+    # Strip line comments (//, #), block comment lines (/* */), and blanks.
+    grep -vE '^\s*(//|#|/\*|\*/)' "$file" | grep -vE '^\s*$' || true
+    ;;
+  json)
+    # Compact JSON via python3; fall back to raw content on any failure.
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1], encoding='utf-8'))
+print(json.dumps(d, ensure_ascii=False, separators=(',', ':')))
+" "$file" 2>/dev/null || cat "$file"
+    else
+      cat "$file"
+    fi
+    ;;
+  *)
+    echo "usage: token-kill err|src|json FILE" >&2
+    exit 2
+    ;;
+esac
+
+exit 0
