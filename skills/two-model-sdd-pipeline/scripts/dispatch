@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Deterministic headless subagent launcher (ADR-0001): dispatches C or D via
+# `opencode run --agent`, tees the JSON event stream to a workspace log
+# (observability - the developer can tail it; the main session never sees it),
+# and records the sessionID for `--continue --session` resume on fix/correction
+# rounds (ADR-0003 context retention).
+#
+# Usage:
+#   dispatch --agent <two-model-coder|two-model-reviewer> --task N \
+#            [--continue SESSION] --prompt-file FILE --log LOG
+#
+#   --agent        agent definition name (must be mode: all - see spike findings)
+#   --task         task number (used for the session-id record path)
+#   --continue     resume an existing session (fix / correction round)
+#   --prompt-file  file with the dispatch prompt / brief
+#   --log          workspace log path (JSON event stream teed here)
+#
+# Env: OPENCODE_BIN (default opencode), OPENCODE_DIR (optional workdir).
+# Exit codes: 0 = dispatched, 2 = usage / missing prompt file; otherwise
+# opencode's exit code.
+set -euo pipefail
+
+OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+
+usage() {
+  echo "usage: dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG" >&2
+  exit 2
+}
+
+agent=""
+task=""
+cont=""
+prompt_file=""
+log=""
+workdir=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --agent) agent=${2:-}; shift 2 ;;
+    --task) task=${2:-}; shift 2 ;;
+    --continue) cont=${2:-}; shift 2 ;;
+    --prompt-file) prompt_file=${2:-}; shift 2 ;;
+    --log) log=${2:-}; shift 2 ;;
+    --workdir) workdir=${2:-}; shift 2 ;;
+    *) usage ;;
+  esac
+done
+
+[ -n "$agent" ] && [ -n "$task" ] && [ -n "$prompt_file" ] && [ -n "$log" ] || usage
+[ -f "$prompt_file" ] || { echo "DISPATCH: no prompt file: $prompt_file" >&2; exit 2; }
+
+mkdir -p "$(dirname "$log")"
+
+args=(run --agent "$agent" --format json)
+if [ -n "$cont" ]; then
+  args+=(--continue --session "$cont")
+fi
+args+=(--file "$prompt_file")
+
+prompt="You are dispatched by Script A. Read the attached file and execute per its instructions. Report concisely."
+
+set +e
+if [ -n "$workdir" ]; then
+  (cd "$workdir" && "$OPENCODE_BIN" "${args[@]}" "$prompt" > "$log" 2>&1)
+else
+  "$OPENCODE_BIN" "${args[@]}" "$prompt" > "$log" 2>&1
+fi
+rc=$?
+set -e
+
+# Record the session id for resume (fix / correction rounds).
+sid=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$log" | head -1)
+if [ -n "$sid" ]; then
+  sid_dir=$(dirname "$log")
+  printf '%s\n' "$sid" > "$sid_dir/task-$task-session.txt"
+fi
+
+exit "$rc"
