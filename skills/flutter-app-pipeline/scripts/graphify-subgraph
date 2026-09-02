@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Deterministic subgraph extraction (ADR-0004): query the project graph for the
+# affected-dependency slice of a task - the modules its plan entry `touches` -
+# and write the interfaces file the Reviewer (D) and the next brief (B) read.
+# This replaces the main agent's manual interface gathering: the only
+# LLM-composed slice in subagent headers becomes a deterministic script.
+#
+# Usage: graphify-subgraph WS TASK
+#   WS     - pipeline workspace (holds plan.json)
+#   TASK   - task id whose plan entry's `touches` define the nodes to query
+# Exit codes: 0 = ok, 2 = usage / missing plan / unknown task.
+set -euo pipefail
+
+GRAPHIFY_BIN="${GRAPHIFY_BIN:-graphify}"
+
+if [ $# -ne 2 ]; then
+  echo "usage: graphify-subgraph WS TASK" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+
+[ -f "$ws/plan.json" ] || { echo "GRAPHIFY-SUBGRAPH: no plan.json in $ws" >&2; exit 2; }
+
+out="$ws/task-$task-interfaces.md"
+: > "$out"
+
+# Resolve the task's touches from plan.json (deterministic, python3).
+touches=$(python3 - "$ws" "$task" <<'PY'
+import json, sys
+ws, task = sys.argv[1], sys.argv[2]
+plan = json.load(open(f"{ws}/plan.json", encoding="utf-8"))
+for t in plan.get("tasks", []):
+    if str(t.get("id")) == task:
+        print("\n".join(t.get("touches", [])))
+        break
+PY
+)
+
+if [ -z "$touches" ]; then
+  echo "GRAPHIFY-SUBGRAPH: task $task has no touches (or unknown task)" >&2
+  exit 2
+fi
+
+while IFS= read -r node; do
+  [ -n "$node" ] || continue
+  echo "## $node" >> "$out"
+  if [ "${GRAPHIFY_ENABLED:-1}" != "0" ] && command -v "$GRAPHIFY_BIN" >/dev/null 2>&1; then
+    "$GRAPHIFY_BIN" explain "$node" >> "$out" 2>/dev/null || true
+  fi
+  echo "" >> "$out"
+done <<< "$touches"
+
+# Cap the interfaces file (~100 lines / 12KB) so it never inflates context.
+head -c 12000 "$out" > "$out.tmp" && mv "$out.tmp" "$out"
+
+echo "GRAPHIFY-SUBGRAPH: wrote $out"
+exit 0

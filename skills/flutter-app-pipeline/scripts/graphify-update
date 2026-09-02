@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Deterministic post-commit graph rebuild (ADR-0004): rebuild the project graph
+# ONLY after an approved task's commit. Never per Coder iteration - that is
+# wasted overhead; the graph is consumed at brief time and review time, not
+# mid-edit.
+#
+# Usage: graphify-update [ROOT]    (default: current directory)
+# Exit codes: 0 = ok (or disabled), 2 = usage; graphify's exit code on failure.
+set -euo pipefail
+
+GRAPHIFY_BIN="${GRAPHIFY_BIN:-graphify}"
+
+if [ $# -gt 1 ]; then
+  echo "usage: graphify-update [ROOT]" >&2
+  exit 2
+fi
+
+root="${1:-$(pwd)}"
+
+if [ "${GRAPHIFY_ENABLED:-1}" != "0" ]; then
+  if command -v "$GRAPHIFY_BIN" >/dev/null 2>&1; then
+    "$GRAPHIFY_BIN" update "$root"
+  else
+    echo "GRAPHIFY-UPDATE: $GRAPHIFY_BIN not found; skipping (graph stays stale)" >&2
+  fi
+fi
+
+exit 0
