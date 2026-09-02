@@ -79,6 +79,18 @@ echo "$*" >> "${STUB_LOG:?}"
 exit "${STUB_GRAPHIFY_EXIT:-0}"
 """,
         )
+        # Dispatch stub: records argv to STUB_DISPATCH_LOG (defaults to
+        # /dev/null so unrelated tests don't fail on an unset var); exits per
+        # STUB_DISPATCH_EXIT (default 0). Used to verify red-gate/green-gate
+        # chain the Coder/Reviewer dispatch on success.
+        self.dispatch = write_stub(
+            self.stub_dir,
+            "dispatch",
+            """
+echo "$*" >> "${STUB_DISPATCH_LOG:-/dev/null}"
+exit "${STUB_DISPATCH_EXIT:-0}"
+""",
+        )
         # Native Windows stub for python-invoked scripts (subprocess.run with
         # a bash-shebang file fails on CreateProcess; a .cmd is executable).
         if os.name == "nt":
@@ -95,6 +107,7 @@ exit "${STUB_GRAPHIFY_EXIT:-0}"
             "GRAPHIFY_BIN": self.graphify,
             "GIT_BIN": shutil.which("git") or "git",
             "RTK_ENABLED": "0",
+            "DISPATCH_BIN": self.dispatch,
         }
 
     def tearDown(self):
@@ -318,6 +331,40 @@ class TestRedGate(GateTestBase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8") if log.exists() else ""
         self.assertEqual(calls, "", f"red-gate must not invoke graphify, got: {calls}")
+
+    def test_red_verified_dispatches_coder(self):
+        """On RED verified, red-gate dispatches the Coder headlessly (Item 4):
+        no main-agent intermediation."""
+        brief = self._brief()
+        brief.write_text(self._brief_text(), encoding="utf-8")
+        dlog = pathlib.Path(self._tmp) / "dispatch.log"
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra={**self.env, "STUB_TEST_EXIT": "1",
+                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist",
+                       "STUB_DISPATCH_LOG": str(dlog)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = dlog.read_text(encoding="utf-8") if dlog.exists() else ""
+        self.assertIn("--agent", calls)
+        self.assertIn("two-model-coder", calls)
+
+    def test_defective_brief_does_not_dispatch(self):
+        """A defective brief (RED passes before implementation) must NOT
+        dispatch the Coder - back to B for arbitration."""
+        brief = self._brief()
+        brief.write_text(self._brief_text(), encoding="utf-8")
+        dlog = pathlib.Path(self._tmp) / "dispatch.log"
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra={**self.env, "STUB_TEST_EXIT": "0",
+                       "STUB_DISPATCH_LOG": str(dlog)},
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        calls = dlog.read_text(encoding="utf-8") if dlog.exists() else ""
+        self.assertEqual(calls, "", f"defective brief must not dispatch, got: {calls}")
 
 
 class TestPubSync(GateTestBase):

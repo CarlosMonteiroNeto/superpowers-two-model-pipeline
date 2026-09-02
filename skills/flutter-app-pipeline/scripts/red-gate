@@ -19,6 +19,8 @@
 #             1 = defective brief, 2 = usage / missing brief / bad entry.
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 if [ $# -ne 2 ]; then
   echo "usage: red-gate WORKSPACE TASK" >&2
   exit 2
@@ -79,5 +81,12 @@ echo "RED-GATE: RED verified (expected failure, expected reason)"
 # brief and the materialized tests), and graphify rebuilds are a
 # Controller-side lazy optimization at brief time - not a per-task gate
 # side effect. Removing the chain keeps the gate fast and deterministic.
+
+# Dispatch the Coder headlessly (Item 4, ADR-0001): RED verified means the
+# brief is sound; Script A launches C directly, no main-agent intermediation.
+# C writes code only; Script A runs the gates (write-only Coder, ADR-0002).
+DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/dispatch}"
+"$DISPATCH_BIN" --agent two-model-coder --task "$task" \
+  --prompt-file "$brief" --log "$ws/task-$task-coder.log"
 
 exit 0
