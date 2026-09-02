@@ -57,8 +57,11 @@ RTK_ENABLED="${RTK_ENABLED:-1}"
 
 # Infer an RTK pipe filter for commands RTK compresses reliably. "" = no
 # filter -> pass the full output through unchanged (nothing is ever lost).
+# Commands are matched by basename so both PATH executables (`flutter`) and
+# FLUTTER_BIN-style absolute paths to stubs/binaries behave identically.
+cmd_base=$(basename "${1:-}")
 filter=""
-case "${1:-}" in
+case "$cmd_base" in
   git)
     case "${2:-}" in
       status) filter="git-status" ;;
@@ -73,20 +76,46 @@ case "${1:-}" in
   go)     [ "${2:-}" = "test" ] && filter="go-test" ;;
 esac
 
+# RTK wrapper mode: Flutter commands have no pipe filter (verified: RTK rejects
+# "flutter-test"). Instead RTK's command wrappers compress the output shape:
+#   flutter test    -> rtk test  (show only failures)
+#   flutter analyze -> rtk err   (show only errors/warnings)
+# The wrapper cannot run the raw command itself without masking its exit code
+# (verified: rtk test/err exit 0 even for a failing child), so `cmd` runs the
+# raw command ONCE for the verdict + full file, then derives the compressed
+# LLM-facing view from the FILE via the wrapper. This keeps the contract:
+# verdict = raw command's exit code; full output always on disk; RTK failure
+# can never turn a green command red (it only degrades the stdout view).
+wrapper=""
+case "$cmd_base" in
+  flutter)
+    case "${2:-}" in
+      test)    wrapper="test" ;;
+      analyze) wrapper="err" ;;
+    esac
+    ;;
+esac
+
 use_rtk=0
-if [ "$RTK_ENABLED" != "0" ] && [ -n "$filter" ] \
+if [ "$RTK_ENABLED" != "0" ] \
     && command -v "$RTK_BIN" >/dev/null 2>&1; then
   use_rtk=1
 fi
 
-# Run once: full output teed to the file, compressed view on stdout.
+# Run once: full output teed to the file; the LLM-facing view is the RTK
+# compressed derivation (or passthrough when RTK does not apply).
 set +e
-if [ "$use_rtk" = "1" ]; then
+if [ "$use_rtk" = "1" ] && [ -n "$wrapper" ]; then
+  "$@" > "$full_file" 2>&1
+  rc=$?
+  "$RTK_BIN" "$wrapper" -- cat "$full_file" 2>/dev/null || cat "$full_file"
+elif [ "$use_rtk" = "1" ] && [ -n "$filter" ]; then
   "$@" 2>&1 | tee "$full_file" | "$RTK_BIN" pipe -f "$filter"
+  rc=${PIPESTATUS[0]}
 else
   "$@" 2>&1 | tee "$full_file"
+  rc=${PIPESTATUS[0]}
 fi
-rc=${PIPESTATUS[0]}
 set -e
 
 exit "$rc"

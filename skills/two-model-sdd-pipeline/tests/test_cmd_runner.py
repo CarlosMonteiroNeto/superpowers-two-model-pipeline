@@ -191,5 +191,90 @@ class TestRunGates(CmdTestBase):
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
 
 
+class TestCmdFlutterRtk(CmdTestBase):
+    def test_flutter_test_keeps_true_exit_code_and_full_file(self):
+        """For flutter test, cmd runs the raw command (verdict = its exit code),
+        writes FULL output to the file, and shows the RTK-compressed view on
+        stdout (derived from the file via `rtk test -- cat <file>`). RTK wrapper
+        exit codes are unreliable (mask child exit) so the verdict comes from the
+        raw run and the compressed view is a read-only derivation."""
+        rtk = write_stub(
+            self.stub_dir,
+            "rtk",
+            """
+cat; exit 0
+""",
+        )
+        out = pathlib.Path(self._tmp) / "out.txt"
+        r = run_script(
+            "cmd",
+            ["--full-file", str(out), "--", "sh", "-c",
+             "echo flutter-run; exit 7"],
+            cwd=self._tmp,
+            env_extra={"RTK_BIN": rtk, "RTK_ENABLED": "1"},
+        )
+        # the raw command's exit code is the verdict (never rtk's).
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
+        # full output is in the file.
+        self.assertIn("flutter-run", out.read_text(encoding="utf-8"))
+        # stdout shows the (stub) compressed view derived from the full file.
+        self.assertIn("flutter-run", r.stdout)
+
+    def _flutter_stub(self, exit_code="0", output="stub: flutter ran"):
+        return write_stub(
+            self.stub_dir,
+            "flutter",
+            f"""
+echo "{output}"
+exit {exit_code}
+""",
+        )
+
+    def test_flutter_test_runs_through_rtk_test_wrapper(self):
+        """flutter test maps to the `rtk test` wrapper: the compressed LLM view
+        on stdout comes from it, while the raw command's exit code is the
+        verdict and the file keeps full output."""
+        rtk = write_stub(
+            self.stub_dir,
+            "rtk",
+            """
+echo "stub rtk test"; cat; exit 0
+""",
+        )
+        out = pathlib.Path(self._tmp) / "out.txt"
+        flutter = self._flutter_stub()
+        r = run_script(
+            "cmd",
+            ["--full-file", str(out), "--", flutter, "test"],
+            cwd=self._tmp,
+            env_extra={"RTK_BIN": rtk, "RTK_ENABLED": "1"},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("stub rtk test", r.stdout)
+        self.assertIn("stub: flutter ran", out.read_text(encoding="utf-8"))
+
+    def test_flutter_analyze_runs_through_rtk_err_when_available(self):
+        """cmd must run flutter analyze raw for the verdict, save full output to
+        the file, and show the RTK err compressed view on stdout."""
+        rtk = write_stub(
+            self.stub_dir,
+            "rtk",
+            """
+echo "stub rtk err"; cat; exit 0
+""",
+        )
+        out = pathlib.Path(self._tmp) / "out.txt"
+        flutter = self._flutter_stub()
+        r = run_script(
+            "cmd",
+            ["--full-file", str(out), "--", flutter, "analyze"],
+            cwd=self._tmp,
+            env_extra={"RTK_BIN": rtk, "RTK_ENABLED": "1"},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("stub rtk err", r.stdout)
+        self.assertIn("stub: flutter ran", out.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()
