@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Deterministic per-task driver (Script A thin orchestrator, ADR-0001):
+# runs the route-next action for a task and hands the outcome back to B.
+#
+# The per-task flow is autonomous once B hands over a brief:
+#   route-next -> execute the action -> re-route -> print OUTCOME for B
+# The gates own their dispatch calls: red-gate dispatches C on RED success
+# (Item 4), green-gate dispatches D after commit (Item 3). The orchestrator
+# is the sequencer - it never judges, it executes emitted actions.
+#
+# Usage: orchestrator WS TASK [TOTAL_TASKS]
+#   WS          - pipeline workspace (ledger.jsonl, plan.json)
+#   TASK        - task number to drive
+#   TOTAL_TASKS - optional; total task count (for NEXT vs FINAL_REVIEW)
+#
+# Env:
+#   RED_GATE_BIN   override red-gate script (default: flutter-app-pipeline)
+#   RUN_GATES_BIN  override the generic gate runner (non-Flutter layer)
+#   GATE_CMD       test command (non-Flutter layer, via run-gates)
+#   ANALYZE_CMD    analyze command (non-Flutter layer, via run-gates)
+#
+# Exit codes: 0 = handed control to B (BRIEF/CORRECTIVE/ARBITRATE/NEXT/
+#             FINAL_REVIEW or a script-owned action completed);
+#             1 = inconsistent state / unknown action; 2 = usage.
+set -euo pipefail
+
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "usage: orchestrator WS TASK [TOTAL_TASKS]" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+total=${3:-}
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+[ -f "$ws/ledger.jsonl" ] || { echo "ORCHESTRATOR: no ledger at $ws" >&2; exit 2; }
+
+route() {
+  local args=("$SCRIPT_DIR/route-next" "$ws" "$task")
+  [ -n "$total" ] && args+=("$total")
+  "${args[@]}"
+}
+
+action=$(route)
+
+case "$action" in
+  BRIEF*|CORRECTIVE*|ARBITRATE*|NEXT*|FINAL_REVIEW*)
+    # These hand control to B: B writes the (next/corrective) brief or
+    # arbitrates. The orchestrator just reports the outcome.
+    echo "OUTCOME: $action"
+    exit 0
+    ;;
+  RED*)
+    # Execute the action: red-gate materializes + verifies the RED tests and
+    # dispatches C on success (Item 4). Then re-route and report.
+    RED_GATE_BIN="${RED_GATE_BIN:-$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate}"
+    "$RED_GATE_BIN" "$ws" "$task" || true
+    action=$(route)
+    echo "OUTCOME: $action"
+    exit 0
+    ;;
+  CODER*|REVIEW*)
+    # C was already dispatched by red-gate (CODER is its hand-off state);
+    # REVIEW means a commit exists and the reviewer dispatch is owned by
+    # green-gate. The orchestrator records the state and hands back.
+    echo "OUTCOME: $action"
+    exit 0
+    ;;
+  *)
+    echo "ORCHESTRATOR: unexpected action: $action" >&2
+    exit 1
+    ;;
+esac
