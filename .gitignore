@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 graphify-out/cache/
+green-gate-report.txt
+green-gate-report.txt.analyze
+green-gate-report.txt.format
