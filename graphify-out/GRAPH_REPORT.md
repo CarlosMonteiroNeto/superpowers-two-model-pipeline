@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 251 files · ~260,041 words
+- 251 files · ~260,264 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2751 nodes · 3309 edges · 263 communities (195 shown, 58 thin omitted)
+- 2753 nodes · 3313 edges · 263 communities (195 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 19 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2af2df55`
+- Built from commit: `f6bd22e5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1055,8 +1055,8 @@ Cohesion: 0.23
 Nodes (12): collect_candidates(), compute_score(), _days_ago(), _detect_flutter_ready(), _fetch_json(), gather_data(), main(), Detect Flutter readiness from pubspec.yaml SDK constraint. Returns 'current' if… (+4 more)
 
 ### Community 255 - "test_template_search.py"
-Cohesion: 0.09
-Nodes (18): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, The suite must catch a regression of the headline flutter_ready feature:…, stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + readme 5 +… (+10 more)
+Cohesion: 0.08
+Nodes (19): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, The stop rule must halt the API work itself, not just the presentation: only…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, The suite must catch a regression of the headline flutter_ready feature:… (+11 more)
 
 ### Community 257 - "TestCategorySkeletonInBrainstorming"
 Cohesion: 0.13
@@ -1080,7 +1080,7 @@ Nodes (7): Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions fi
 
 ## Knowledge Gaps
 - **1326 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1321 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1658 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1659 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
