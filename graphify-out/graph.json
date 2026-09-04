@@ -680,6 +680,19 @@
       "source_location": "L108"
     },
     {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "label": "TestParseReviewWiredInDocs",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": "testparsereviewwiredindocs",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L8"
+    },
+    {
       "id": "skills_two_model_sdd_pipeline_tests_test_orchestrator_orchestratortestbase",
       "label": "OrchestratorTestBase",
       "_callable": true,
@@ -5454,6 +5467,66 @@
       "norm_label": "wsconnect()",
       "source_file": "tests/brainstorm-server/auth.test.js",
       "source_location": "L59"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_corrective_path_convention_documented",
+      "label": ".test_corrective_path_convention_documented()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": ".test_corrective_path_convention_documented()",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L27"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_readme_llm_documents_parse_review",
+      "label": ".test_readme_llm_documents_parse_review()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": ".test_readme_llm_documents_parse_review()",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L9"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_readme_txt_documents_parse_review",
+      "label": ".test_readme_txt_documents_parse_review()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": ".test_readme_txt_documents_parse_review()",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L13"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_skill_documents_parse_review",
+      "label": ".test_skill_documents_parse_review()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": ".test_skill_documents_parse_review()",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L17"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_skill_owner_consistent",
+      "label": ".test_skill_owner_consistent()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": ".test_skill_owner_consistent()",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L21"
     },
     {
       "id": "skills_two_model_sdd_pipeline_tests_test_orchestrator_orchestratortestbase_entry",
@@ -20623,6 +20696,39 @@
       "norm_label": "v3.2.2 (2025-10-21)",
       "source_file": "RELEASE-NOTES.md",
       "source_location": "L1018"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs",
+      "label": "test_skill_docs.py",
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "code",
+      "norm_label": "test_skill_docs.py",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_rationale_22",
+      "label": "SKILL.md must not claim Script A runs parse-review (B does).",
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "rationale",
+      "norm_label": "skill.md must not claim script a runs parse-review (b does).",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L22"
+    },
+    {
+      "id": "skills_two_model_sdd_pipeline_tests_test_skill_docs_rationale_28",
+      "label": "The corrective brief must go to task-N-corrective.md (distinct path, never\u2026",
+      "_origin": "ast",
+      "community": 267,
+      "community_name": "TestParseReviewWiredInDocs",
+      "file_type": "rationale",
+      "norm_label": "the corrective brief must go to task-n-corrective.md (distinct path, never...",
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L28"
     },
     {
       "id": "tests_opencode_setup",
@@ -60519,6 +60625,17 @@
       "weight": 1.0
     },
     {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
       "source": "skills_two_model_sdd_pipeline_tests_test_token_kill",
       "target": "skills_two_model_sdd_pipeline_tests_test_token_kill_run_script",
       "relation": "contains",
@@ -70793,6 +70910,61 @@
       "weight": 1.0
     },
     {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_readme_txt_documents_parse_review",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_skill_documents_parse_review",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_skill_owner_consistent",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_corrective_path_convention_documented",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_readme_llm_documents_parse_review",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
       "source": "skills_two_model_sdd_pipeline_tests_test_token_kill_testtokenkillerr",
       "target": "skills_two_model_sdd_pipeline_tests_test_token_kill_testtokenkillerr_test_err_minifies_error_log",
       "relation": "method",
@@ -71926,6 +72098,28 @@
       "weight": 1.0
     },
     {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_rationale_22",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_skill_owner_consistent",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_two_model_sdd_pipeline_tests_test_skill_docs_rationale_28",
+      "target": "skills_two_model_sdd_pipeline_tests_test_skill_docs_testparsereviewwiredindocs_test_corrective_path_convention_documented",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/two-model-sdd-pipeline/tests/test_skill_docs.py",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
       "source": "skills_two_model_sdd_pipeline_tests_test_token_kill_rationale_44",
       "target": "skills_two_model_sdd_pipeline_tests_test_token_kill_testtokenkillerr_test_err_minifies_error_log",
       "relation": "rationale_for",
@@ -72484,5 +72678,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "a8b0efe05075c40c4af6b1b2271a0f4293b686e0"
+  "built_at_commit": "2275af235a3fab3187032fbf7de40d9b6506757c"
 }

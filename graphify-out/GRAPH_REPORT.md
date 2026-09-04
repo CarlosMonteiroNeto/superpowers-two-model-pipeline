@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 255 files · ~262,204 words
+- 256 files · ~262,362 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2800 nodes · 3379 edges · 267 communities (198 shown, 59 thin omitted)
+- 2809 nodes · 3387 edges · 268 communities (199 shown, 59 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 29 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a8b0efe0`
+- Built from commit: `2275af23`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -272,6 +272,7 @@
 - Gemini CLI Tool Mapping
 - v4.1.0 (2026-01-23)
 - v3.2.2 (2025-10-21)
+- TestParseReviewWiredInDocs
 
 ## God Nodes (most connected - your core abstractions)
 1. `Superpowers Release Notes` - 43 edges
@@ -300,7 +301,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (267 total, 59 thin omitted)
+## Communities (268 total, 59 thin omitted)
 
 ### Community 0 - "server.cjs"
 Cohesion: 0.05
@@ -1094,9 +1095,13 @@ Nodes (3): Breaking Changes, Fixes, v4.1.0 (2026-01-23)
 Cohesion: 0.67
 Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
 
+### Community 267 - "TestParseReviewWiredInDocs"
+Cohesion: 0.22
+Nodes (3): SKILL.md must not claim Script A runs parse-review (B does)., The corrective brief must go to task-N-corrective.md (distinct path, never…, TestParseReviewWiredInDocs
+
 ## Knowledge Gaps
 - **1333 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1328 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1678 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1684 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **59 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
@@ -1105,7 +1110,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.3.0 (2025-10-28)`, `v4.1.0 (2026-01-23)`, `v3.2.2 (2025-10-21)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **Why does `Writing Skills` connect `Writing Skills` to `Anti-Patterns`, `Testing All Skill Types`, `RED-GREEN-REFACTOR for Skills`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`, `codex-tools.md`?**
-  _High betweenness centrality (0.001) - this node is a cross-community bridge._
+  _High betweenness centrality (0.002) - this node is a cross-community bridge._
 - **What connects `__dirname`, `extensionDir`, `packageRoot` to the rest of the system?**
   _1333 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `server.cjs` be split into smaller, more focused modules?**

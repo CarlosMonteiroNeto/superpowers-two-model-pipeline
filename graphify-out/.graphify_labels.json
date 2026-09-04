@@ -265,5 +265,6 @@
   "263": "parse-review script",
   "264": "Gemini CLI Tool Mapping",
   "265": "v4.1.0 (2026-01-23)",
-  "266": "v3.2.2 (2025-10-21)"
+  "266": "v3.2.2 (2025-10-21)",
+  "267": "TestParseReviewWiredInDocs"
 }

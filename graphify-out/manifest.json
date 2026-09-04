@@ -846,9 +846,9 @@
     "semantic_hash": ""
   },
   "README.txt": {
-    "mtime": 1788557845.9571126,
-    "seen": 1788558794.815057,
-    "ast_hash": "46e67f8a1fc87c5079bca1de84d4e64a",
+    "mtime": 1788560036.5841382,
+    "seen": 1788560152.3373568,
+    "ast_hash": "0688b1650910b71a2911bf57e88fce74",
     "semantic_hash": ""
   },
   "RELEASE-NOTES.md": {
@@ -1350,9 +1350,9 @@
     "semantic_hash": ""
   },
   "skills/two-model-sdd-pipeline/SKILL.md": {
-    "mtime": 1788559381.5957603,
-    "seen": 1788559568.711752,
-    "ast_hash": "cfb4754035f64b5cdd6e0862103e07d4",
+    "mtime": 1788560020.624365,
+    "seen": 1788560152.3373568,
+    "ast_hash": "91af11c4e6098a1869950ba39e044524",
     "semantic_hash": ""
   },
   "skills/two-model-sdd-pipeline/coder-prompt.md": {
@@ -1629,6 +1629,12 @@
     "mtime": 1788555769.156811,
     "seen": 1788556932.6642756,
     "ast_hash": "839c02138ea334ca4d03efe570fcaef5",
+    "semantic_hash": ""
+  },
+  "skills/two-model-sdd-pipeline/tests/test_skill_docs.py": {
+    "mtime": 1788559944.153461,
+    "seen": 1788560152.3373568,
+    "ast_hash": "2ef013a571b25d9c2aa1a105163dad6d",
     "semantic_hash": ""
   }
 }
