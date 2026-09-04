@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 249 files · ~258,680 words
+- 249 files · ~259,137 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2712 nodes · 3272 edges · 261 communities (193 shown, 58 thin omitted)
+- 2717 nodes · 3277 edges · 259 communities (191 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 19 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9b053627`
+- Built from commit: `a5411065`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -262,8 +262,6 @@
 - pkg_score.py
 - template_score.py
 - test_template_search.py
-- codex-tools.md
-- Gemini CLI Tool Mapping
 - v3.2.2 (2025-10-21)
 - template-search
 
@@ -272,12 +270,12 @@
 2. `main()` - 27 edges
 3. `run_script()` - 24 edges
 4. `Writing Skills` - 22 edges
-5. `Lift drill into superpowers as `evals/` — implementation plan` - 17 edges
-6. `data()` - 16 edges
-7. `main()` - 16 edges
-8. `runTests()` - 16 edges
-9. `Testing Skills With Subagents` - 16 edges
-10. `tdata()` - 15 edges
+5. `TestFlutterAppPipelineSkill` - 18 edges
+6. `Lift drill into superpowers as `evals/` — implementation plan` - 17 edges
+7. `data()` - 16 edges
+8. `main()` - 16 edges
+9. `runTests()` - 16 edges
+10. `Testing Skills With Subagents` - 16 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `main()` --calls--> `collect_candidates()`  [EXTRACTED]
@@ -294,7 +292,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (261 total, 58 thin omitted)
+## Communities (259 total, 58 thin omitted)
 
 ### Community 0 - "server.cjs"
 Cohesion: 0.05
@@ -353,8 +351,8 @@ Cohesion: 0.07
 Nodes (28): A1 — Per-session secret key (chosen approach), A2 — Host allowlist dropped; browser WS Origin retained, A3 — Server crashes on `null` / primitive WS payload, A4 — Frame-length bound in `decodeFrame` (adjacent), A. Server security hardening (`server.cjs`), B1 — macOS resource-fork dotfiles served as screen content, B2 — `stop-server.sh` can kill a reused PID, B3 — WebSocket client: silent reconnect, stale "Connected" (+20 more)
 
 ### Community 14 - "Testing Skills With Subagents"
-Cohesion: 0.07
-Nodes (29): 1. Explicit Negation in Rules, 2. Entry in Rationalization Table, 3. Red Flag Entry, 4. Update description, Common Mistakes (Same as TDD), Example: TDD Skill Bulletproofing, GREEN Phase: Write Minimal Skill (Make It Pass), Initial Test (Failed) (+21 more)
+Cohesion: 0.04
+Nodes (41): Codex App Finishing, Environment Detection, Model routing on spawns, Subagent dispatch requires multi-agent support, Waiting on children, Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions file (+33 more)
 
 ### Community 15 - "Superpowers v2.0.0 Release Notes"
 Cohesion: 0.07
@@ -369,8 +367,8 @@ Cohesion: 0.08
 Nodes (25): Lift drill into superpowers as `evals/` — implementation plan, Task 10: Bash test deletion phase — per-file with subagent gate, Task 10a: Skill-triggering prompts (6 files), Task 10b: explicit-skill-requests (selective deletion), Task 10c: subagent-driven-dev real-project tests, Task 10d: tests/claude-code/test-document-review-system.sh, Task 10e: tests/claude-code/test-requesting-code-review.sh, Task 10f: tests/claude-code/test-worktree-native-preference.sh (+17 more)
 
 ### Community 18 - "TestFlutterAppPipelineSkill"
-Cohesion: 0.08
-Nodes (9): Graphify is post-commit only (ADR-0004): the graph is rebuilt only after an…, Every LLM-invoked command runs through scripts/cmd: full output to a file, RTK-…, red-gate now verifies the failure reason, not just the exit code: the skill…, The skill must document the corrected graphify invocation (`graphify update…, The deterministic router (review outcome -> next action) must be documented in…, After the gate and Phase 2 selection, the branch runs to completion without…, Tiers are pre-configured locally; the gate asks the user only when the pipeline…, TestFlutterAppPipelineSkill (+1 more)
+Cohesion: 0.07
+Nodes (8): Re-weighted (spec Section 6): pub points now weight 20, not 30., The skill must state the health signals (recency + SDK + issue ratio) sum to 55…, The new project-level template stage must be documented: both the orchestrator…, The skill must document the template search order (specific first, stars…, Phase 2c change: the adopted template is cloned + graphified into a template…, The 'no code downloaded' invariant is relaxed ONLY for the adopted template…, TestFlutterAppPipelineSkill, TestTwoModelLayering
 
 ### Community 19 - "2026-04-06-worktree-rototill.md"
 Cohesion: 0.08
@@ -469,8 +467,8 @@ Cohesion: 0.32
 Nodes (3): FinalGateBase, TestFinalGate, write_stub()
 
 ### Community 43 - "Flutter App Pipeline (layered on two-model-sdd-pipeline)"
-Cohesion: 0.12
-Nodes (16): 0. Relationship to two-model-sdd-pipeline, 1. Phase 1 — Requirements (once, project-level), 1a. Commercial requirements verification, 1b. Generic technical architecture requirements, 2. Phase 2 — Research & Planning (per task), 2a. Solution research, 2b. Solution selection, 2c. Task documentation (+8 more)
+Cohesion: 0.11
+Nodes (17): 0. Relationship to two-model-sdd-pipeline, 1. Phase 1 — Requirements (once, project-level), 1a. Commercial requirements verification, 1b. Generic technical architecture requirements, 2. Phase 2 — Research & Planning (per task), 2a. Solution research, 2b. Solution selection, 2c. Task documentation (+9 more)
 
 ### Community 44 - "Code Review Reception"
 Cohesion: 0.12
@@ -1056,21 +1054,13 @@ Nodes (12): collect_candidates(), compute_score(), _days_ago(), _detect_flutter_
 Cohesion: 0.09
 Nodes (18): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, The suite must catch a regression of the headline flutter_ready feature:…, stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + readme 5 +… (+10 more)
 
-### Community 257 - "codex-tools.md"
-Cohesion: 0.22
-Nodes (5): Codex App Finishing, Environment Detection, Model routing on spawns, Subagent dispatch requires multi-agent support, Waiting on children
-
-### Community 258 - "Gemini CLI Tool Mapping"
-Cohesion: 0.29
-Nodes (7): Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions file, Parallel dispatch, Personal skills directory, Prompt filling, Subagent support
-
 ### Community 259 - "v3.2.2 (2025-10-21)"
 Cohesion: 0.67
 Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
 
 ## Knowledge Gaps
-- **1322 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1317 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1633 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **1323 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1318 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1639 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
@@ -1078,10 +1068,10 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.2.2 (2025-10-21)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
-- **Why does `Writing Skills` connect `Writing Skills` to `codex-tools.md`, `Anti-Patterns`, `RED-GREEN-REFACTOR for Skills`, `Testing All Skill Types`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`?**
+- **Why does `v5.0.1 (2026-03-10)` connect `v5.0.1 (2026-03-10)` to `Superpowers Release Notes`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `__dirname`, `extensionDir`, `packageRoot` to the rest of the system?**
-  _1322 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1323 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `server.cjs` be split into smaller, more focused modules?**
   _Cohesion score 0.051923076923076926 - nodes in this community are weakly interconnected._
 - **Should `run_script` be split into smaller, more focused modules?**

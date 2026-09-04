@@ -235,7 +235,7 @@
       "file_type": "code",
       "norm_label": "testtwomodellayering",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L71"
+      "source_location": "L98"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_template_score_testflutterreadiness",
@@ -2950,7 +2950,7 @@
       "file_type": "code",
       "norm_label": ".test_deterministic_gate_scripts_referenced()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L48"
+      "source_location": "L51"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_expected_red_reason_documented",
@@ -2962,7 +2962,7 @@
       "file_type": "code",
       "norm_label": ".test_expected_red_reason_documented()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L58"
+      "source_location": "L89"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_gate_thresholds_documented",
@@ -2974,7 +2974,7 @@
       "file_type": "code",
       "norm_label": ".test_gate_thresholds_documented()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L53"
+      "source_location": "L84"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_before_llm_invariant",
@@ -2986,7 +2986,7 @@
       "file_type": "code",
       "norm_label": ".test_graphify_before_llm_invariant()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L26"
+      "source_location": "L34"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_is_post_commit_and_subgraph",
@@ -2998,7 +2998,7 @@
       "file_type": "code",
       "norm_label": ".test_graphify_is_post_commit_and_subgraph()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L31"
+      "source_location": "L39"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_update_subcommand_documented",
@@ -3010,7 +3010,19 @@
       "file_type": "code",
       "norm_label": ".test_graphify_update_subcommand_documented()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L64"
+      "source_location": "L93"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_health_signals_55_documented",
+      "label": ".test_health_signals_55_documented()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "TestFlutterAppPipelineSkill",
+      "file_type": "code",
+      "norm_label": ".test_health_signals_55_documented()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L24"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_layers_on_two_model_pipeline",
@@ -3025,6 +3037,18 @@
       "source_location": "L14"
     },
     {
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_no_code_downloaded_invariant_relaxed_for_template",
+      "label": ".test_no_code_downloaded_invariant_relaxed_for_template()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "TestFlutterAppPipelineSkill",
+      "file_type": "code",
+      "norm_label": ".test_no_code_downloaded_invariant_relaxed_for_template()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L77"
+    },
+    {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_phase_2c_uses_writing_plans",
       "label": ".test_phase_2c_uses_writing_plans()",
       "_callable": true,
@@ -3034,7 +3058,7 @@
       "file_type": "code",
       "norm_label": ".test_phase_2c_uses_writing_plans()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L22"
+      "source_location": "L30"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_rtk_compression_invariant",
@@ -3046,17 +3070,17 @@
       "file_type": "code",
       "norm_label": ".test_rtk_compression_invariant()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L40"
+      "source_location": "L45"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_score_formula_normalizes_by_160",
-      "label": ".test_score_formula_normalizes_by_160()",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_score_formula_normalizes_by_160_and_weight_20",
+      "label": ".test_score_formula_normalizes_by_160_and_weight_20()",
       "_callable": true,
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "code",
-      "norm_label": ".test_score_formula_normalizes_by_160()",
+      "norm_label": ".test_score_formula_normalizes_by_160_and_weight_20()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
       "source_location": "L18"
     },
@@ -3073,6 +3097,42 @@
       "source_location": "L11"
     },
     {
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_adoption_flow_documented",
+      "label": ".test_template_adoption_flow_documented()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "TestFlutterAppPipelineSkill",
+      "file_type": "code",
+      "norm_label": ".test_template_adoption_flow_documented()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L70"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_scripts_referenced",
+      "label": ".test_template_scripts_referenced()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "TestFlutterAppPipelineSkill",
+      "file_type": "code",
+      "norm_label": ".test_template_scripts_referenced()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L56"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_search_order_and_stop_rule_documented",
+      "label": ".test_template_search_order_and_stop_rule_documented()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "TestFlutterAppPipelineSkill",
+      "file_type": "code",
+      "norm_label": ".test_template_search_order_and_stop_rule_documented()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L63"
+    },
+    {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_models_pre_defined_or_asked_when_not_installed",
       "label": ".test_models_pre_defined_or_asked_when_not_installed()",
       "_callable": true,
@@ -3082,7 +3142,7 @@
       "file_type": "code",
       "norm_label": ".test_models_pre_defined_or_asked_when_not_installed()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L92"
+      "source_location": "L115"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_no_approval_gate_after_decisions",
@@ -3094,7 +3154,7 @@
       "file_type": "code",
       "norm_label": ".test_no_approval_gate_after_decisions()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L85"
+      "source_location": "L110"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_route_next_documented",
@@ -3106,7 +3166,7 @@
       "file_type": "code",
       "norm_label": ".test_route_next_documented()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L78"
+      "source_location": "L105"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_two_model_skill_cross_references_flutter_layer",
@@ -3118,7 +3178,7 @@
       "file_type": "code",
       "norm_label": ".test_two_model_skill_cross_references_flutter_layer()",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L72"
+      "source_location": "L99"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_template_score_tdata",
@@ -11969,6 +12029,202 @@
       "source_location": "L125"
     },
     {
+      "id": "skills_writing_skills_skill",
+      "label": "writing-skills/SKILL.md",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "frontmatter": {
+        "name": "writing-skills",
+        "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment"
+      },
+      "node_kind": "page",
+      "norm_label": "writing-skills/skill.md",
+      "source_file": "skills/writing-skills/SKILL.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_using_superpowers_references_codex_tools",
+      "label": "codex-tools.md",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "page",
+      "norm_label": "codex-tools.md",
+      "source_file": "skills/using-superpowers/references/codex-tools.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_using_superpowers_references_codex_tools_codex_app_finishing",
+      "label": "Codex App Finishing",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "codex app finishing",
+      "source_file": "skills/using-superpowers/references/codex-tools.md",
+      "source_location": "L98"
+    },
+    {
+      "id": "skills_using_superpowers_references_codex_tools_environment_detection",
+      "label": "Environment Detection",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "environment detection",
+      "source_file": "skills/using-superpowers/references/codex-tools.md",
+      "source_location": "L81"
+    },
+    {
+      "id": "skills_using_superpowers_references_codex_tools_model_routing_on_spawns",
+      "label": "Model routing on spawns",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "model routing on spawns",
+      "source_file": "skills/using-superpowers/references/codex-tools.md",
+      "source_location": "L62"
+    },
+    {
+      "id": "skills_using_superpowers_references_codex_tools_subagent_dispatch_requires_multi_agent_support",
+      "label": "Subagent dispatch requires multi-agent support",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "subagent dispatch requires multi-agent support",
+      "source_file": "skills/using-superpowers/references/codex-tools.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_using_superpowers_references_codex_tools_waiting_on_children",
+      "label": "Waiting on children",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "waiting on children",
+      "source_file": "skills/using-superpowers/references/codex-tools.md",
+      "source_location": "L39"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools",
+      "label": "gemini-tools.md",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "page",
+      "norm_label": "gemini-tools.md",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_additional_gemini_cli_tools",
+      "label": "Additional Gemini CLI tools",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "additional gemini cli tools",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L50"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_gemini_cli_tool_mapping",
+      "label": "Gemini CLI Tool Mapping",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "gemini cli tool mapping",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_instructions_file",
+      "label": "Instructions file",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "instructions file",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L22"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_parallel_dispatch",
+      "label": "Parallel dispatch",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "parallel dispatch",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L46"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_personal_skills_directory",
+      "label": "Personal skills directory",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "personal skills directory",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L26"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_prompt_filling",
+      "label": "Prompt filling",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "prompt filling",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L42"
+    },
+    {
+      "id": "skills_using_superpowers_references_gemini_tools_subagent_support",
+      "label": "Subagent support",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "subagent support",
+      "source_file": "skills/using-superpowers/references/gemini-tools.md",
+      "source_location": "L30"
+    },
+    {
+      "id": "skills_writing_skills_testing_skills_with_subagents",
+      "label": "testing-skills-with-subagents.md",
+      "_origin": "ast",
+      "community": 14,
+      "community_name": "Testing Skills With Subagents",
+      "file_type": "document",
+      "node_kind": "page",
+      "norm_label": "testing-skills-with-subagents.md",
+      "source_file": "skills/writing-skills/testing-skills-with-subagents.md",
+      "source_location": "L1"
+    },
+    {
       "id": "skills_writing_skills_testing_skills_with_subagents_1_explicit_negation_in_rules",
       "label": "1. Explicit Negation in Rules",
       "_origin": "ast",
@@ -15440,81 +15696,70 @@
       "source_location": "L1"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_32",
-      "label": "Graphify is post-commit only (ADR-0004): the graph is rebuilt only after an\u2026",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_19",
+      "label": "Re-weighted (spec Section 6): pub points now weight 20, not 30.",
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "rationale",
-      "norm_label": "graphify is post-commit only (adr-0004): the graph is rebuilt only after an...",
+      "norm_label": "re-weighted (spec section 6): pub points now weight 20, not 30.",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L32"
+      "source_location": "L19"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_41",
-      "label": "Every LLM-invoked command runs through scripts/cmd: full output to a file, RTK-\u2026",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_25",
+      "label": "The skill must state the health signals (recency + SDK + issue ratio) sum to 55\u2026",
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "rationale",
-      "norm_label": "every llm-invoked command runs through scripts/cmd: full output to a file, rtk-...",
+      "norm_label": "the skill must state the health signals (recency + sdk + issue ratio) sum to 55...",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L41"
+      "source_location": "L25"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_59",
-      "label": "red-gate now verifies the failure reason, not just the exit code: the skill\u2026",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_57",
+      "label": "The new project-level template stage must be documented: both the orchestrator\u2026",
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "rationale",
-      "norm_label": "red-gate now verifies the failure reason, not just the exit code: the skill...",
+      "norm_label": "the new project-level template stage must be documented: both the orchestrator...",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L59"
+      "source_location": "L57"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_65",
-      "label": "The skill must document the corrected graphify invocation (`graphify update\u2026",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_64",
+      "label": "The skill must document the template search order (specific first, stars\u2026",
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "rationale",
-      "norm_label": "the skill must document the corrected graphify invocation (`graphify update...",
+      "norm_label": "the skill must document the template search order (specific first, stars...",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L65"
+      "source_location": "L64"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_79",
-      "label": "The deterministic router (review outcome -> next action) must be documented in\u2026",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_71",
+      "label": "Phase 2c change: the adopted template is cloned + graphified into a template\u2026",
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "rationale",
-      "norm_label": "the deterministic router (review outcome -> next action) must be documented in...",
+      "norm_label": "phase 2c change: the adopted template is cloned + graphified into a template...",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L79"
+      "source_location": "L71"
     },
     {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_86",
-      "label": "After the gate and Phase 2 selection, the branch runs to completion without\u2026",
+      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_78",
+      "label": "The 'no code downloaded' invariant is relaxed ONLY for the adopted template\u2026",
       "_origin": "ast",
       "community": 18,
       "community_name": "TestFlutterAppPipelineSkill",
       "file_type": "rationale",
-      "norm_label": "after the gate and phase 2 selection, the branch runs to completion without...",
+      "norm_label": "the 'no code downloaded' invariant is relaxed only for the adopted template...",
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L86"
-    },
-    {
-      "id": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_93",
-      "label": "Tiers are pre-configured locally; the gate asks the user only when the pipeline\u2026",
-      "_origin": "ast",
-      "community": 18,
-      "community_name": "TestFlutterAppPipelineSkill",
-      "file_type": "rationale",
-      "norm_label": "tiers are pre-configured locally; the gate asks the user only when the pipeline...",
-      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L93"
+      "source_location": "L78"
     },
     {
       "id": "release_notes_added",
@@ -19224,202 +19469,6 @@
       "norm_label": "template-score",
       "source_file": "skills/flutter-app-pipeline/scripts/template-score",
       "source_location": "L1"
-    },
-    {
-      "id": "skills_writing_skills_skill",
-      "label": "writing-skills/SKILL.md",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "frontmatter": {
-        "name": "writing-skills",
-        "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment"
-      },
-      "node_kind": "page",
-      "norm_label": "writing-skills/skill.md",
-      "source_file": "skills/writing-skills/SKILL.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "skills_using_superpowers_references_codex_tools",
-      "label": "codex-tools.md",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "page",
-      "norm_label": "codex-tools.md",
-      "source_file": "skills/using-superpowers/references/codex-tools.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "skills_using_superpowers_references_codex_tools_codex_app_finishing",
-      "label": "Codex App Finishing",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "codex app finishing",
-      "source_file": "skills/using-superpowers/references/codex-tools.md",
-      "source_location": "L98"
-    },
-    {
-      "id": "skills_using_superpowers_references_codex_tools_environment_detection",
-      "label": "Environment Detection",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "environment detection",
-      "source_file": "skills/using-superpowers/references/codex-tools.md",
-      "source_location": "L81"
-    },
-    {
-      "id": "skills_using_superpowers_references_codex_tools_model_routing_on_spawns",
-      "label": "Model routing on spawns",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "model routing on spawns",
-      "source_file": "skills/using-superpowers/references/codex-tools.md",
-      "source_location": "L62"
-    },
-    {
-      "id": "skills_using_superpowers_references_codex_tools_subagent_dispatch_requires_multi_agent_support",
-      "label": "Subagent dispatch requires multi-agent support",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "subagent dispatch requires multi-agent support",
-      "source_file": "skills/using-superpowers/references/codex-tools.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "skills_using_superpowers_references_codex_tools_waiting_on_children",
-      "label": "Waiting on children",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "waiting on children",
-      "source_file": "skills/using-superpowers/references/codex-tools.md",
-      "source_location": "L39"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools",
-      "label": "gemini-tools.md",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "page",
-      "norm_label": "gemini-tools.md",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "skills_writing_skills_testing_skills_with_subagents",
-      "label": "testing-skills-with-subagents.md",
-      "_origin": "ast",
-      "community": 257,
-      "community_name": "codex-tools.md",
-      "file_type": "document",
-      "node_kind": "page",
-      "norm_label": "testing-skills-with-subagents.md",
-      "source_file": "skills/writing-skills/testing-skills-with-subagents.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_additional_gemini_cli_tools",
-      "label": "Additional Gemini CLI tools",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "additional gemini cli tools",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L50"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_gemini_cli_tool_mapping",
-      "label": "Gemini CLI Tool Mapping",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "gemini cli tool mapping",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L1"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_instructions_file",
-      "label": "Instructions file",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "instructions file",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L22"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_parallel_dispatch",
-      "label": "Parallel dispatch",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "parallel dispatch",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L46"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_personal_skills_directory",
-      "label": "Personal skills directory",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "personal skills directory",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L26"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_prompt_filling",
-      "label": "Prompt filling",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "prompt filling",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L42"
-    },
-    {
-      "id": "skills_using_superpowers_references_gemini_tools_subagent_support",
-      "label": "Subagent support",
-      "_origin": "ast",
-      "community": 258,
-      "community_name": "Gemini CLI Tool Mapping",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "subagent support",
-      "source_file": "skills/using-superpowers/references/gemini-tools.md",
-      "source_location": "L30"
     },
     {
       "id": "release_notes_files_changed_1037",
@@ -23373,7 +23422,7 @@
       "node_kind": "heading",
       "norm_label": "2b. solution selection",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L31"
+      "source_location": "L39"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_2c_task_documentation",
@@ -23385,7 +23434,7 @@
       "node_kind": "heading",
       "norm_label": "2c. task documentation",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L35"
+      "source_location": "L43"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_3_phase_3_tdd_implementation_two_model_loop",
@@ -23397,7 +23446,7 @@
       "node_kind": "heading",
       "norm_label": "3. phase 3 \u2014 tdd implementation (two-model loop)",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L64"
+      "source_location": "L87"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_4_phase_4_project_wide_review",
@@ -23409,7 +23458,7 @@
       "node_kind": "heading",
       "norm_label": "4. phase 4 \u2014 project-wide review",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L81"
+      "source_location": "L104"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_5_deterministic_scripts_no_ai_involvement",
@@ -23421,7 +23470,7 @@
       "node_kind": "heading",
       "norm_label": "5. deterministic scripts (no ai involvement)",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L88"
+      "source_location": "L111"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_6_data_sources_for_score_computation_all_scriptable_no_llm",
@@ -23433,7 +23482,7 @@
       "node_kind": "heading",
       "norm_label": "6. data sources for score computation (all scriptable, no llm)",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L116"
+      "source_location": "L141"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_7_github_authentication_one_time_setup",
@@ -23445,7 +23494,7 @@
       "node_kind": "heading",
       "norm_label": "7. github authentication (one-time setup)",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L126"
+      "source_location": "L155"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_8_summary_of_flow",
@@ -23457,7 +23506,7 @@
       "node_kind": "heading",
       "norm_label": "8. summary of flow",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L135"
+      "source_location": "L164"
     },
     {
       "id": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
@@ -23472,16 +23521,28 @@
       "source_location": "L6"
     },
     {
-      "id": "skills_flutter_app_pipeline_skill_quality_score_0_100_per_candidate_package",
-      "label": "Quality Score (0\u2013100), per candidate package",
+      "id": "skills_flutter_app_pipeline_skill_quality_score_0_100_per_candidate_package_pkg_score",
+      "label": "Quality Score (0\u2013100), per candidate package (pkg-score)",
       "_origin": "ast",
       "community": 43,
       "community_name": "Flutter App Pipeline (layered on two-model-sdd-pipeline)",
       "file_type": "document",
       "node_kind": "heading",
-      "norm_label": "quality score (0\u2013100), per candidate package",
+      "norm_label": "quality score (0\u2013100), per candidate package (pkg-score)",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L42"
+      "source_location": "L51"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_skill_template_score_0_100_per_candidate_template_template_score",
+      "label": "Template Score (0\u2013100), per candidate template (template-score)",
+      "_origin": "ast",
+      "community": 43,
+      "community_name": "Flutter App Pipeline (layered on two-model-sdd-pipeline)",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "template score (0\u2013100), per candidate template (template-score)",
+      "source_file": "skills/flutter-app-pipeline/SKILL.md",
+      "source_location": "L70"
     },
     {
       "id": "skills_receiving_code_review_skill",
@@ -55512,7 +55573,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L31",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -55523,29 +55584,51 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L35",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
       "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
-      "target": "skills_flutter_app_pipeline_skill_quality_score_0_100_per_candidate_package",
+      "target": "skills_flutter_app_pipeline_skill_quality_score_0_100_per_candidate_package_pkg_score",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L42",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "target": "skills_flutter_app_pipeline_skill_template_score_0_100_per_candidate_template_template_score",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/SKILL.md",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
       "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
-      "target": "skills_flutter_app_pipeline_skill_6_data_sources_for_score_computation_all_scriptable_no_llm",
+      "target": "skills_flutter_app_pipeline_skill_4_phase_4_project_wide_review",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L116",
+      "source_location": "L104",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
+      "target": "skills_flutter_app_pipeline_skill_5_deterministic_scripts_no_ai_involvement",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/SKILL.md",
+      "source_location": "L111",
       "weight": 1.0
     },
     {
@@ -55561,13 +55644,24 @@
     },
     {
       "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
+      "target": "skills_flutter_app_pipeline_skill_6_data_sources_for_score_computation_all_scriptable_no_llm",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/SKILL.md",
+      "source_location": "L141",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
       "target": "skills_flutter_app_pipeline_skill_7_github_authentication_one_time_setup",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L126",
+      "source_location": "L155",
       "weight": 1.0
     },
     {
@@ -55578,7 +55672,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L135",
+      "source_location": "L164",
       "weight": 1.0
     },
     {
@@ -55594,17 +55688,6 @@
     },
     {
       "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
-      "target": "skills_flutter_app_pipeline_skill_3_phase_3_tdd_implementation_two_model_loop",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L64",
-      "weight": 1.0
-    },
-    {
-      "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
       "target": "skills_flutter_app_pipeline_skill_0_relationship_to_two_model_sdd_pipeline",
       "relation": "contains",
       "_origin": "ast",
@@ -55616,24 +55699,13 @@
     },
     {
       "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
-      "target": "skills_flutter_app_pipeline_skill_4_phase_4_project_wide_review",
+      "target": "skills_flutter_app_pipeline_skill_3_phase_3_tdd_implementation_two_model_loop",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L81",
-      "weight": 1.0
-    },
-    {
-      "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
-      "target": "skills_flutter_app_pipeline_skill_5_deterministic_scripts_no_ai_involvement",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "skills/flutter-app-pipeline/SKILL.md",
-      "source_location": "L88",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -55886,7 +55958,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L71",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -66814,7 +66886,7 @@
     },
     {
       "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_score_formula_normalizes_by_160",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_score_formula_normalizes_by_160_and_weight_20",
       "relation": "method",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -66825,13 +66897,24 @@
     },
     {
       "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_health_signals_55_documented",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
       "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_phase_2c_uses_writing_plans",
       "relation": "method",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L22",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
@@ -66842,7 +66925,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L26",
+      "source_location": "L34",
       "weight": 1.0
     },
     {
@@ -66853,7 +66936,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L31",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -66864,7 +66947,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L40",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -66875,40 +66958,51 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L48",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
       "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_gate_thresholds_documented",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_scripts_referenced",
       "relation": "method",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L53",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
       "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_expected_red_reason_documented",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_search_order_and_stop_rule_documented",
       "relation": "method",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L58",
+      "source_location": "L63",
       "weight": 1.0
     },
     {
       "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_update_subcommand_documented",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_adoption_flow_documented",
       "relation": "method",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L64",
+      "source_location": "L70",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_no_code_downloaded_invariant_relaxed_for_template",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L77",
       "weight": 1.0
     },
     {
@@ -66923,14 +67017,36 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_two_model_skill_cross_references_flutter_layer",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_gate_thresholds_documented",
       "relation": "method",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L72",
+      "source_location": "L84",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_expected_red_reason_documented",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L89",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_update_subcommand_documented",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
@@ -66941,7 +67057,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L78",
+      "source_location": "L105",
       "weight": 1.0
     },
     {
@@ -66952,7 +67068,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L85",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -66963,7 +67079,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L92",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_two_model_skill_cross_references_flutter_layer",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -69442,80 +69569,69 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_32",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_is_post_commit_and_subgraph",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_19",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_score_formula_normalizes_by_160_and_weight_20",
       "relation": "rationale_for",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L32",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_41",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_rtk_compression_invariant",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_25",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_health_signals_55_documented",
       "relation": "rationale_for",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L41",
+      "source_location": "L25",
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_59",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_expected_red_reason_documented",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_57",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_scripts_referenced",
       "relation": "rationale_for",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L59",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_65",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_graphify_update_subcommand_documented",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_64",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_search_order_and_stop_rule_documented",
       "relation": "rationale_for",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L65",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_79",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_route_next_documented",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_71",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_template_adoption_flow_documented",
       "relation": "rationale_for",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L79",
+      "source_location": "L71",
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_86",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_no_approval_gate_after_decisions",
+      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_78",
+      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testflutterapppipelineskill_test_no_code_downloaded_invariant_relaxed_for_template",
       "relation": "rationale_for",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L86",
-      "weight": 1.0
-    },
-    {
-      "source": "skills_flutter_app_pipeline_tests_test_skill_content_rationale_93",
-      "target": "skills_flutter_app_pipeline_tests_test_skill_content_testtwomodellayering_test_models_pre_defined_or_asked_when_not_installed",
-      "relation": "rationale_for",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "skills/flutter-app-pipeline/tests/test_skill_content.py",
-      "source_location": "L93",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -70232,5 +70348,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "9b0536279283a3492e66f475882b4d87836ff656"
+  "built_at_commit": "a5411065ddf50dc0d773567cdba51a45d03fd9dc"
 }

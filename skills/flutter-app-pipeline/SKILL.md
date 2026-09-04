@@ -21,7 +21,7 @@ This is the Flutter/Dart specialization. It does **not** replace the generic eng
 
 Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEXT.md` glossary + ADRs, architectural path only). The spec doc stays branch-specific.
 
-## 2. Phase 2 — Research & Planning (per task)
+## 2. Phase 2 — Research & Planning (project-level + per task)
 
 ### 2a. Solution research
 
@@ -79,7 +79,7 @@ Corrections vs the original draft:
 | License | 5 | MIT/Apache/BSD=5 / other=3 / none=0 |
 | README quality (setup + structure docs) | 5 | full setup docs=5 / partial=2 / none=0 |
 
-Gate logic (reported by `pkg-score` as the verdict):
+Gate logic (reported by `pkg-score` / `template-score` as the verdict):
 - Score ≥ 70 → auto-approved (`AUTO_APPROVE`)
 - Score 50–69 → included in the 2a comparison table for the developer's decision in 2b (`DEVELOPER_DECISION`)
 - Score < 50 → auto-rejected, defaults to from-scratch in 2b (`AUTO_REJECT`)
@@ -113,8 +113,8 @@ script outputs; Script A owns dispatch):
 | Script | Replaces |
 |---|---|
 | `pkg-score PACKAGE` | AI subjectively judging package quality |
-| `template-search OWNER REPO` | AI manually searching GitHub for project-level templates (searches specific then generic category, stars descending, collects up to 3 AUTO_APPROVE before stopping) |
-| `template-score OWNER REPO` | AI subjectively judging template quality (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) |
+| `template-search --specific QUERY --generic QUERY` | AI manually searching GitHub for project-level templates (searches specific then generic category, stars descending, collects up to 3 AUTO_APPROVE before stopping) |
+| `template-score OWNER/REPO [--github-token TOKEN]` | AI subjectively judging template quality (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) |
 | `pub-sync [PACKAGE]` | AI-driven download + AI reasoning about version conflicts + AI reconciling the lockfile |
 | `red-gate WORKSPACE TASK` | AI judging whether the RED test failed for the expected reason (verifies the brief's `EXPECTED-RED:` text against the report; on success dispatches the Coder) |
 | `green-gate [--no-commit] [-m MSG] [-w WS -t TASK -b BASE]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries (on commit: graphify-update + reviewer dispatch) |
