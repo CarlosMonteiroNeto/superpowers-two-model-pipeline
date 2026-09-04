@@ -123,10 +123,14 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   On success: post-commit `graphify-update`, builds the review package, and
   dispatches D headlessly (Item 3). `--no-commit` validates only.
 - **`dispatch`** — headless launcher: `opencode run --agent <def> --format
-  json --file <prompt> [--continue --session <id>]`, tees the JSON event
+  json <prompt-file> <prompt> [--continue --session <id>]`, tees the JSON event
   stream to `<ws>/task-N-coder.log` / `task-N-reviewer.log` (observability —
   the developer can tail them; the session history stays clean), records the
-  session id for resume.
+  session id for resume. The brief is passed as a positional so opencode
+  auto-attaches it — never `--file`, which this opencode version misparses
+  (it treats the positional message as a file path and dies). Refuses
+  (exit 3) when the targeted agent is not `mode: all`, so a silent fallback
+  to the default agent can never break the tiers.
 - **`route-next`** — deterministic router (see Approval Policy).
 - **`cmd`** — generic command runner (RTK compression; flutter test → `rtk
   test`, flutter analyze → `rtk err` wrapper derivation, verdict from the

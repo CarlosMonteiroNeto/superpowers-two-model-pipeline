@@ -55,18 +55,28 @@ args=(run --agent "$agent" --format json)
 if [ -n "$cont" ]; then
   args+=(--continue --session "$cont")
 fi
-args+=(--file "$prompt_file")
 
 prompt="You are dispatched by Script A. Read the attached file and execute per its instructions. Report concisely."
 
 set +e
 if [ -n "$workdir" ]; then
-  (cd "$workdir" && "$OPENCODE_BIN" "${args[@]}" "$prompt" > "$log" 2>&1)
+  # The brief is passed as a positional so opencode auto-attaches it. --file
+  # is deliberately NOT used: this opencode version treats the positional
+  # message as a file path whenever --file is present, which breaks every run.
+  (cd "$workdir" && "$OPENCODE_BIN" "${args[@]}" "$prompt_file" "$prompt" > "$log" 2>&1)
 else
-  "$OPENCODE_BIN" "${args[@]}" "$prompt" > "$log" 2>&1
+  "$OPENCODE_BIN" "${args[@]}" "$prompt_file" "$prompt" > "$log" 2>&1
 fi
 rc=$?
 set -e
+
+# Refuse a silent fallback: if the requested agent is mode: subagent, opencode
+# warns and runs the default agent instead. Dispatching the wrong agent breaks
+# the two-tier contract, so fail loudly rather than continue wrongly.
+if grep -qE 'is a subagent, not a primary agent|Falling back to default agent' "$log" 2>/dev/null; then
+  echo "DISPATCH: agent \"$agent\" is not a primary agent (mode: all required). Refusing to continue with the wrong agent." >&2
+  exit 3
+fi
 
 # Record the session id for resume (fix / correction rounds).
 sid=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$log" | head -1)

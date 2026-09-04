@@ -158,7 +158,9 @@ skills/two-model-sdd-pipeline/scripts/:
                        rtk test/err wrappers; RTK_ENABLED=0 / RTK_BIN)
   dispatch             headless subagent launcher: opencode run --agent,
                        JSON stream teed to a workspace log, session id
-                       recorded for resume (--continue --session)
+                       recorded for resume (--continue --session). The brief
+                       is passed as a positional (auto-attach; never --file);
+                       exit 3 when the targeted agent is not mode: all
   orchestrator         thin per-task driver: executes route-next actions,
                        prints OUTCOME for B
   token-kill           RTK minification of error logs / source / JSON

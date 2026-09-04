@@ -48,6 +48,9 @@ class DispatchTestBase(unittest.TestCase):
             "opencode",
             """
 echo "$*" >> "${STUB_ARGV:?}"
+if [ -n "${STUB_FALLBACK:-}" ]; then
+  echo '! agent "two-model-coder" is a subagent, not a primary agent. Falling back to default agent' >&2
+fi
 echo '{"type":"step_start","sessionID":"ses_fixed123"}'
 echo '{"type":"text","part":{"type":"text","text":"DONE"}}'
 exit "${STUB_OPENCODE_EXIT:-0}"
@@ -92,6 +95,44 @@ class TestDispatchFresh(DispatchTestBase):
         self.assertIn("--agent", argv)
         self.assertIn("two-model-coder", argv)
         self.assertIn(str(brief), argv)
+
+    def test_brief_is_passed_as_positional_not_file(self):
+        # Regression: opencode (this version) treats the positional message as
+        # a file path whenever --file is present, so dispatch must attach the
+        # brief as a positional argument and never pass --file.
+        brief = self.brief()
+        argv_log = self.argv_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", self.dispatch_log()],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        argv = pathlib.Path(argv_log).read_text(encoding="utf-8")
+        self.assertNotIn("--file", argv)
+        self.assertIn(str(brief), argv)
+
+    def test_falls_back_loudly_when_agent_is_not_primary(self):
+        # If opencode falls back to the default agent (requested agent is
+        # mode: subagent), dispatch must fail loudly instead of silently
+        # running the wrong agent.
+        brief = self.brief()
+        argv_log = self.argv_log()
+        dlog = self.dispatch_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", dlog],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log,
+                       "STUB_FALLBACK": "1"},
+        )
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("primary agent", r.stdout + r.stderr)
+        # no session record may be written for a fallback dispatch
+        self.assertFalse((pathlib.Path(dlog).parent / "task-3-session.txt").exists())
 
     def test_session_id_recorded_for_resume(self):
         brief = self.brief()
