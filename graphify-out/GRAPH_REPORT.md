@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 249 files · ~259,144 words
+- 250 files · ~259,536 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2717 nodes · 3277 edges · 259 communities (191 shown, 58 thin omitted)
+- 2733 nodes · 3292 edges · 260 communities (192 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 19 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `99462de2`
+- Built from commit: `3f8fc564`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -262,6 +262,7 @@
 - pkg_score.py
 - template_score.py
 - test_template_search.py
+- TestCategorySkeletonInBrainstorming
 - v3.2.2 (2025-10-21)
 - template-search
 
@@ -292,7 +293,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (259 total, 58 thin omitted)
+## Communities (260 total, 58 thin omitted)
 
 ### Community 0 - "server.cjs"
 Cohesion: 0.05
@@ -823,8 +824,8 @@ Cohesion: 0.67
 Nodes (5): assert_contains(), assert_not_contains(), fail(), pass(), test-render-graphs.sh script
 
 ### Community 133 - "CONTEXT.md — Glossary (two-model pipeline)"
-Cohesion: 0.33
-Nodes (5): Context and cost rules, CONTEXT.md — Glossary (two-model pipeline), Decision points locked during brainstorming (2026-09-02), Deterministic gates and flows, Roles and actors
+Cohesion: 0.29
+Nodes (6): Category Skeleton, Context and cost rules, CONTEXT.md — Glossary (two-model pipeline), Decision points locked during brainstorming (2026-09-02), Deterministic gates and flows, Roles and actors
 
 ### Community 134 - "ADR-0001: Script-autonomous subagent dispatch (B out of the per-task hot path)"
 Cohesion: 0.33
@@ -1054,13 +1055,17 @@ Nodes (12): collect_candidates(), compute_score(), _days_ago(), _detect_flutter_
 Cohesion: 0.09
 Nodes (18): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, The suite must catch a regression of the headline flutter_ready feature:…, stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + readme 5 +… (+10 more)
 
+### Community 257 - "TestCategorySkeletonInBrainstorming"
+Cohesion: 0.13
+Nodes (6): Phase 1a must gain a REQUIRED elicitation step for the Category Skeleton (spec…, The elicitation order is fixed: generic category -> specific category ->…, The three fields are REQUIRED outputs of Phase 1a, persisted to CONTEXT.md; the…, CONTEXT.md must document the Category Skeleton fields (generic category,…, TestCategorySkeletonInBrainstorming, TestCategorySkeletonInContext
+
 ### Community 259 - "v3.2.2 (2025-10-21)"
 Cohesion: 0.67
 Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
 
 ## Knowledge Gaps
-- **1323 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1318 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1639 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **1324 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1319 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1648 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
@@ -1068,10 +1073,8 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.2.2 (2025-10-21)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
-- **Why does `v5.0.1 (2026-03-10)` connect `v5.0.1 (2026-03-10)` to `Superpowers Release Notes`?**
-  _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `__dirname`, `extensionDir`, `packageRoot` to the rest of the system?**
-  _1323 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1324 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `server.cjs` be split into smaller, more focused modules?**
   _Cohesion score 0.051923076923076926 - nodes in this community are weakly interconnected._
 - **Should `run_script` be split into smaller, more focused modules?**
@@ -1080,3 +1083,5 @@ _Questions this graph is uniquely positioned to answer:_
   _Cohesion score 0.10591133004926108 - nodes in this community are weakly interconnected._
 - **Should `Superpowers Release Notes` be split into smaller, more focused modules?**
   _Cohesion score 0.05405405405405406 - nodes in this community are weakly interconnected._
+- **Should `Worktree Rototill: Detect-and-Defer` be split into smaller, more focused modules?**
+  _Cohesion score 0.05714285714285714 - nodes in this community are weakly interconnected._

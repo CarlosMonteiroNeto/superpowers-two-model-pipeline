@@ -121,7 +121,9 @@ USAGE
 
 Start a session and describe the work. For a Flutter/Dart app, the
 flutter-app-pipeline runs end to end: requirements (brainstorming +
-grill-with-docs), research + pkg-score for every candidate package,
+grill-with-docs + Category Skeleton), research + pkg-score for every
+candidate package, then a project-level template stage (template search for
+the specific category, template scoring, clone + graphify → gap analysis),
 selection with you, writing-plans tasks, then the script-autonomous
 two-model TDD loop, then a project-wide review. On the two-tier gate,
 default to YES: the tiers are pre-configured locally (two-model-coder /
@@ -136,6 +138,12 @@ DETERMINISTIC SCRIPTS (no AI involvement)
 
 skills/flutter-app-pipeline/scripts/:
   pkg-score            corrected Quality Score for a pub.dev package
+  template-search      search GitHub for project templates in a category
+                       (stars descending, 3-AUTO_APPROVE stop; fallback to
+                       generic ≥70 with the specific 50–69 group)
+  template-score       score a project template candidate (stars, recency,
+                       Flutter/Dart readiness, issue ratio, sustained interest,
+                       license, README)
   pub-sync             download + lockfile + version-conflict report
   red-gate             materialize RED tests, verify the failure is the
                        EXPECTED-RED reason, and dispatch the Coder on success

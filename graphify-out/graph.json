@@ -589,6 +589,32 @@
       "source_location": "L372"
     },
     {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "label": "TestCategorySkeletonInBrainstorming",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": "testcategoryskeletoninbrainstorming",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L8"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext",
+      "label": "TestCategorySkeletonInContext",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": "testcategoryskeletonincontext",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L42"
+    },
+    {
       "id": "skills_two_model_sdd_pipeline_tests_test_orchestrator_orchestratortestbase",
       "label": "OrchestratorTestBase",
       "_callable": true,
@@ -4751,6 +4777,102 @@
       "norm_label": ".test_missing_arguments_is_usage()",
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
       "source_location": "L373"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_setup",
+      "label": ".setUp()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".setup()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L9"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_required_elicitation_step_documented",
+      "label": ".test_required_elicitation_step_documented()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".test_required_elicitation_step_documented()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L15"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_required_fields_persist_to_context",
+      "label": ".test_required_fields_persist_to_context()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".test_required_fields_persist_to_context()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L34"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_skill_exists",
+      "label": ".test_skill_exists()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".test_skill_exists()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L12"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_three_fields_in_exact_order",
+      "label": ".test_three_fields_in_exact_order()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".test_three_fields_in_exact_order()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L21"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_setup",
+      "label": ".setUp()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".setup()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L43"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_test_category_skeleton_fields_documented",
+      "label": ".test_category_skeleton_fields_documented()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".test_category_skeleton_fields_documented()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L49"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_test_context_exists",
+      "label": ".test_context_exists()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": ".test_context_exists()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L46"
     },
     {
       "id": "tests_brainstorm_server_auth_test_assertsecurityheaders",
@@ -11537,6 +11659,18 @@
       "source_location": "L1"
     },
     {
+      "id": "context_category_skeleton",
+      "label": "Category Skeleton",
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "CONTEXT.md \u2014 Glossary (two-model pipeline)",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "category skeleton",
+      "source_file": "CONTEXT.md",
+      "source_location": "L74"
+    },
+    {
       "id": "context_context_and_cost_rules",
       "label": "Context and cost rules",
       "_origin": "ast",
@@ -11570,7 +11704,7 @@
       "node_kind": "heading",
       "norm_label": "decision points locked during brainstorming (2026-09-02)",
       "source_file": "CONTEXT.md",
-      "source_location": "L74"
+      "source_location": "L89"
     },
     {
       "id": "context_deterministic_gates_and_flows",
@@ -19469,6 +19603,61 @@
       "norm_label": "template-score",
       "source_file": "skills/flutter-app-pipeline/scripts/template-score",
       "source_location": "L1"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton",
+      "label": "test_category_skeleton.py",
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "code",
+      "norm_label": "test_category_skeleton.py",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_16",
+      "label": "Phase 1a must gain a REQUIRED elicitation step for the Category Skeleton (spec\u2026",
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "rationale",
+      "norm_label": "phase 1a must gain a required elicitation step for the category skeleton (spec...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L16"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_22",
+      "label": "The elicitation order is fixed: generic category -> specific category ->\u2026",
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "rationale",
+      "norm_label": "the elicitation order is fixed: generic category -> specific category ->...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L22"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_35",
+      "label": "The three fields are REQUIRED outputs of Phase 1a, persisted to CONTEXT.md; the\u2026",
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "rationale",
+      "norm_label": "the three fields are required outputs of phase 1a, persisted to context.md; the...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L35"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_50",
+      "label": "CONTEXT.md must document the Category Skeleton fields (generic category,\u2026",
+      "_origin": "ast",
+      "community": 257,
+      "community_name": "TestCategorySkeletonInBrainstorming",
+      "file_type": "rationale",
+      "norm_label": "context.md must document the category skeleton fields (generic category,...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L50"
     },
     {
       "id": "release_notes_files_changed_1037",
@@ -32986,7 +33175,7 @@
       "node_kind": "heading",
       "norm_label": "after the design (architectural path)",
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L226"
+      "source_location": "L233"
     },
     {
       "id": "skills_brainstorming_skill_anti_pattern_too_simple_to_need_approval",
@@ -33046,7 +33235,7 @@
       "node_kind": "heading",
       "norm_label": "process flow",
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L117"
+      "source_location": "L124"
     },
     {
       "id": "skills_brainstorming_skill_red_flags",
@@ -33070,7 +33259,7 @@
       "node_kind": "heading",
       "norm_label": "the process",
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L168"
+      "source_location": "L175"
     },
     {
       "id": "skills_brainstorming_skill_three_paths",
@@ -33094,7 +33283,7 @@
       "node_kind": "heading",
       "norm_label": "visual companion",
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L258"
+      "source_location": "L265"
     },
     {
       "id": "skills_two_model_sdd_pipeline_tests_test_red_integrity",
@@ -42961,7 +43150,7 @@
     },
     {
       "source": "context_context_md_glossary_two_model_pipeline",
-      "target": "context_decision_points_locked_during_brainstorming_2026_09_02",
+      "target": "context_category_skeleton",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -42979,6 +43168,17 @@
       "confidence_score": 1.0,
       "source_file": "CONTEXT.md",
       "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "context_context_md_glossary_two_model_pipeline",
+      "target": "context_decision_points_locked_during_brainstorming_2026_09_02",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CONTEXT.md",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -54495,7 +54695,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L117",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -54506,7 +54706,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L168",
+      "source_location": "L175",
       "weight": 1.0
     },
     {
@@ -54528,7 +54728,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L226",
+      "source_location": "L233",
       "weight": 1.0
     },
     {
@@ -54539,7 +54739,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/brainstorming/SKILL.md",
-      "source_location": "L258",
+      "source_location": "L265",
       "weight": 1.0
     },
     {
@@ -55717,6 +55917,28 @@
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/run-tests.sh",
       "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L8",
       "weight": 1.0
     },
     {
@@ -66280,6 +66502,94 @@
       "weight": 1.0
     },
     {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_skill_exists",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_required_elicitation_step_documented",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_three_fields_in_exact_order",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_required_fields_persist_to_context",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_setup",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_setup",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_test_context_exists",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_test_category_skeleton_fields_documented",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
       "source": "skills_flutter_app_pipeline_tests_test_gates_gatetestbase",
       "target": "skills_flutter_app_pipeline_tests_test_gates_gatetestbase_teardown",
       "relation": "method",
@@ -69404,6 +69714,50 @@
       "weight": 1.0
     },
     {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_16",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_required_elicitation_step_documented",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_22",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_three_fields_in_exact_order",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_35",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletoninbrainstorming_test_required_fields_persist_to_context",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_category_skeleton_rationale_50",
+      "target": "skills_flutter_app_pipeline_tests_test_category_skeleton_testcategoryskeletonincontext_test_category_skeleton_fields_documented",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_category_skeleton.py",
+      "source_location": "L50",
+      "weight": 1.0
+    },
+    {
       "source": "skills_flutter_app_pipeline_tests_test_gates_rationale_204",
       "target": "skills_flutter_app_pipeline_tests_test_gates_testgreengate_test_does_not_chain_graphify_after_commit",
       "relation": "rationale_for",
@@ -70348,5 +70702,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "99462de23d6e5d1f5c1e71e41110676a7913b619"
+  "built_at_commit": "3f8fc564ca822621f449a32ebf7d8637a3e97389"
 }
