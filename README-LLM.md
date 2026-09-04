@@ -217,13 +217,13 @@ Gate: ≥70 auto-approve; 50–69 developer decision; <50 reject -> from-scratch
 
 | Criterion | Weight | Scoring |
 |---|---|---|
-| Stars | 30 | stars/scale × 30 |
+| Stars | 30 | ≥1000=30 / 300–999=24 / 100–299=18 / 30–99=12 / 10–29=6 / <10=0 |
 | Recency | 20 | <3mo=20 / 3–6mo=12 / 6–12mo=5 / >12mo=0 |
-| Flutter/Dart readiness | 20 | ready=20 / partial=10 / none=0 |
-| Issue ratio | 10 | <20% open=10 / 20–40%=5 / >40%=0 |
-| Sustained interest | 10 | active ≥6mo=10 / 3–6mo=5 / <3mo=2 |
-| License | 5 | MIT/ BSD/ Apache=5 / other=2 / none=0 |
-| README quality | 5 | detailed=5 / minimal=2 / none=0 |
+| Flutter/Dart readiness | 20 | current SDK + null-safe pubspec=20 / dated SDK=10 / not Flutter=0 |
+| Open/closed issue ratio | 10 | <20% open=10 / 20–40%=5 / >40%=0 |
+| Sustained interest (stars ÷ repo age) | 10 | ≥10/yr=10 / 1–10/yr=6 / <1/yr=2 |
+| License | 5 | MIT/Apache/BSD=5 / other=3 / none=0 |
+| README quality (setup + structure docs) | 5 | full setup docs=5 / partial=2 / none=0 |
 
 Stars is the primary search sort key (used by `template-search` to order
 candidates descending). Same gate semantics as pkg-score (≥70 auto-approve;
