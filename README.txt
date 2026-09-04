@@ -161,6 +161,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        recorded for resume (--continue --session). The brief
                        is passed as a positional (auto-attach; never --file);
                        exit 3 when the targeted agent is not mode: all
+  session-clean        deletes the opencode sessions a completed task recorded
+                       (task-N-*-session.txt) so headless dispatches don't
+                       pollute session history; run by the orchestrator on
+                       NEXT / FINAL_REVIEW
   orchestrator         thin per-task driver: executes route-next actions,
                        prints OUTCOME for B
   token-kill           RTK minification of error logs / source / JSON

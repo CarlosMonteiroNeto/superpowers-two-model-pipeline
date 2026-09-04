@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Deterministic session cleanup for completed tasks: deletes the opencode
+# sessions recorded by `dispatch` so headless subagent runs never pollute the
+# interactive session history. Best-effort by design - a session that is
+# already gone is not an error, and the record files are removed regardless.
+#
+# Usage: session-clean WORKSPACE TASK|all
+#   WORKSPACE  - pipeline workspace (holds task-N-*-session.txt records)
+#   TASK       - task number to clean, or 'all' (every task record in the ws)
+#
+# Env: OPENCODE_BIN (default opencode)
+# Exit codes: 0 = done (best-effort); 2 = usage / no workspace.
+set -u
+
+if [ $# -ne 2 ]; then
+  echo "usage: session-clean WORKSPACE TASK|all" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
+
+[ -d "$ws" ] || { echo "SESSION-CLEAN: no workspace: $ws" >&2; exit 2; }
+
+# task-N-*session.txt matches both the generic record (task-N-session.txt,
+# last writer, read by B for resume) and the per-agent records
+# (task-N-<agent>-session.txt) written by dispatch.
+if [ "$task" = "all" ]; then
+  pattern='task-*session.txt'
+else
+  pattern="task-${task}-*session.txt"
+fi
+
+while IFS= read -r -d '' f; do
+  sid=$(cat "$f" 2>/dev/null || true)
+  if [ -n "$sid" ]; then
+    "$OPENCODE_BIN" session delete "$sid" >/dev/null 2>&1 || true
+  fi
+  rm -f "$f"
+done < <(find "$ws" -maxdepth 1 -type f -name "$pattern" -print0 2>/dev/null)
+
+exit 0

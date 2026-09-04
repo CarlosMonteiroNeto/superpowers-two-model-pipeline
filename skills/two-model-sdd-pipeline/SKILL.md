@@ -131,6 +131,11 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   (it treats the positional message as a file path and dies). Refuses
   (exit 3) when the targeted agent is not `mode: all`, so a silent fallback
   to the default agent can never break the tiers.
+- **`session-clean`** — deterministic session hygiene: deletes the opencode
+  sessions a completed task recorded (`task-N-*-session.txt`, per-agent and
+  generic) so headless dispatches never pile up in the interactive session
+  history. Run by the orchestrator on `NEXT` (that task) and `FINAL_REVIEW`
+  (all tasks). Best-effort; `OPENCODE_BIN` overrides the binary.
 - **`route-next`** — deterministic router (see Approval Policy).
 - **`cmd`** — generic command runner (RTK compression; flutter test → `rtk
   test`, flutter analyze → `rtk err` wrapper derivation, verdict from the

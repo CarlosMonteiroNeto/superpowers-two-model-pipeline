@@ -102,6 +102,37 @@ class TestOrchestratorHandoff(OrchestratorTestBase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("OUTCOME: NEXT 4", r.stdout)
 
+    def test_approved_next_cleans_that_tasks_sessions(self):
+        # A completed task's sessions must be deleted (history hygiene) -
+        # the task-N-session.txt files vanish and opencode gets a delete call.
+        self.ledger([
+            self.entry("brief_ready", 3, "task"),
+            self.entry("red_check", 3, "RED"),
+            self.entry("coder_round", 3, "Coder"),
+            self.entry("commit", 3, "Task", commits="a1b2c3"),
+            self.entry("review_outcome", 3, "APPROVED"),
+            self.entry("task_complete", 3, "Task"),
+        ])
+        (self.ws / "task-3-two-model-coder-session.txt").write_text("ses_3c\n", encoding="utf-8")
+        (self.ws / "task-3-two-model-reviewer-session.txt").write_text("ses_3r\n", encoding="utf-8")
+        deleted = self._tmp / "deleted.log"
+        opencode_stub = self.stub(
+            "opencode",
+            'echo "${3:-}" >> "${DELETED_LOG:?}"\n',
+        )
+        r = run_script(
+            "orchestrator", [str(self.ws), "3", "5"],
+            cwd=self._tmp,
+            env_extra={"RTK_ENABLED": "0", "OPENCODE_BIN": opencode_stub,
+                       "DELETED_LOG": str(deleted)},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("OUTCOME: NEXT 4", r.stdout)
+        self.assertEqual(sorted(deleted.read_text(encoding="utf-8").strip().splitlines()),
+                         ["ses_3c", "ses_3r"])
+        self.assertFalse((self.ws / "task-3-two-model-coder-session.txt").exists())
+        self.assertFalse((self.ws / "task-3-two-model-reviewer-session.txt").exists())
+
 
 class TestOrchestratorExecutes(OrchestratorTestBase):
     def test_red_action_invokes_red_gate(self):

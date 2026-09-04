@@ -48,6 +48,14 @@ case "$action" in
   BRIEF*|CORRECTIVE*|ARBITRATE*|NEXT*|FINAL_REVIEW*)
     # These hand control to B: B writes the (next/corrective) brief or
     # arbitrates. The orchestrator just reports the outcome.
+    #
+    # Completed tasks' headless sessions are cleaned so they never pile up in
+    # the session history; FINAL_REVIEW cleans the whole branch. Best-effort.
+    SESSION_CLEAN_BIN="${SESSION_CLEAN_BIN:-$SCRIPT_DIR/session-clean}"
+    case "$action" in
+      NEXT*) "$SESSION_CLEAN_BIN" "$ws" "$task" || true ;;
+      FINAL_REVIEW*) "$SESSION_CLEAN_BIN" "$ws" all || true ;;
+    esac
     echo "OUTCOME: $action"
     exit 0
     ;;

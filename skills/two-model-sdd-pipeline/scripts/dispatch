@@ -82,7 +82,10 @@ fi
 sid=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$log" | head -1)
 if [ -n "$sid" ]; then
   sid_dir=$(dirname "$log")
+  # Generic record (last writer, read by B) + per-agent record so
+  # session-clean can delete both the Coder and Reviewer sessions.
   printf '%s\n' "$sid" > "$sid_dir/task-$task-session.txt"
+  printf '%s\n' "$sid" > "$sid_dir/task-$task-$agent-session.txt"
 fi
 
 exit "$rc"

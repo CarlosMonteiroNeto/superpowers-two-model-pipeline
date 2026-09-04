@@ -152,6 +152,24 @@ class TestDispatchFresh(DispatchTestBase):
             encoding="utf-8").strip()
         self.assertEqual(sid, "ses_fixed123")
 
+    def test_per_agent_session_record_written(self):
+        # dispatch also records the session per agent, so session-clean can
+        # delete both the Coder and the Reviewer sessions of a completed task
+        # (the generic task-N-session.txt holds only the last writer).
+        brief = self.brief()
+        argv_log = self.argv_log()
+        dlog = self.dispatch_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", dlog],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        sid_file = pathlib.Path(dlog).parent / "task-3-two-model-coder-session.txt"
+        self.assertEqual(sid_file.read_text(encoding="utf-8").strip(), "ses_fixed123")
+
     def test_opencode_failure_propagates(self):
         brief = self.brief()
         argv_log = self.argv_log()
