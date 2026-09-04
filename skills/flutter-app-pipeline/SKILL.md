@@ -24,9 +24,17 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 ## 2. Phase 2 — Research & Planning (per task)
 
 ### 2a. Solution research
-- Search for templates/packages/APIs matching the task: Tavily + reference sources (pub.dev, Flutter Gems, GitHub awesome-flutter/awesome-selfhosted/public-apis).
+
+**Package search** — same task-level cycle as before:
+- Search for packages/APIs matching the task: Tavily + reference sources (pub.dev, Flutter Gems, GitHub awesome-flutter/awesome-selfhosted/public-apis).
 - Score every candidate with `scripts/pkg-score` (corrected formula, below).
 - Findings presented to the developer before proceeding.
+
+**Project-level template search** (runs once per project, Phase 2a, before package research):
+- Search the **specific** category first (stars descending via GitHub search API), using `scripts/template-search` + `scripts/template-score`.
+- Collect up to **3** `AUTO_APPROVE` (≥70) candidates then **STOP** — nothing is downloaded without an explicit developer pick.
+- If the specific category yields no `AUTO_APPROVE` candidates, collect its 50–69 group **and** the generic category's ≥70 candidates, presenting both groups in one comparison table for the developer's decision.
+- Template search order: specific category → generic fallback; stars descending within each tier.
 
 ### 2b. Solution selection
 - Brainstorming with the developer + grill-with-docs.
@@ -35,26 +43,41 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 ### 2c. Task documentation
 - Produced with `writing-plans` (the standard superpowers pattern): each task is technically complete — touched files, interfaces, acceptance criteria, dependencies, and verification.
 - No code is downloaded or implemented here. Only a version-conflict check + lockfile update (`scripts/pub-sync`) for what was decided.
+- If the developer adopted a template in 2b: **clone** the template and run `graphify` to produce a **template gap analysis** (what the template provides / what to strip / what is missing → dependency search or from-scratch). This gap analysis seeds the plan tasks. The "no code downloaded" invariant is relaxed **only** for the adopted template (clone + graphify); package downloads stay lockfile-only in 2c.
 - Output feeds the Controller's `plan.json` for the two-model loop.
 
 Phase 2 is pure planning and documentation. Nothing is implemented yet.
 
-### Quality Score (0–100), per candidate package
+### Quality Score (0–100), per candidate package (pkg-score)
 
 | Criterion | Weight | Scoring |
 |---|---|---|
-| Pub points (pub.dev) | 30 | (points / 160) × 30 |
-| Popularity (pub.dev) | 15 | popularity% × 15 |
+| Pub points (pub.dev) | 20 | (points / 160) × 20 |
+| Popularity (pub.dev) | 10 | popularity% × 10 |
 | Last commit recency | 20 | <3mo=20 / 3–6mo=12 / 6–12mo=5 / >12mo=0 |
-| Flutter/Dart SDK compatibility | 15 | compatible=15 / needs override=5 / incompatible=0 |
-| Dependents count (pub.dev) | 10 | ≥50=10 / 10–49=6 / 1–9=3 / 0=0 |
-| Open/closed issue ratio | 10 | <20% open=10 / 20–40%=5 / >40%=0 |
+| Flutter/Dart SDK compatibility | 20 | compatible=20 / needs override=7 / incompatible=0 |
+| Dependents count (pub.dev) | 15 | ≥50=15 / 10–49=9 / 1–9=4 / 0=0 |
+| Open/closed issue ratio | 15 | <20% open=15 / 20–40%=7 / >40%=0 |
+
+Health signals (recency + SDK compatibility + issue ratio) sum to **55** of 100.
 
 Corrections vs the original draft:
 - **/160, not /140** — pub.dev `grantedPoints` max is 160; `/140` let a perfect package exceed 100 and loosened the gate.
 - **Issue ratio is PR-aware** — GitHub `open_issues_count` counts issues + PRs; `pkg-score` queries `search/issues?type=issue` for clean counts.
 - **Dependents via the pub.dev page** — no official endpoint; the HTML scrape is best-effort and falls back to 0 (the orchestrator may substitute `pub_api_client` when precision matters).
 - **Last-commit fallback** — packages without a GitHub repo use `latest.published` from the pub.dev API instead of commit recency.
+
+### Template Score (0–100), per candidate template (template-score)
+
+| Criterion | Weight | Scoring |
+|---|---|---|
+| Stars (primary sort key) | 30 | ≥1000=30 / 300–999=24 / 100–299=18 / 30–99=12 / 10–29=6 / <10=0 |
+| Last commit recency | 20 | <3mo=20 / 3–6mo=12 / 6–12mo=5 / >12mo=0 |
+| Flutter/Dart readiness | 20 | current SDK + null-safe pubspec=20 / dated SDK=10 / not Flutter=0 |
+| Open/closed issue ratio | 10 | <20% open=10 / 20–40%=5 / >40%=0 |
+| Sustained interest (stars ÷ repo age) | 10 | ≥10/yr=10 / 1–10/yr=6 / <1/yr=2 |
+| License | 5 | MIT/Apache/BSD=5 / other=3 / none=0 |
+| README quality (setup + structure docs) | 5 | full setup docs=5 / partial=2 / none=0 |
 
 Gate logic (reported by `pkg-score` as the verdict):
 - Score ≥ 70 → auto-approved (`AUTO_APPROVE`)
@@ -90,6 +113,8 @@ script outputs; Script A owns dispatch):
 | Script | Replaces |
 |---|---|
 | `pkg-score PACKAGE` | AI subjectively judging package quality |
+| `template-search OWNER REPO` | AI manually searching GitHub for project-level templates (searches specific then generic category, stars descending, collects up to 3 AUTO_APPROVE before stopping) |
+| `template-score OWNER REPO` | AI subjectively judging template quality (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) |
 | `pub-sync [PACKAGE]` | AI-driven download + AI reasoning about version conflicts + AI reconciling the lockfile |
 | `red-gate WORKSPACE TASK` | AI judging whether the RED test failed for the expected reason (verifies the brief's `EXPECTED-RED:` text against the report; on success dispatches the Coder) |
 | `green-gate [--no-commit] [-m MSG] [-w WS -t TASK -b BASE]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries (on commit: graphify-update + reviewer dispatch) |
@@ -122,6 +147,10 @@ scratch, RED-test authoring from a natural-language spec, and code review.
 | SDK compatibility | pub.dev API | `GET /api/packages/{name}` → `pubspec.environment.sdk` |
 | Dependents count | pub.dev | HTML page scrape (best-effort) |
 | Open/closed issue ratio | GitHub REST | `GET /search/issues?q=repo:{o}/{r}+type:issue+state:{open\|closed}` (`total_count`) |
+| Template stars | GitHub REST | `GET /search/repositories?q=...&sort=stars&order=desc` |
+| Template repo metadata | GitHub REST | `GET /repos/{owner}/{repo}` (stars, created_at, license, open_issues_count) |
+| Template issue ratio | GitHub REST | `GET /search/issues?q=repo:{o}/{r}+type:issue` (open vs total) |
+| Template README | GitHub REST | `GET /repos/{owner}/{repo}/contents/README.md` (base64 decode, check for setup/structure docs) |
 
 ## 7. GitHub Authentication (one-time setup)
 
@@ -136,7 +165,8 @@ GitHub REST rate limit is 60 req/h unauthenticated, 5000 req/h authenticated. Ba
 
 ```
 1a Commercial Requirements → 1b Generic Architecture
-  → [per task] 2a Research + pkg-score → 2b Selection (developer) → 2c writing-plans tasks (lockfile only)
+  → [project-level] 2a template-search + template-score (specific category first, stars descending, 3-AUTO_APPROVE stop)
+  → [per task] 2a package research + pkg-score → 2b Selection (developer) → 2c writing-plans tasks (lockfile only; template: clone + gap analysis seeds plan tasks)
   → 3 two-model loop, script-autonomous (pub-sync → red-gate → dispatch C → gates → green-gate → dispatch D → route-next)
   → 4 green-gate --no-commit + full review → done
 ```

@@ -524,6 +524,19 @@
       "source_location": "L175"
     },
     {
+      "id": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection",
+      "label": "TestFlutterReadyDetection",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 255,
+      "community_name": "test_template_search.py",
+      "file_type": "code",
+      "norm_label": "testflutterreadydetection",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L337"
+    },
+    {
       "id": "skills_flutter_app_pipeline_tests_test_template_search_testnotemplate",
       "label": "TestNoTemplate",
       "_callable": true,
@@ -573,7 +586,7 @@
       "file_type": "code",
       "norm_label": "testusage",
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L325"
+      "source_location": "L372"
     },
     {
       "id": "skills_two_model_sdd_pipeline_tests_test_orchestrator_orchestratortestbase",
@@ -4584,6 +4597,30 @@
       "source_location": "L180"
     },
     {
+      "id": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_dated_pubspec_detected_and_totals_76",
+      "label": ".test_dated_pubspec_detected_and_totals_76()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 255,
+      "community_name": "test_template_search.py",
+      "file_type": "code",
+      "norm_label": ".test_dated_pubspec_detected_and_totals_76()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L342"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_missing_pubspec_totals_66_developer_decision",
+      "label": ".test_missing_pubspec_totals_66_developer_decision()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 255,
+      "community_name": "test_template_search.py",
+      "file_type": "code",
+      "norm_label": ".test_missing_pubspec_totals_66_developer_decision()",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L356"
+    },
+    {
       "id": "skills_flutter_app_pipeline_tests_test_template_search_testnotemplate_test_all_below_50_is_from_scratch",
       "label": ".test_all_below_50_is_from_scratch()",
       "_callable": true,
@@ -4653,7 +4690,7 @@
       "file_type": "code",
       "norm_label": ".test_missing_arguments_is_usage()",
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L326"
+      "source_location": "L373"
     },
     {
       "id": "tests_brainstorm_server_auth_test_assertsecurityheaders",
@@ -19132,6 +19169,39 @@
       "norm_label": "neither category yields anything >= 50: no template is adopted, the base is...",
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
       "source_location": "L309"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_template_search_rationale_338",
+      "label": "The suite must catch a regression of the headline flutter_ready feature:\u2026",
+      "_origin": "ast",
+      "community": 255,
+      "community_name": "test_template_search.py",
+      "file_type": "rationale",
+      "norm_label": "the suite must catch a regression of the headline flutter_ready feature:...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L338"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_template_search_rationale_343",
+      "label": "stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + readme 5 +\u2026",
+      "_origin": "ast",
+      "community": 255,
+      "community_name": "test_template_search.py",
+      "file_type": "rationale",
+      "norm_label": "stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + readme 5 +...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L343"
+    },
+    {
+      "id": "skills_flutter_app_pipeline_tests_test_template_search_rationale_357",
+      "label": "Same fixture with pubspec=None totals 66 (flutter_ready=0) and lands in the\u2026",
+      "_origin": "ast",
+      "community": 255,
+      "community_name": "test_template_search.py",
+      "file_type": "rationale",
+      "norm_label": "same fixture with pubspec=none totals 66 (flutter_ready=0) and lands in the...",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L357"
     },
     {
       "id": "skills_flutter_app_pipeline_tests_test_template_search_rationale_44",
@@ -36348,6 +36418,54 @@
       "weight": 1.0
     },
     {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_dated_pubspec_detected_and_totals_76",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase_stub",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L348",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_dated_pubspec_detected_and_totals_76",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase_run",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L349",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_missing_pubspec_totals_66_developer_decision",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase_stub",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L363",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_missing_pubspec_totals_66_developer_decision",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase_run",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L364",
+      "weight": 1.0
+    },
+    {
       "source": "skills_flutter_app_pipeline_tests_test_template_search_testnotemplate_test_all_below_50_is_from_scratch",
       "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase_stub",
       "relation": "calls",
@@ -36500,7 +36618,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L327",
+      "source_location": "L374",
       "weight": 1.0
     },
     {
@@ -36512,7 +36630,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L328",
+      "source_location": "L375",
       "weight": 1.0
     },
     {
@@ -56015,13 +56133,13 @@
     },
     {
       "source": "skills_flutter_app_pipeline_tests_test_template_search",
-      "target": "skills_flutter_app_pipeline_tests_test_template_search_testusage",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L325",
+      "source_location": "L337",
       "weight": 1.0
     },
     {
@@ -56033,6 +56151,17 @@
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
       "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testusage",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L372",
       "weight": 1.0
     },
     {
@@ -65727,6 +65856,17 @@
       "weight": 1.0
     },
     {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase",
+      "relation": "inherits",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L337",
+      "weight": 1.0
+    },
+    {
       "source": "skills_flutter_app_pipeline_tests_test_template_search_testnotemplate",
       "target": "skills_flutter_app_pipeline_tests_test_template_search_templatesearchtestbase",
       "relation": "inherits",
@@ -65767,7 +65907,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L325",
+      "source_location": "L372",
       "weight": 1.0
     },
     {
@@ -67190,6 +67330,28 @@
       "weight": 1.0
     },
     {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_dated_pubspec_detected_and_totals_76",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L342",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_missing_pubspec_totals_66_developer_decision",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L356",
+      "weight": 1.0
+    },
+    {
       "source": "skills_flutter_app_pipeline_tests_test_template_search_testnotemplate",
       "target": "skills_flutter_app_pipeline_tests_test_template_search_testnotemplate_test_all_below_50_is_from_scratch",
       "relation": "method",
@@ -67252,7 +67414,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
-      "source_location": "L326",
+      "source_location": "L373",
       "weight": 1.0
     },
     {
@@ -69423,6 +69585,39 @@
       "weight": 1.0
     },
     {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_rationale_338",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L338",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_rationale_343",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_dated_pubspec_detected_and_totals_76",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L343",
+      "weight": 1.0
+    },
+    {
+      "source": "skills_flutter_app_pipeline_tests_test_template_search_rationale_357",
+      "target": "skills_flutter_app_pipeline_tests_test_template_search_testflutterreadydetection_test_missing_pubspec_totals_66_developer_decision",
+      "relation": "rationale_for",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "skills/flutter-app-pipeline/tests/test_template_search.py",
+      "source_location": "L357",
+      "weight": 1.0
+    },
+    {
       "source": "skills_flutter_app_pipeline_tests_test_template_search_rationale_44",
       "target": "skills_flutter_app_pipeline_tests_test_template_search_stubgithub",
       "relation": "rationale_for",
@@ -70037,5 +70232,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "5ee6db8bbda39e5c40398ecd0fa8e6d7d01996ff"
+  "built_at_commit": "9b0536279283a3492e66f475882b4d87836ff656"
 }

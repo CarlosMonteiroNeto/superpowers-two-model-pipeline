@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 249 files · ~258,367 words
+- 249 files · ~258,680 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2706 nodes · 3261 edges · 261 communities (193 shown, 58 thin omitted)
+- 2712 nodes · 3272 edges · 261 communities (193 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 19 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5ee6db8b`
+- Built from commit: `9b053627`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1053,8 +1053,8 @@ Cohesion: 0.23
 Nodes (12): collect_candidates(), compute_score(), _days_ago(), _detect_flutter_ready(), _fetch_json(), gather_data(), main(), Detect Flutter readiness from pubspec.yaml SDK constraint. Returns 'current' if… (+4 more)
 
 ### Community 255 - "test_template_search.py"
-Cohesion: 0.10
-Nodes (14): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, Deterministic GitHub REST stub: serves canned search + repo data. search_map:…, run_script() (+6 more)
+Cohesion: 0.09
+Nodes (18): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, The suite must catch a regression of the headline flutter_ready feature:…, stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + readme 5 +… (+10 more)
 
 ### Community 257 - "codex-tools.md"
 Cohesion: 0.22
@@ -1070,7 +1070,7 @@ Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
 
 ## Knowledge Gaps
 - **1322 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1317 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1630 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1633 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
