@@ -1,7 +1,7 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 249 files · ~259,137 words
+- 249 files · ~259,144 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a5411065`
+- Built from commit: `99462de2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -468,7 +468,7 @@ Nodes (3): FinalGateBase, TestFinalGate, write_stub()
 
 ### Community 43 - "Flutter App Pipeline (layered on two-model-sdd-pipeline)"
 Cohesion: 0.11
-Nodes (17): 0. Relationship to two-model-sdd-pipeline, 1. Phase 1 — Requirements (once, project-level), 1a. Commercial requirements verification, 1b. Generic technical architecture requirements, 2. Phase 2 — Research & Planning (per task), 2a. Solution research, 2b. Solution selection, 2c. Task documentation (+9 more)
+Nodes (17): 0. Relationship to two-model-sdd-pipeline, 1. Phase 1 — Requirements (once, project-level), 1a. Commercial requirements verification, 1b. Generic technical architecture requirements, 2. Phase 2 — Research & Planning (project-level + per task), 2a. Solution research, 2b. Solution selection, 2c. Task documentation (+9 more)
 
 ### Community 44 - "Code Review Reception"
 Cohesion: 0.12

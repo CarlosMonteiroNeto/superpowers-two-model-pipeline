@@ -23389,14 +23389,14 @@
       "source_location": "L18"
     },
     {
-      "id": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
-      "label": "2. Phase 2 \u2014 Research & Planning (per task)",
+      "id": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
+      "label": "2. Phase 2 \u2014 Research & Planning (project-level + per task)",
       "_origin": "ast",
       "community": 43,
       "community_name": "Flutter App Pipeline (layered on two-model-sdd-pipeline)",
       "file_type": "document",
       "node_kind": "heading",
-      "norm_label": "2. phase 2 \u2014 research & planning (per task)",
+      "norm_label": "2. phase 2 \u2014 research & planning (project-level + per task)",
       "source_file": "skills/flutter-app-pipeline/SKILL.md",
       "source_location": "L24"
     },
@@ -55555,7 +55555,7 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
       "target": "skills_flutter_app_pipeline_skill_2a_solution_research",
       "relation": "contains",
       "_origin": "ast",
@@ -55566,7 +55566,7 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
       "target": "skills_flutter_app_pipeline_skill_2b_solution_selection",
       "relation": "contains",
       "_origin": "ast",
@@ -55577,7 +55577,7 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
       "target": "skills_flutter_app_pipeline_skill_2c_task_documentation",
       "relation": "contains",
       "_origin": "ast",
@@ -55588,7 +55588,7 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
       "target": "skills_flutter_app_pipeline_skill_quality_score_0_100_per_candidate_package_pkg_score",
       "relation": "contains",
       "_origin": "ast",
@@ -55599,7 +55599,7 @@
       "weight": 1.0
     },
     {
-      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "source": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
       "target": "skills_flutter_app_pipeline_skill_template_score_0_100_per_candidate_template_template_score",
       "relation": "contains",
       "_origin": "ast",
@@ -55677,7 +55677,7 @@
     },
     {
       "source": "skills_flutter_app_pipeline_skill_flutter_app_pipeline_layered_on_two_model_sdd_pipeline",
-      "target": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_per_task",
+      "target": "skills_flutter_app_pipeline_skill_2_phase_2_research_planning_project_level_per_task",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70348,5 +70348,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "a5411065ddf50dc0d773567cdba51a45d03fd9dc"
+  "built_at_commit": "99462de23d6e5d1f5c1e71e41110676a7913b619"
 }

@@ -71,6 +71,21 @@ Persistence — architectural path only).
 - **RTK = Token Killer:** every command an LLM could see runs through `cmd`/`token-kill`;
   RTK is the pipeline's context-compression layer, not an optional extra.
 
+## Category Skeleton
+
+The **Category Skeleton** is a REQUIRED output of Phase 1a brainstorming. The
+spec cannot be written without it. It consists of three fields in this exact
+order:
+
+1. **generic category** — the broad app family (e.g. POS, marketplace, CMS)
+2. **specific category** — the niche within that family (e.g. women's fashion POS)
+3. **original implementations** — the features that make it yours (e.g. voice
+   command, auto-calc installments)
+
+These fields drive downstream research: the generic + specific category compose
+the template search query, and each original implementation becomes a per-task
+pub.dev dependency-research target in Phase 2a.
+
 ## Decision points locked during brainstorming (2026-09-02)
 
 - Items 1–7 of the pipeline-change request mapped in the design spec.
