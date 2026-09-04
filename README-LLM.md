@@ -51,13 +51,22 @@ end to end.
 
 ## 4. Pipeline phases
 
-1. **Phase 1 — Requirements (once, project-level).** `1a` commercial requirements
-   via brainstorming + grill-with-docs; `1b` generic technical architecture.
-   Resolved terms persist in `CONTEXT.md` + ADRs (architectural path only).
+1. **Phase 1 — Requirements (once, project-level).**    `1a` commercial requirements
+   via brainstorming + grill-with-docs; this also produces the **Category
+   Skeleton** — three fields (generic category, specific category, original
+   implementations) that drive the template search and per-task dependency
+   research downstream.
+   `1b` generic technical architecture. Resolved terms persist in `CONTEXT.md`
+   + ADRs (architectural path only).
 2. **Phase 2 — Research & Planning (per task).** `2a` search (Tavily + reference
-   sources) and score candidates with `pkg-score`; `2b` select with the developer
-   (as-is / modified / from-scratch); `2c` write technically complete tasks with
-   `writing-plans` (no code downloaded; lockfile only). Pure planning.
+   sources) and score candidates with `pkg-score`; then, at project level, run
+   `template-search` against the Category Skeleton's specific category (stars
+   descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific
+   50–69 group). Score results with `template-score`. `2b` select with the
+   developer (as-is / modified / from-scratch); `2c` clone the selected template
+   + run `graphify-package` → gap analysis against the plan, then write
+   technically complete tasks with `writing-plans` (no code downloaded; lockfile
+   only). Pure planning.
 3. **Phase 3 — TDD Implementation.** Delegated to `two-model-sdd-pipeline`
    (script-autonomous per-task loop). Flutter additions: `pub-sync` ->
    `red-gate` (dispatches C on RED verified) -> Script A gates (task tests ->
@@ -94,6 +103,8 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `run-gates WS TEST ANALYZE` (two-model) | Generic green approval: full suite + analysis through `cmd` (language-agnostic mirror of green-gate) | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
 | `orient-llm [REPO]` | Brainstorming pre-flight: locate and print this repo's `README-LLM.md` so the agent is oriented on how to run the pipeline | exit 0 printed; 1 missing (gate — stop); 2 usage |
 | `pkg-score PACKAGE` | Fetch pub.dev + GitHub, compute the corrected Quality Score | JSON + gate verdict (AUTO_APPROVE / DEVELOPER_DECISION / AUTO_REJECT) |
+| `template-search CATEGORY` | Search GitHub for project templates in the given category (stars descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific 50–69 group) | JSON list of candidates with scores |
+| `template-score TEMPLATE` | Score a project template candidate (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) | JSON + gate verdict (same semantics as pkg-score) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
 | `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report). **On success dispatches C** | exit 0 RED verified + C dispatched; exit 1 defective brief (no dispatch); exit 2 usage |
 | `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: `graphify-update` + review package + **dispatches D**. `--no-commit` never commits/never dispatches | exit 0 green (+commit +graphify +D); 1 tests; 2 analyze; 3 format |
@@ -183,14 +194,18 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
 
 ## 8. Quality Score (0–100)
 
+### pkg-score (package evaluation)
+
 | Criterion | Weight | Scoring |
 |---|---|---|
-| Pub points | 30 | (points / 160) × 30 |
-| Popularity | 15 | popularity% × 15 |
+| Pub points | 20 | (points / 160) × 20 |
+| Popularity | 10 | popularity% × 10 |
 | Last commit recency | 20 | <3mo=20 / 3–6mo=12 / 6–12mo=5 / >12mo=0 |
-| Flutter/Dart SDK compatibility | 15 | compatible=15 / needs override=5 / incompatible=0 |
-| Dependents count | 10 | ≥50=10 / 10–49=6 / 1–9=3 / 0=0 |
-| Open/closed issue ratio | 10 | <20% open=10 / 20–40%=5 / >40%=0 |
+| Flutter/Dart SDK compatibility | 20 | compatible=20 / needs override=7 / incompatible=0 |
+| Dependents count | 15 | ≥50=15 / 10–49=9 / 1–9=4 / 0=0 |
+| Open/closed issue ratio | 15 | <20% open=15 / 20–40%=7 / >40%=0 |
+
+Health signals (recency + SDK + issue ratio) sum to **55**.
 
 Corrections: **/160 not /140** (pub.dev max is 160); issue ratio is **PR-aware**
 (`open_issues_count` includes PRs — use `search/issues?type=issue`); dependents
@@ -198,6 +213,29 @@ have no official endpoint (best-effort scrape or `pub_api_client`); no-GitHub
 packages fall back to `latest.published`.
 
 Gate: ≥70 auto-approve; 50–69 developer decision; <50 reject -> from-scratch.
+
+### template-score (project template evaluation)
+
+| Criterion | Weight | Scoring |
+|---|---|---|
+| Stars | 30 | ≥1000=30 / 300–999=24 / 100–299=18 / 30–99=12 / 10–29=6 / <10=0 |
+| Recency | 20 | <3mo=20 / 3–6mo=12 / 6–12mo=5 / >12mo=0 |
+| Flutter/Dart readiness | 20 | current SDK + null-safe pubspec=20 / dated SDK=10 / not Flutter=0 |
+| Open/closed issue ratio | 10 | <20% open=10 / 20–40%=5 / >40%=0 |
+| Sustained interest (stars ÷ repo age) | 10 | ≥10/yr=10 / 1–10/yr=6 / <1/yr=2 |
+| License | 5 | MIT/Apache/BSD=5 / other=3 / none=0 |
+| README quality (setup + structure docs) | 5 | full setup docs=5 / partial=2 / none=0 |
+
+Stars is the primary search sort key (used by `template-search` to order
+candidates descending). Same gate semantics as pkg-score (≥70 auto-approve;
+50–69 developer decision; <50 reject).
+
+### Category Skeleton
+
+The Category Skeleton is produced during Phase 1a and contains three fields:
+the **generic category**, **specific category**, and **original implementations**.
+These fields drive the `template-search` query (specific category first) and the
+per-task dependency research in Phase 3.
 
 ## 9. GitHub authentication
 

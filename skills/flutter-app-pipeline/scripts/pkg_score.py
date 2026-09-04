@@ -23,7 +23,7 @@ import urllib.request
 PUB_API = os.environ.get("PUB_API_BASE", "https://pub.dev")
 GH_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")
 
-SDK_SCORE = {"compatible": 15, "needs_override": 5, "incompatible": 0}
+SDK_SCORE = {"compatible": 20, "needs_override": 7, "incompatible": 0}
 
 
 def compute_score(data):
@@ -36,9 +36,9 @@ def compute_score(data):
     """
     max_points = data.get("max_points") or 0
     granted = data.get("granted_points") or 0
-    pub_points = (granted / max_points) * 30 if max_points else 0
+    pub_points = (granted / max_points) * 20 if max_points else 0
 
-    popularity = (data.get("popularity") or 0) * 15
+    popularity = (data.get("popularity") or 0) * 10
 
     days = data.get("recency_days") or 0
     recency = 20 if days < 90 else 12 if days < 180 else 5 if days < 365 else 0
@@ -46,12 +46,12 @@ def compute_score(data):
     sdk = SDK_SCORE.get(data.get("sdk"), 0)
 
     dependents = data.get("dependents") or 0
-    dep = 10 if dependents >= 50 else 6 if dependents >= 10 else 3 if dependents >= 1 else 0
+    dep = 15 if dependents >= 50 else 9 if dependents >= 10 else 4 if dependents >= 1 else 0
 
     open_ = data.get("open_issues") or 0
     closed = data.get("closed_issues") or 0
     ratio = open_ / (open_ + closed) if (open_ + closed) else 0
-    issue_ratio = 10 if ratio < 0.20 else 5 if ratio <= 0.40 else 0
+    issue_ratio = 15 if ratio < 0.20 else 7 if ratio <= 0.40 else 0
 
     total = round(pub_points + popularity + recency + sdk + dep + issue_ratio, 1)
     total = min(total, 100.0)

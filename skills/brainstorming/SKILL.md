@@ -106,13 +106,20 @@ your path and complete them in order.
 **Architectural:**
 1. **Explore project context** — check files, docs, recent commits
 2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
-3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria; fact-finding questions stay open-ended (no preset options), and each resolved term/decision/constraint goes to `CONTEXT.md` as it resolves
-4. **Propose 3 approaches** — with trade-offs and your recommendation, plus a free-form custom-answer option
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+3. **Category Skeleton (REQUIRED)** — before any other clarifying question, elicit the three Category Skeleton fields in this exact order. These are REQUIRED outputs of Phase 1a — the spec cannot be written without them:
+   - **generic category** — the broad app family (e.g. POS, marketplace, CMS)
+   - **specific category** — the niche within that family (e.g. women's fashion POS)
+   - **original implementations** — the features that make it yours (e.g. voice command, auto-calc installments)
+
+   Persist all three fields to `CONTEXT.md`. The generic + specific category drive the template search query; each original implementation becomes a per-task dependency-research target in Phase 2a.
+
+4. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria; fact-finding questions stay open-ended (no preset options), and each resolved term/decision/constraint goes to `CONTEXT.md` as it resolves
+5. **Propose 3 approaches** — with trade-offs and your recommendation, plus a free-form custom-answer option
+6. **Present design** — in sections scaled to their complexity, get user approval after each section
+7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+9. **User reviews written spec** — ask user to review the spec file before proceeding
+10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
