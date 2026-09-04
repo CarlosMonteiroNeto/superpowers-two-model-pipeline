@@ -40,7 +40,7 @@
   "38": "Superpowers for OpenCode",
   "39": "Changes by File",
   "40": "Codex App Compatibility: Worktree and Finishing Skill Adaptation",
-  "41": "run_script",
+  "41": "DispatchTestBase",
   "42": "FinalGateBase",
   "43": "Flutter App Pipeline (layered on two-model-sdd-pipeline)",
   "44": "Code Review Reception",
@@ -112,7 +112,7 @@
   "110": "Global Constraints",
   "111": "Document Review System Design",
   "112": "helper.js",
-  "113": "Category Skeleton + Tiered Template Search Design",
+  "113": "codex-tools.md",
   "114": "Skill authoring best practices",
   "115": "helper.test.js",
   "116": "stop-server.test.sh",
@@ -128,7 +128,7 @@
   "126": "feature_request.md",
   "127": "v5.0.1 (2026-03-10)",
   "128": "stop-server.sh",
-  "129": "SessionCleanTest",
+  "129": "Gemini CLI Tool Mapping",
   "130": "Hermes Agent Tool Mapping",
   "131": "test-session-start.sh",
   "132": "test-render-graphs.sh",
@@ -199,7 +199,7 @@
   "197": "orchestrator",
   "198": "route-next",
   "199": "Antigravity CLI (`agy`) Tool Mapping",
-  "200": "Evaluation and iteration",
+  "200": "Anti-patterns to avoid",
   "201": "test-antigravity-tools.sh",
   "202": "test-devin-plugin.sh",
   "203": "check-superpowers",
@@ -250,6 +250,5 @@
   "248": "GEMINI.md",
   "249": "graphify-package",
   "250": "pkg-score",
-  "251": "hermes/__init__.py",
-  "252": "session-clean"
+  "251": "hermes/__init__.py"
 }
