@@ -1,0 +1,91 @@
+test_invokes_graphify_update_subcommand_on_package_dir (test_gates.TestGraphifyPackage.test_invokes_graphify_update_subcommand_on_package_dir)
+graphify-package must invoke `graphify update <pkg_dir>` - the ... ok
+test_missing_package_is_an_error (test_gates.TestGraphifyPackage.test_missing_package_is_an_error) ... ok
+test_invokes_graphify_update_subcommand_on_root (test_gates.TestGraphifyRegen.test_invokes_graphify_update_subcommand_on_root)
+graphify-regen must invoke `graphify update <root>` - the real ... ok
+test_never_uses_the_old_flag_form (test_gates.TestGraphifyRegen.test_never_uses_the_old_flag_form) ... ok
+test_analyze_failure_reports_and_does_not_commit (test_gates.TestGreenGate.test_analyze_failure_reports_and_does_not_commit) ... ok
+test_does_not_chain_graphify_after_commit (test_gates.TestGreenGate.test_does_not_chain_graphify_after_commit)
+green-gate no longer rebuilds the project graph: the Reviewer reads ... ok
+test_format_drift_reports_and_does_not_commit (test_gates.TestGreenGate.test_format_drift_reports_and_does_not_commit) ... ok
+test_green_commits_updates_graph_and_dispatches_reviewer (test_gates.TestGreenGate.test_green_commits_updates_graph_and_dispatches_reviewer)
+On all-green + commit with a workspace/task/base, green-gate must: ... ok
+test_green_runs_all_gates_and_commits (test_gates.TestGreenGate.test_green_runs_all_gates_and_commits) ... ok
+test_no_commit_does_not_chain_graphify (test_gates.TestGreenGate.test_no_commit_does_not_chain_graphify)
+--no-commit (Phase 4 revalidation) changes nothing, so it must not ... ok
+test_no_commit_flag_never_commits (test_gates.TestGreenGate.test_no_commit_flag_never_commits) ... ok
+test_no_commit_skips_graphify_and_reviewer (test_gates.TestGreenGate.test_no_commit_skips_graphify_and_reviewer)
+--no-commit validation must not update the graph nor dispatch the ... ok
+test_test_failure_reports_and_does_not_commit (test_gates.TestGreenGate.test_test_failure_reports_and_does_not_commit) ... ok
+test_chains_graphify_package_for_added_packages (test_gates.TestPubSync.test_chains_graphify_package_for_added_packages)
+pub-sync knows which packages were added; it must index each one ... ok
+test_conflict_writes_report_and_fails (test_gates.TestPubSync.test_conflict_writes_report_and_fails) ... ok
+test_pub_sync_respects_graphify_enabled (test_gates.TestPubSync.test_pub_sync_respects_graphify_enabled) ... ok
+test_resolution_ok_exits_zero (test_gates.TestPubSync.test_resolution_ok_exits_zero) ... ok
+test_defective_brief_does_not_dispatch (test_gates.TestRedGate.test_defective_brief_does_not_dispatch)
+A defective brief (RED passes before implementation) must NOT ... ok
+test_defective_brief_when_red_fails_for_wrong_reason (test_gates.TestRedGate.test_defective_brief_when_red_fails_for_wrong_reason)
+A RED failure whose report does NOT contain the brief's expected ... ok
+test_defective_brief_when_red_passes (test_gates.TestRedGate.test_defective_brief_when_red_passes) ... ok
+test_does_not_chain_graphify_after_red_verified (test_gates.TestRedGate.test_does_not_chain_graphify_after_red_verified)
+red-gate no longer rebuilds the project graph: the Coder reads the ... ok
+test_materializes_and_verifies_red_when_tests_fail (test_gates.TestRedGate.test_materializes_and_verifies_red_when_tests_fail) ... ok
+test_missing_brief_is_an_error (test_gates.TestRedGate.test_missing_brief_is_an_error) ... ok
+test_missing_expected_red_is_defective (test_gates.TestRedGate.test_missing_expected_red_is_defective)
+A brief without an EXPECTED-RED block cannot be verified: the ... ok
+test_red_verified_dispatches_coder (test_gates.TestRedGate.test_red_verified_dispatches_coder)
+On RED verified, red-gate dispatches the Coder headlessly (Item 4): ... ok
+test_missing_package_raises (test_package_resolve.TestResolvePackageDir.test_missing_package_raises) ... ok
+test_plain_path_root_uri (test_package_resolve.TestResolvePackageDir.test_plain_path_root_uri) ... ok
+test_resolves_absolute_file_uri (test_package_resolve.TestResolvePackageDir.test_resolves_absolute_file_uri) ... ok
+test_resolves_relative_root_uri_against_base (test_package_resolve.TestResolvePackageDir.test_resolves_relative_root_uri_against_base) ... ok
+test_buckets (test_score.TestDependentsBuckets.test_buckets) ... ok
+test_auto_approve_above_70 (test_score.TestGateVerdicts.test_auto_approve_above_70) ... ok
+test_auto_approve_at_70 (test_score.TestGateVerdicts.test_auto_approve_at_70)
+70.0 sits exactly on the AUTO_APPROVE threshold (0+0+20+20+15+15). ... ok
+test_auto_reject_below_50 (test_score.TestGateVerdicts.test_auto_reject_below_50) ... ok
+test_developer_decision_band (test_score.TestGateVerdicts.test_developer_decision_band) ... ok
+test_health_signals_sum_to_55 (test_score.TestHealthWeight.test_health_signals_sum_to_55)
+Recency (20) + SDK (20) + issue ratio (15) = 55 of 100. ... ok
+test_bands (test_score.TestIssueRatioBands.test_bands) ... ok
+test_popularity_scales_to_10 (test_score.TestPopularityScoring.test_popularity_scales_to_10) ... ok
+test_partial_points_normalize_by_160 (test_score.TestPubPointsNormalization.test_partial_points_normalize_by_160) ... ok
+test_perfect_package_scores_20 (test_score.TestPubPointsNormalization.test_perfect_package_scores_20)
+Re-weighted: pub points now weight 20 of 100 (was 30). ... ok
+test_perfect_package_total_is_exactly_100 (test_score.TestPubPointsNormalization.test_perfect_package_total_is_exactly_100) ... ok
+test_bands (test_score.TestRecencyBands.test_bands) ... ok
+test_sdk_scores (test_score.TestSdkCompatibility.test_sdk_scores) ... ok
+test_total_never_exceeds_100 (test_score.TestVerdictRounding.test_total_never_exceeds_100) ... ok
+test_deterministic_gate_scripts_referenced (test_skill_content.TestFlutterAppPipelineSkill.test_deterministic_gate_scripts_referenced) ... ok
+test_expected_red_reason_documented (test_skill_content.TestFlutterAppPipelineSkill.test_expected_red_reason_documented)
+red-gate now verifies the failure reason, not just the exit code: ... ok
+test_gate_thresholds_documented (test_skill_content.TestFlutterAppPipelineSkill.test_gate_thresholds_documented) ... ok
+test_graphify_before_llm_invariant (test_skill_content.TestFlutterAppPipelineSkill.test_graphify_before_llm_invariant) ... ok
+test_graphify_is_post_commit_and_subgraph (test_skill_content.TestFlutterAppPipelineSkill.test_graphify_is_post_commit_and_subgraph)
+Graphify is post-commit only (ADR-0004): the graph is rebuilt only ... ok
+test_graphify_update_subcommand_documented (test_skill_content.TestFlutterAppPipelineSkill.test_graphify_update_subcommand_documented)
+The skill must document the corrected graphify invocation ... ok
+test_layers_on_two_model_pipeline (test_skill_content.TestFlutterAppPipelineSkill.test_layers_on_two_model_pipeline) ... ok
+test_phase_2c_uses_writing_plans (test_skill_content.TestFlutterAppPipelineSkill.test_phase_2c_uses_writing_plans) ... ok
+test_rtk_compression_invariant (test_skill_content.TestFlutterAppPipelineSkill.test_rtk_compression_invariant)
+Every LLM-invoked command runs through scripts/cmd: full output to ... ok
+test_score_formula_normalizes_by_160 (test_skill_content.TestFlutterAppPipelineSkill.test_score_formula_normalizes_by_160) ... ok
+test_skill_exists (test_skill_content.TestFlutterAppPipelineSkill.test_skill_exists) ... ok
+test_models_pre_defined_or_asked_when_not_installed (test_skill_content.TestTwoModelLayering.test_models_pre_defined_or_asked_when_not_installed)
+Tiers are pre-configured locally; the gate asks the user only ... ok
+test_no_approval_gate_after_decisions (test_skill_content.TestTwoModelLayering.test_no_approval_gate_after_decisions)
+After the gate and Phase 2 selection, the branch runs to ... ok
+test_route_next_documented (test_skill_content.TestTwoModelLayering.test_route_next_documented)
+The deterministic router (review outcome -> next action) must be ... ok
+test_two_model_skill_cross_references_flutter_layer (test_skill_content.TestTwoModelLayering.test_two_model_skill_cross_references_flutter_layer) ... ok
+test_missing_plan_is_usage (test_subgraph.TestGraphifySubgraph.test_missing_plan_is_usage) ... ok
+test_missing_task_is_usage (test_subgraph.TestGraphifySubgraph.test_missing_task_is_usage) ... ok
+test_multiple_touches_each_queried (test_subgraph.TestGraphifySubgraph.test_multiple_touches_each_queried) ... ok
+test_writes_interfaces_file_from_touches (test_subgraph.TestGraphifySubgraph.test_writes_interfaces_file_from_touches) ... ok
+test_disabled_skips_graphify (test_subgraph.TestGraphifyUpdate.test_disabled_skips_graphify) ... ok
+test_invokes_graphify_update_on_root (test_subgraph.TestGraphifyUpdate.test_invokes_graphify_update_on_root) ... ok
+
+----------------------------------------------------------------------
+Ran 64 tests in 36.431s
+
+OK
