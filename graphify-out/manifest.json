@@ -1566,15 +1566,33 @@
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/scripts/template_score.py": {
-    "mtime": 1788545280.785106,
-    "seen": 1788545718.2867875,
-    "ast_hash": "7e3bf7408ce99fd6a1d4791827bd2eeb",
+    "mtime": 1788546812.2637012,
+    "seen": 1788546959.9880948,
+    "ast_hash": "77cd3dba126f42732c9a85d7ccd76d8f",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_template_score.py": {
     "mtime": 1788545169.485713,
     "seen": 1788545718.2867875,
     "ast_hash": "03b8a613fa53b78fd31b0c7c0e44cd6f",
+    "semantic_hash": ""
+  },
+  "skills/flutter-app-pipeline/scripts/_template_search_collect.py": {
+    "mtime": 1788546685.870276,
+    "seen": 1788546959.9880948,
+    "ast_hash": "1f0a1919e300e8ef59c5a84cb5663567",
+    "semantic_hash": ""
+  },
+  "skills/flutter-app-pipeline/scripts/template-search": {
+    "mtime": 1788546709.0233583,
+    "seen": 1788546959.9880948,
+    "ast_hash": "c979c10c7f889bc8067adf7ce3f29c38",
+    "semantic_hash": ""
+  },
+  "skills/flutter-app-pipeline/tests/test_template_search.py": {
+    "mtime": 1788546488.6079257,
+    "seen": 1788546959.9880948,
+    "ast_hash": "3e25d26625c964e6116cc91735d80c4e",
     "semantic_hash": ""
   }
 }

@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 246 files · ~256,600 words
+- 249 files · ~258,367 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2665 nodes · 3197 edges · 257 communities (190 shown, 57 thin omitted)
+- 2706 nodes · 3261 edges · 261 communities (193 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 19 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f75b6663`
+- Built from commit: `5ee6db8b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -260,8 +260,12 @@
 - opencode/run-tests.sh
 - session-clean
 - pkg_score.py
-- gather_data
-- v3.3.0 (2025-10-28)
+- template_score.py
+- test_template_search.py
+- codex-tools.md
+- Gemini CLI Tool Mapping
+- v3.2.2 (2025-10-21)
+- template-search
 
 ## God Nodes (most connected - your core abstractions)
 1. `Superpowers Release Notes` - 43 edges
@@ -276,6 +280,8 @@
 10. `tdata()` - 15 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `main()` --calls--> `collect_candidates()`  [EXTRACTED]
+  skills/flutter-app-pipeline/scripts/_template_search_collect.py → skills/flutter-app-pipeline/scripts/template_score.py
 - `run_and_check()` --calls--> `cleanup_test_project()`  [EXTRACTED]
   tests/claude-code/test-worktree-native-preference.sh → tests/claude-code/test-helpers.sh
 - `test-subagent-driven-development.sh script` --calls--> `run_claude()`  [EXTRACTED]
@@ -284,13 +290,11 @@
   tests/claude-code/test-worktree-native-preference.sh → tests/claude-code/test-helpers.sh
 - `test-subagent-driven-development.sh script` --calls--> `assert_contains()`  [EXTRACTED]
   tests/claude-code/test-subagent-driven-development.sh → tests/claude-code/test-helpers.sh
-- `test-subagent-driven-development.sh script` --calls--> `assert_order()`  [EXTRACTED]
-  tests/claude-code/test-subagent-driven-development.sh → tests/claude-code/test-helpers.sh
 
 ## Import Cycles
 - None detected.
 
-## Communities (257 total, 57 thin omitted)
+## Communities (261 total, 58 thin omitted)
 
 ### Community 0 - "server.cjs"
 Cohesion: 0.05
@@ -306,7 +310,7 @@ Nodes (13): data(), Re-weighted: pub points now weight 20 of 100 (was 30)., Rece
 
 ### Community 3 - "Superpowers Release Notes"
 Cohesion: 0.05
-Nodes (37): Breaking Changes, Bug Fixes, Bug Fixes, Bug Fixes, Changed, Changes, Codex Fixes, Files Changed (+29 more)
+Nodes (37): Breaking Changes, Bug Fixes, Bug Fixes, Bug Fixes, Changed, Changes, Codex Fixes, Files Added (+29 more)
 
 ### Community 4 - "Worktree Rototill: Detect-and-Defer"
 Cohesion: 0.06
@@ -349,8 +353,8 @@ Cohesion: 0.07
 Nodes (28): A1 — Per-session secret key (chosen approach), A2 — Host allowlist dropped; browser WS Origin retained, A3 — Server crashes on `null` / primitive WS payload, A4 — Frame-length bound in `decodeFrame` (adjacent), A. Server security hardening (`server.cjs`), B1 — macOS resource-fork dotfiles served as screen content, B2 — `stop-server.sh` can kill a reused PID, B3 — WebSocket client: silent reconnect, stale "Connected" (+20 more)
 
 ### Community 14 - "Testing Skills With Subagents"
-Cohesion: 0.04
-Nodes (41): Codex App Finishing, Environment Detection, Model routing on spawns, Subagent dispatch requires multi-agent support, Waiting on children, Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions file (+33 more)
+Cohesion: 0.07
+Nodes (29): 1. Explicit Negation in Rules, 2. Entry in Rationalization Table, 3. Red Flag Entry, 4. Update description, Common Mistakes (Same as TDD), Example: TDD Skill Bulletproofing, GREEN Phase: Write Minimal Skill (Make It Pass), Initial Test (Failed) (+21 more)
 
 ### Community 15 - "Superpowers v2.0.0 Release Notes"
 Cohesion: 0.07
@@ -1044,25 +1048,37 @@ Nodes (4): Build evaluations first, Develop Skills iteratively with the agent, E
 Cohesion: 0.27
 Nodes (11): compute_score(), _days_ago(), _dependents_count(), _fetch_json(), gather_data(), _github_repo(), main(), Best-effort SDK compatibility. 'compatible' unless the project SDK constraint… (+3 more)
 
-### Community 254 - "gather_data"
-Cohesion: 0.39
-Nodes (7): compute_score(), _days_ago(), _fetch_json(), gather_data(), main(), Fetch GitHub data for a template repository., Score a candidate template from structured data (pure, no I/O). data keys:…
+### Community 254 - "template_score.py"
+Cohesion: 0.23
+Nodes (12): collect_candidates(), compute_score(), _days_ago(), _detect_flutter_ready(), _fetch_json(), gather_data(), main(), Detect Flutter readiness from pubspec.yaml SDK constraint. Returns 'current' if… (+4 more)
 
-### Community 255 - "v3.3.0 (2025-10-28)"
+### Community 255 - "test_template_search.py"
+Cohesion: 0.10
+Nodes (14): _commit_date(), _created_years_ago(), Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 are found,…, Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic >=70,…, If only the generic group has candidates, present it alone., Neither category yields anything >= 50: no template is adopted, the base is…, Deterministic GitHub REST stub: serves canned search + repo data. search_map:…, run_script() (+6 more)
+
+### Community 257 - "codex-tools.md"
+Cohesion: 0.22
+Nodes (5): Codex App Finishing, Environment Detection, Model routing on spawns, Subagent dispatch requires multi-agent support, Waiting on children
+
+### Community 258 - "Gemini CLI Tool Mapping"
+Cohesion: 0.29
+Nodes (7): Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions file, Parallel dispatch, Personal skills directory, Prompt filling, Subagent support
+
+### Community 259 - "v3.2.2 (2025-10-21)"
 Cohesion: 0.67
-Nodes (3): Files Added, New Features, v3.3.0 (2025-10-28)
+Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
 
 ## Knowledge Gaps
 - **1322 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1317 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1613 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **57 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1630 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.3.0 (2025-10-28)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
+- **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.2.2 (2025-10-21)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
   _High betweenness centrality (0.003) - this node is a cross-community bridge._
-- **Why does `Writing Skills` connect `Writing Skills` to `Anti-Patterns`, `Testing All Skill Types`, `RED-GREEN-REFACTOR for Skills`, `Testing Skills With Subagents`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`?**
+- **Why does `Writing Skills` connect `Writing Skills` to `codex-tools.md`, `Anti-Patterns`, `RED-GREEN-REFACTOR for Skills`, `Testing All Skill Types`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `__dirname`, `extensionDir`, `packageRoot` to the rest of the system?**
   _1322 weakly-connected nodes found - possible documentation gaps or missing edges._

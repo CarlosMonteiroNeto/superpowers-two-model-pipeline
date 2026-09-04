@@ -322,6 +322,53 @@ class TestNoTemplate(TemplateSearchTestBase):
         self.assertNotIn("good/", out)
 
 
+DATED_THRESHOLD_REPO = {
+    "stars": 300,
+    "created": _created_years_ago(5),
+    "commit_date": _commit_date(100),
+    "license": "mit",
+    "open": 10,
+    "closed": 90,
+    "pubspec": _pubspec_dated("dated_shop"),
+    "readme": "# Shop\n\n## Install\n\n## Structure\n",
+}
+
+
+class TestFlutterReadyDetection(TemplateSearchTestBase):
+    """The suite must catch a regression of the headline flutter_ready
+    feature: crossing AUTO_APPROVE (>= 70) depends on detection returning
+    'dated' (10) rather than 'none' (0)."""
+
+    def test_dated_pubspec_detected_and_totals_76(self):
+        """stars 24 + recency 12 + issues 10 + sustained 10 + license 5 +
+        readme 5 + flutter_ready dated 10 = 76 AUTO_APPROVE. With 'none'
+        (0) the total would be 66 DEVELOPER_DECISION; with 'current' (20)
+        it would be 86 - so the exact 76 pins the dated detection."""
+        repos = {"mid/dated_shop": dict(DATED_THRESHOLD_REPO)}
+        stub = self._stub({"fashion pos": ["mid/dated_shop"]}, repos)
+        r = self._run(["--specific", "women's fashion pos", "--generic", "pos"], stub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = r.stdout
+        self.assertIn("mid/dated_shop", out)
+        self.assertIn("76", out, "dated pubspec must total 76 (flutter_ready=10), got:\n" + out)
+        self.assertIn("AUTO_APPROVE", out)
+
+    def test_missing_pubspec_totals_66_developer_decision(self):
+        """Same fixture with pubspec=None totals 66 (flutter_ready=0) and
+        lands in the DEVELOPER_DECISION band - proves detection differs from
+        the dated case."""
+        repo = dict(DATED_THRESHOLD_REPO)
+        repo["pubspec"] = None
+        repos = {"mid/nopub_shop": repo}
+        stub = self._stub({"fashion pos": ["mid/nopub_shop"]}, repos)
+        r = self._run(["--specific", "women's fashion pos", "--generic", "pos"], stub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = r.stdout
+        self.assertIn("mid/nopub_shop", out)
+        self.assertIn("66", out, "missing pubspec must total 66 (flutter_ready=0), got:\n" + out)
+        self.assertIn("DEVELOPER_DECISION", out)
+
+
 class TestUsage(TemplateSearchTestBase):
     def test_missing_arguments_is_usage(self):
         stub = self._stub({}, {})
