@@ -203,7 +203,8 @@ skills/two-model-sdd-pipeline/scripts/:
   parse-review         deterministic parser for the Reviewer's verdict:
                        reads JSONL event log, extracts structured verdict,
                        writes JSON file (exit 0 verdict written; 1 no
-                       verdict / read error / write error; 2 usage)
+                       verdict / read error / write error; 2 usage).
+                       Run by B after D's log lands.
 
 skills/brainstorming/scripts/:
   orient-llm           pre-flight orientation gate: locate and print

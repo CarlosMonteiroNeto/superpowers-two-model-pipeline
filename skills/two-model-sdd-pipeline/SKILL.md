@@ -148,9 +148,9 @@ the spike: subagent-mode agents cannot be targeted headlessly by
 - **`review-package` / `ledger-append` / `red-integrity` / `final-gate` /
   `doc-check`** — as before.
 - **`parse-review`** — deterministic parser: reads the Reviewer's JSONL event
-  log, extracts the structured verdict, writes it to a JSON file. Run by
-  B after D's log lands:
-  `parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`
+  log, extracts the structured verdict, and writes it to a JSON file
+  (`parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`). Run by
+  B after D's log lands.
 - Runs the gate sequence (task tests → full suite → analyze) and reports
   pass/fail back to whichever role needs it — **the test/analyze decision
   lives in the script (Item 2)**.
