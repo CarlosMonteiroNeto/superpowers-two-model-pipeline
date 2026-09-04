@@ -96,7 +96,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | Script | Purpose | Verdict |
 |---|---|---|
 | `cmd --full-file FILE -- CMD...` (two-model) | Generic command runner: runs any LLM-invoked command, saves the FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code. `flutter test`/`flutter analyze` compress via `rtk test`/`rtk err` wrappers derived from the file (verdict from the raw run — wrappers mask child exit codes) | exit = command's exit code; 2 usage |
-| `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG (observability), records the session id for resume. The brief is passed as a positional so opencode auto-attaches it (never `--file` — this opencode version misparses the message when `--file` is present). Refuses (exit 3) when the targeted agent is not `mode: all` (fallback to the default agent would silently break the tiers) | exit = opencode's exit; 2 usage; 3 not a primary agent |
+| `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG (observability), records the session id for resume. The brief is passed as a positional so opencode auto-attaches it (never `--file` — this opencode version misparses the message when `--file` is present). On `--continue` (corrective round) the prompt explicitly tells the resumed model the brief has CHANGED and to re-read it fully. Refuses (exit 3) when the targeted agent is not `mode: all` (fallback to the default agent would silently break the tiers) | exit = opencode's exit; 2 usage; 3 not a primary agent |
 | `session-clean WS TASK\|all` (two-model) | Session hygiene: deletes the opencode sessions a completed task recorded (`task-N-*-session.txt`), so headless dispatches never pollute the interactive session history. Orchestrator runs it on `NEXT` (that task) and `FINAL_REVIEW` (all tasks) | exit 0 best-effort; 2 usage |
 | `orchestrator WS TASK [TOTAL]` (two-model) | Thin per-task driver: runs `route-next`, executes the emitted action, prints `OUTCOME:` for B | exit 0 handoff; 1 inconsistent; 2 usage |
 | `token-kill err\|src\|json FILE` (two-model) | RTK minification of LLM-facing payloads (error logs, source, JSON reports); lossless fallback to raw | exit 0 ok; 2 usage |
@@ -118,6 +118,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-holistic: all complete + no unresolved verdicts + no blocking parked + tests/analyze green | exit 0 ready; 1 blockers; 2 usage |
 | `doc-check [REPO]` | Deterministic gate: pipeline files changed → READMEs must also change | exit 0 OK; 1 violation; 2 usage |
+| `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the Reviewer's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after D's log lands | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
 
 All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`,
 `DISPATCH_BIN`, `OPENCODE_BIN` env overrides. `cmd` also respects `RTK_ENABLED=0`
@@ -306,7 +307,7 @@ skills/flutter-app-pipeline/tests/       <- python unittest suite (run-tests.sh)
 skills/two-model-sdd-pipeline/SKILL.md
 skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, cmd, dispatch,
                                             orchestrator, token-kill, run-gates, review-package,
-                                            route-next, doc-check
+                                            route-next, doc-check, parse-review
 ```
 
 ## 13. How to work with this harness
@@ -324,7 +325,10 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, c
    resume C up to 4 attempts) -> `green-gate` (commit + `graphify-update` +
    dispatch D) -> `red-integrity` (byte-compare) -> D JSON verdict ->
    `route-next` -> `orchestrator` hands `OUTCOME` to B. SEND_BACK →
-   `CORRECTIVE` (B brief -> resume C); ESCALATE / overflow → `ARBITRATE` (B
+   `CORRECTIVE` (B writes corrective brief to `task-N-corrective.md`,
+   never overwriting `task-N-brief.md`; resume C via `--continue --session`
+   with a corrective-round prompt that tells the model the brief has
+   CHANGED and to re-read it fully); ESCALATE / overflow → `ARBITRATE` (B
    rules). After all tasks: `final-gate` then B's fresh `/new` holistic review.
    The router, not the LLM, decides every transition. All command lines go
    through `scripts/cmd`; Graphify is post-commit + subgraph-only.

@@ -56,7 +56,11 @@ if [ -n "$cont" ]; then
   args+=(--continue --session "$cont")
 fi
 
-prompt="You are dispatched by Script A. Read the attached file and execute per its instructions. Report concisely."
+if [ -n "$cont" ]; then
+  prompt="You are dispatched by Script A on a CORRECTIVE round. The attached brief has CHANGED since your last round. Re-read it FULLY and apply its new requirements; do NOT assume prior work is complete. Report concisely."
+else
+  prompt="You are dispatched by Script A. Read the attached file and execute per its instructions. Report concisely."
+fi
 
 set +e
 if [ -n "$workdir" ]; then

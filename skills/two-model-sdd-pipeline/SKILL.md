@@ -147,6 +147,10 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   `<ws>/task-N-interfaces.md` for B's next brief and D's review.
 - **`review-package` / `ledger-append` / `red-integrity` / `final-gate` /
   `doc-check`** — as before.
+- **`parse-review`** — deterministic parser: reads the Reviewer's JSONL event
+  log, extracts the structured verdict, writes it to a JSON file. Run by
+  Script A after D's log lands (B does not run it):
+  `parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`
 - Runs the gate sequence (task tests → full suite → analyze) and reports
   pass/fail back to whichever role needs it — **the test/analyze decision
   lives in the script (Item 2)**.
@@ -323,14 +327,19 @@ For each task in order:
    tampering, an automatic Critical finding. D (`two-model-reviewer`,
    Strategic, headless via green-gate) reviews the review package + the
    interfaces file (`graphify-subgraph` output) and returns a JSON verdict.
-   Script A parses it to `<workspace>/task-N-review.json`. D never runs
-   test/analyze (Item 2).
+   B runs `parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`
+   after D's log lands to extract the structured verdict to a JSON file.
+   D never runs test/analyze (Item 2).
 
 6. **Outcome.** Ledger `review_outcome`, then `route-next`:
    - `APPROVED` → ledger `task_complete`, minors PARKED (documented by B),
      next task.
-   - `SEND_BACK` → `CORRECTIVE`: B writes a corrective brief; the same C
-     session resumes with it (ADR-0003); then wrap-up + D re-review.
+   - `SEND_BACK` → `CORRECTIVE`: B writes a corrective brief to
+     `<workspace>/task-N-corrective.md` (never overwrite the original
+     `task-N-brief.md`). The same C session resumes via
+     `dispatch --continue --session <id>`; the corrective-round resume
+     prompt explicitly tells the model the brief has CHANGED and to re-read
+     it fully. Then wrap-up + D re-review.
    - `ESCALATE` → `ARBITRATE`: B validates the brief/test's viability and
      reissues or re-plans.
    No budget left and findings persist → treat as escalation.

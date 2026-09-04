@@ -55,3 +55,15 @@ EXPECTED-RED:
   defective brief), re-examine the RED test you wrote — a compile error in
   test setup instead of the missing symbol means the brief is defective.
   Reissue via arbitration, never silently "fix" the test through the Coder.
+
+## Corrective briefs
+
+When D sends back a task (SEND_BACK), B writes a corrective brief. The
+corrective brief goes to `<workspace>/task-N-corrective.md` — a distinct path
+that never overwrites the original `task-N-brief.md`. The same Coder session
+resumes via `dispatch --continue --session <id>`; the corrective-round resume
+prompt explicitly tells the model the brief has CHANGED and to re-read it fully.
+
+Follow the same structure (Task statement, Exact values, RED test, Expected
+RED failure, Out of scope) but incorporate D's findings and the corrected
+requirements.

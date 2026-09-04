@@ -87,19 +87,14 @@ class TestDispatchFresh(DispatchTestBase):
             env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        # the JSON event stream is teed to the dispatch log
         self.assertTrue(pathlib.Path(dlog).exists())
         self.assertIn("ses_fixed123", pathlib.Path(dlog).read_text(encoding="utf-8"))
-        # the agent name and prompt file reach opencode (recorded by the stub)
         argv = pathlib.Path(argv_log).read_text(encoding="utf-8")
         self.assertIn("--agent", argv)
         self.assertIn("two-model-coder", argv)
         self.assertIn(str(brief), argv)
 
     def test_brief_is_passed_as_positional_not_file(self):
-        # Regression: opencode (this version) treats the positional message as
-        # a file path whenever --file is present, so dispatch must attach the
-        # brief as a positional argument and never pass --file.
         brief = self.brief()
         argv_log = self.argv_log()
         r = run_script(
@@ -115,9 +110,6 @@ class TestDispatchFresh(DispatchTestBase):
         self.assertIn(str(brief), argv)
 
     def test_falls_back_loudly_when_agent_is_not_primary(self):
-        # If opencode falls back to the default agent (requested agent is
-        # mode: subagent), dispatch must fail loudly instead of silently
-        # running the wrong agent.
         brief = self.brief()
         argv_log = self.argv_log()
         dlog = self.dispatch_log()
@@ -131,7 +123,6 @@ class TestDispatchFresh(DispatchTestBase):
         )
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
         self.assertIn("primary agent", r.stdout + r.stderr)
-        # no session record may be written for a fallback dispatch
         self.assertFalse((pathlib.Path(dlog).parent / "task-3-session.txt").exists())
 
     def test_session_id_recorded_for_resume(self):
@@ -146,16 +137,11 @@ class TestDispatchFresh(DispatchTestBase):
             env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        # the session record is written next to the log (real pipeline:
-        # --log <ws>/task-N-coder.log, so this is the workspace)
         sid = (pathlib.Path(dlog).parent / "task-3-session.txt").read_text(
             encoding="utf-8").strip()
         self.assertEqual(sid, "ses_fixed123")
 
     def test_per_agent_session_record_written(self):
-        # dispatch also records the session per agent, so session-clean can
-        # delete both the Coder and the Reviewer sessions of a completed task
-        # (the generic task-N-session.txt holds only the last writer).
         brief = self.brief()
         argv_log = self.argv_log()
         dlog = self.dispatch_log()
@@ -202,6 +188,25 @@ class TestDispatchResume(DispatchTestBase):
         argv = pathlib.Path(argv_log).read_text(encoding="utf-8")
         self.assertIn("--continue", argv)
         self.assertIn("ses_prev42", argv)
+
+    def test_resume_prompt_mentions_brief_changed(self):
+        """Regression for the corrective-resume defect: a resumed session must
+        be told the brief has CHANGED and to re-read it, or it reuses its stale
+        cached copy and silently no-ops the corrective."""
+        brief = self.brief()
+        argv_log = self.argv_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--continue", "ses_prev42", "--prompt-file", str(brief),
+             "--log", self.dispatch_log()],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        argv = pathlib.Path(argv_log).read_text(encoding="utf-8")
+        self.assertIn("CHANGED", argv)
+        self.assertIn("re-read", argv.lower())
 
 
 class TestDispatchUsage(DispatchTestBase):

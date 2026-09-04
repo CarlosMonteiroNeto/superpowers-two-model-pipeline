@@ -222,8 +222,8 @@
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/scripts/pkg_score.py": {
-    "mtime": 1788544289.0297399,
-    "seen": 1788544470.0416439,
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
     "ast_hash": "ecba08dfc2b6fd14f0af964dc9a5f4cb",
     "semantic_hash": ""
   },
@@ -258,15 +258,15 @@
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_score.py": {
-    "mtime": 1788544109.5671284,
-    "seen": 1788544470.0416439,
-    "ast_hash": "8a1cb49163ba21a8cb02103ba838d81d",
+    "mtime": 1788554470.6572263,
+    "seen": 1788556932.6642756,
+    "ast_hash": "0d072ccd6d6db91705a5ca0bb9ea545b",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_skill_content.py": {
-    "mtime": 1788549165.9637456,
-    "seen": 1788549396.9543207,
-    "ast_hash": "ea044c69d976b195ef7554ea5d579152",
+    "mtime": 1788554470.6572263,
+    "seen": 1788556932.6642756,
+    "ast_hash": "2790d52510752df571103daaaaefad86",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_subgraph.py": {
@@ -828,8 +828,8 @@
     "semantic_hash": ""
   },
   "CONTEXT.md": {
-    "mtime": 1788550676.9591186,
-    "seen": 1788550753.7512035,
+    "mtime": 1788554470.5681653,
+    "seen": 1788556932.6642756,
     "ast_hash": "4b34010828a1c89d8c124b8882be45fe",
     "semantic_hash": ""
   },
@@ -840,14 +840,14 @@
     "semantic_hash": ""
   },
   "README-LLM.md": {
-    "mtime": 1788553463.6644492,
-    "seen": 1788553578.2935987,
+    "mtime": 1788554470.5823386,
+    "seen": 1788556932.6642756,
     "ast_hash": "242849462a5d2d26eeb4e0d7f33e6e20",
     "semantic_hash": ""
   },
   "README.txt": {
-    "mtime": 1788551371.9284194,
-    "seen": 1788551470.475084,
+    "mtime": 1788554470.5823386,
+    "seen": 1788556932.6642756,
     "ast_hash": "3831c4ee5ba10c0871fbc4f9ff533f1b",
     "semantic_hash": ""
   },
@@ -1194,8 +1194,8 @@
     "semantic_hash": ""
   },
   "skills/brainstorming/SKILL.md": {
-    "mtime": 1788550692.334935,
-    "seen": 1788550753.7512035,
+    "mtime": 1788554470.6384492,
+    "seen": 1788556932.6642756,
     "ast_hash": "f60c463dedb1103632729d77ccbf9d52",
     "semantic_hash": ""
   },
@@ -1236,8 +1236,8 @@
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/SKILL.md": {
-    "mtime": 1788550124.629895,
-    "seen": 1788550219.4355645,
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
     "ast_hash": "5ac42bc73e8d11059e2fe28786656447",
     "semantic_hash": ""
   },
@@ -1560,51 +1560,75 @@
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/scripts/template-score": {
-    "mtime": 1788545290.6410196,
-    "seen": 1788545718.2867875,
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
     "ast_hash": "0e9978702752ed0f31ba5ce002b18c86",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/scripts/template_score.py": {
-    "mtime": 1788553450.557166,
-    "seen": 1788553578.2935987,
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
     "ast_hash": "d427d8252651e73b65388656d7f7e655",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_template_score.py": {
-    "mtime": 1788545169.485713,
-    "seen": 1788545718.2867875,
-    "ast_hash": "03b8a613fa53b78fd31b0c7c0e44cd6f",
+    "mtime": 1788554470.6572263,
+    "seen": 1788556932.6642756,
+    "ast_hash": "329600d377f83882bc49fa6db6ac7902",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/scripts/_template_search_collect.py": {
-    "mtime": 1788546685.870276,
-    "seen": 1788546959.9880948,
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
     "ast_hash": "1f0a1919e300e8ef59c5a84cb5663567",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/scripts/template-search": {
-    "mtime": 1788548422.3616438,
-    "seen": 1788548531.7161496,
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
     "ast_hash": "659fd66787ed10ab19d98250c2cc02ff",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_template_search.py": {
-    "mtime": 1788553270.0526254,
-    "seen": 1788553578.2935987,
-    "ast_hash": "3c6455e2daa5ff4231f39db22a5acf68",
+    "mtime": 1788554470.6618328,
+    "seen": 1788556932.6642756,
+    "ast_hash": "810bd14c0c046f8378a97dee6364e9eb",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_category_skeleton.py": {
-    "mtime": 1788550621.8378396,
-    "seen": 1788550753.7355635,
-    "ast_hash": "9a4a2ac3e70b8a871b30697e137a34d0",
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
+    "ast_hash": "c4183685ae04fe37be5ac7e147a58091",
     "semantic_hash": ""
   },
   "skills/flutter-app-pipeline/tests/test_readme_content.py": {
-    "mtime": 1788551169.199648,
-    "seen": 1788551470.475084,
-    "ast_hash": "f28eb518e516000306c5152b547ddeae",
+    "mtime": 1788554470.6455545,
+    "seen": 1788556932.6642756,
+    "ast_hash": "87ffc0ebaf4ae906ac1c77348ce48ba2",
+    "semantic_hash": ""
+  },
+  "skills/two-model-sdd-pipeline/scripts/parse-review": {
+    "mtime": 1788556234.502696,
+    "seen": 1788556932.6642756,
+    "ast_hash": "f8d25f9398825e58c53d72956a79680b",
+    "semantic_hash": ""
+  },
+  "skills/two-model-sdd-pipeline/scripts/parse_review.py": {
+    "mtime": 1788556220.5027292,
+    "seen": 1788556932.6642756,
+    "ast_hash": "b58625a1df6bfe9902959d9628a4d2ab",
+    "semantic_hash": ""
+  },
+  "skills/two-model-sdd-pipeline/tests/test_parse_review.py": {
+    "mtime": 1788556736.0288315,
+    "seen": 1788556932.6642756,
+    "ast_hash": "a7ad63f648bd8e0fd8492c17fd99503b",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-04-pipeline-hardening-resume-parse-review.md": {
+    "mtime": 1788555769.156811,
+    "seen": 1788556932.6642756,
+    "ast_hash": "839c02138ea334ca4d03efe570fcaef5",
     "semantic_hash": ""
   }
 }

@@ -258,8 +258,9 @@
   "256": "template-score",
   "257": "TestCategorySkeletonInBrainstorming",
   "258": "TestReadmeLlmReflectsTemplateStage",
-  "259": "v3.2.2 (2025-10-21)",
+  "259": "extract_verdict",
   "260": "template-search",
-  "261": "codex-tools.md",
-  "262": "Gemini CLI Tool Mapping"
+  "261": "Pipeline Hardening: Corrective-Resume Reliability + Permanent Verdict Parsing",
+  "262": "v3.3.0 (2025-10-28)",
+  "263": "parse-review script"
 }

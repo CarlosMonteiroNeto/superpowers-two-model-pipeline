@@ -51,6 +51,10 @@ PRINCIPLES
 - The Reviewer reviews compiler-approved code only (Item 2) and returns a
   structured JSON verdict; minor findings are documented by B, never fix
   loops.
+- Corrective briefs go to task-N-corrective.md (never overwriting the
+  original task-N-brief.md). On resume (dispatch --continue --session),
+  the corrective-round prompt tells the resumed model the brief has
+  CHANGED and to re-read it fully.
 - Every command line is scripted and RTK-compressed. All LLM-invoked
   commands run through scripts/cmd: full output is saved to a workspace
   file (gates and escalation read the file) and the LLM sees the
@@ -168,7 +172,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        JSON stream teed to a workspace log, session id
                        recorded for resume (--continue --session). The brief
                        is passed as a positional (auto-attach; never --file);
-                       exit 3 when the targeted agent is not mode: all
+                       on --continue (corrective round) the prompt explicitly
+                       tells the resumed model the brief has CHANGED and to
+                       re-read it fully; exit 3 when the targeted agent is
+                       not mode: all
   session-clean        deletes the opencode sessions a completed task recorded
                        (task-N-*-session.txt) so headless dispatches don't
                        pollute session history; run by the orchestrator on
@@ -193,6 +200,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        (exit 0 ready; 1 blockers; 2 usage)
   doc-check            pipeline files changed -> READMEs must change too
                        (exit 0 OK; 1 violation; 2 usage)
+  parse-review         deterministic parser for the Reviewer's verdict:
+                       reads JSONL event log, extracts structured verdict,
+                       writes JSON file (exit 0 verdict written; 1 no
+                       verdict / read error / write error; 2 usage)
 
 skills/brainstorming/scripts/:
   orient-llm           pre-flight orientation gate: locate and print
