@@ -290,11 +290,15 @@ def collect_candidates(specific_query, generic_query, token=None):
     Search order: specific category first (stars descending), then generic
     as fallback. Returns a dict with 'specific' and 'generic' lists of
     scored candidates, plus 'presentation' (the combined presentation list).
+
+    The stop rule halts scoring as soon as the 3rd AUTO_APPROVE is found —
+    no further candidates from the specific search are scored. The generic
+    search is only issued when the specific category yields zero AUTO_APPROVE.
     """
     result = {"specific": [], "generic": [], "presentation": []}
 
-    def _search_and_score(query):
-        """Search repos by query, score each, return list of scored results."""
+    def _fetch_search_items(query):
+        """Fetch search results without scoring. Returns list of items."""
         if not query:
             return []
         encoded = urllib.parse.quote(query)
@@ -305,46 +309,55 @@ def collect_candidates(specific_query, generic_query, token=None):
             )
         except Exception:
             return []
-        items = search_resp.get("items", [])
-        candidates = []
-        for item in items:
-            full_name = item.get("full_name", "")
-            parts = full_name.split("/")
-            if len(parts) != 2:
-                continue
-            owner, repo = parts
-            try:
-                data = gather_data(owner, repo, token)
-                score = compute_score(data)
-                score["data"] = data
-                candidates.append(score)
-            except Exception:
-                continue
-        return candidates
+        return search_resp.get("items", [])
 
-    # Search specific category first
-    specific_candidates = _search_and_score(specific_query)
+    def _score_item(item):
+        """Score a single search result item. Returns scored dict or None."""
+        full_name = item.get("full_name", "")
+        parts = full_name.split("/")
+        if len(parts) != 2:
+            return None
+        owner, repo = parts
+        try:
+            data = gather_data(owner, repo, token)
+            score = compute_score(data)
+            score["data"] = data
+            return score
+        except Exception:
+            return None
+
+    # Fetch specific search results (one API call)
+    specific_items = _fetch_search_items(specific_query)
+
+    # Score candidates in search order, collecting until 3rd AUTO_APPROVE
+    specific_candidates = []
+    auto_count = 0
+    for item in specific_items:
+        scored = _score_item(item)
+        if scored is None:
+            continue
+        specific_candidates.append(scored)
+        if scored["verdict"] == "AUTO_APPROVE":
+            auto_count += 1
+            if auto_count >= 3:
+                break
     result["specific"] = specific_candidates
 
-    # Check stop rule: collect until 3 AUTO_APPROVE from specific
-    auto_approve = [c for c in specific_candidates if c["verdict"] == "AUTO_APPROVE"]
-    if len(auto_approve) >= 1:
-        # Iterate in search order; stop after 3rd AUTO_APPROVE
-        stop_candidates = []
-        auto_count = 0
-        for c in specific_candidates:
-            stop_candidates.append(c)
-            if c["verdict"] == "AUTO_APPROVE":
-                auto_count += 1
-                if auto_count >= 3:
-                    break
-        result["presentation"] = stop_candidates
+    if auto_count >= 1:
+        # Specific yielded at least one AUTO_APPROVE — present what was collected
+        result["presentation"] = specific_candidates
     else:
-        # No AUTO_APPROVE in specific: collect 50-69 range
+        # No AUTO_APPROVE in specific: collect DEVELOPER_DECISION (50-69)
         dev_decision = [c for c in specific_candidates if c["verdict"] == "DEVELOPER_DECISION"]
 
-        # Search generic category for AUTO_APPROVE
-        generic_candidates = _search_and_score(generic_query)
+        # Search generic category for AUTO_APPROVE (only when specific has none)
+        generic_items = _fetch_search_items(generic_query)
+        generic_candidates = []
+        for item in generic_items:
+            scored = _score_item(item)
+            if scored is None:
+                continue
+            generic_candidates.append(scored)
         result["generic"] = generic_candidates
         generic_auto = [c for c in generic_candidates if c["verdict"] == "AUTO_APPROVE"]
 

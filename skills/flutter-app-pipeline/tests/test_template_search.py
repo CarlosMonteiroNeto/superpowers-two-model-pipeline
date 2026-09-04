@@ -52,6 +52,8 @@ class StubGitHub:
     def __init__(self, search_map, repos):
         self.search_map = search_map
         self.repos = repos
+        self.repo_hits = []
+        self.search_hits = []
         self._server = HTTPServer(("127.0.0.1", 0), self._make_handler())
         self.port = self._server.server_address[1]
         self.thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -96,6 +98,7 @@ class StubGitHub:
 
         if segs[0] == "search" and segs[1] == "repositories":
             q = query.get("q", "")
+            self.search_hits.append(q)
             full_names = []
             for marker, names in self.search_map.items():
                 if marker in q:
@@ -131,6 +134,7 @@ class StubGitHub:
             full = "{}/{}".format(owner, repo)
             if full not in self.repos:
                 raise KeyError(full)
+            self.repo_hits.append(full)
             r = self.repos[full]
             if len(segs) >= 4 and segs[3] == "commits":
                 return json.dumps([{
@@ -243,6 +247,30 @@ class TestStopRule(TemplateSearchTestBase):
         self.assertIn("good/shop_c", out)
         self.assertNotIn("good/shop_d", out, "stop rule must halt at 3 AUTO_APPROVE candidates")
         self.assertEqual(out.count("AUTO_APPROVE"), 3, out)
+
+    def test_collection_truly_stops_at_three(self):
+        """The stop rule must halt the API work itself, not just the
+        presentation: only the first 3 auto-approvable repos are ever scored
+        (unique /repos hits), and the generic search is never issued when the
+        specific category yields AUTO_APPROVE."""
+        repos = {
+            "good/shop_a": dict(GOOD_REPO),
+            "good/shop_b": dict(GOOD_REPO),
+            "good/shop_c": dict(GOOD_REPO),
+            "good/shop_d": dict(GOOD_REPO),
+        }
+        stub = self._stub({"fashion pos": ["good/shop_a", "good/shop_b", "good/shop_c", "good/shop_d"]}, repos)
+        r = self._run(["--specific", "women's fashion pos", "--generic", "pos"], stub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        hit_repos = set(stub.repo_hits)
+        self.assertIn("good/shop_a", hit_repos)
+        self.assertIn("good/shop_b", hit_repos)
+        self.assertIn("good/shop_c", hit_repos)
+        self.assertNotIn("good/shop_d", hit_repos,
+                         "collection must stop before scoring the 4th candidate, hits: %s" % sorted(hit_repos))
+        generic_searches = [q for q in stub.search_hits if "pos" in q and "fashion" not in q]
+        self.assertEqual(generic_searches, [],
+                         "generic search must never run when specific yields AUTO_APPROVE, saw: %s" % stub.search_hits)
 
     def test_fewer_than_three_presents_what_was_found(self):
         repos = {

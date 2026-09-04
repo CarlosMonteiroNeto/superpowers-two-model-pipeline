@@ -51,10 +51,11 @@ end to end.
 
 ## 4. Pipeline phases
 
-1. **Phase 1 — Requirements (once, project-level).** `1a` commercial requirements
+1. **Phase 1 — Requirements (once, project-level).**    `1a` commercial requirements
    via brainstorming + grill-with-docs; this also produces the **Category
-   Skeleton** — three fields (category slug, core intent, key dependencies)
-   that drive the template search and per-task dependency research downstream.
+   Skeleton** — three fields (generic category, specific category, original
+   implementations) that drive the template search and per-task dependency
+   research downstream.
    `1b` generic technical architecture. Resolved terms persist in `CONTEXT.md`
    + ADRs (architectural path only).
 2. **Phase 2 — Research & Planning (per task).** `2a` search (Tavily + reference
@@ -232,9 +233,9 @@ candidates descending). Same gate semantics as pkg-score (≥70 auto-approve;
 ### Category Skeleton
 
 The Category Skeleton is produced during Phase 1a and contains three fields:
-the **category slug**, **core intent**, and **key dependencies**. These fields
-drive the `template-search` query (specific category first) and the per-task
-dependency research in Phase 3.
+the **generic category**, **specific category**, and **original implementations**.
+These fields drive the `template-search` query (specific category first) and the
+per-task dependency research in Phase 3.
 
 ## 9. GitHub authentication
 
