@@ -149,7 +149,7 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   `doc-check`** — as before.
 - **`parse-review`** — deterministic parser: reads the Reviewer's JSONL event
   log, extracts the structured verdict, writes it to a JSON file. Run by
-  Script A after D's log lands (B does not run it):
+  B after D's log lands:
   `parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`
 - Runs the gate sequence (task tests → full suite → analyze) and reports
   pass/fail back to whichever role needs it — **the test/analyze decision

@@ -1,16 +1,16 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 255 files · ~261,756 words
+- 255 files · ~262,204 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2793 nodes · 3366 edges · 264 communities (195 shown, 59 thin omitted)
+- 2800 nodes · 3379 edges · 267 communities (198 shown, 59 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 29 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6e2488e6`
+- Built from commit: `a8b0efe0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -204,7 +204,7 @@
 - v3.2.3 (2025-10-23)
 - tdata
 - v3.2.1 (2025-10-20)
-- v5.0.7 (2026-03-31)
+- codex-tools.md
 - start-server.sh
 - dispatch
 - final-gate
@@ -269,6 +269,9 @@
 - Pipeline Hardening: Corrective-Resume Reliability + Permanent Verdict Parsing
 - v3.3.0 (2025-10-28)
 - parse-review script
+- Gemini CLI Tool Mapping
+- v4.1.0 (2026-01-23)
+- v3.2.2 (2025-10-21)
 
 ## God Nodes (most connected - your core abstractions)
 1. `Superpowers Release Notes` - 43 edges
@@ -297,7 +300,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (264 total, 59 thin omitted)
+## Communities (267 total, 59 thin omitted)
 
 ### Community 0 - "server.cjs"
 Cohesion: 0.05
@@ -312,8 +315,8 @@ Cohesion: 0.11
 Nodes (13): data(), Re-weighted: pub points now weight 20 of 100 (was 30)., Recency (20) + SDK (20) + issue ratio (15) = 55 of 100., 70.0 sits exactly on the AUTO_APPROVE threshold (0+0+20+20+15+15)., TestDependentsBuckets, TestGateVerdicts, TestHealthWeight, TestIssueRatioBands (+5 more)
 
 ### Community 3 - "Superpowers Release Notes"
-Cohesion: 0.05
-Nodes (37): Breaking Changes, Bug Fixes, Bug Fixes, Bug Fixes, Changed, Changes, Codex Fixes, Files Changed (+29 more)
+Cohesion: 0.06
+Nodes (34): Bug Fixes, Bug Fixes, Bug Fixes, Changed, Changes, Codex Fixes, Fixed, Fixes (+26 more)
 
 ### Community 4 - "Worktree Rototill: Detect-and-Defer"
 Cohesion: 0.06
@@ -356,8 +359,8 @@ Cohesion: 0.07
 Nodes (28): A1 — Per-session secret key (chosen approach), A2 — Host allowlist dropped; browser WS Origin retained, A3 — Server crashes on `null` / primitive WS payload, A4 — Frame-length bound in `decodeFrame` (adjacent), A. Server security hardening (`server.cjs`), B1 — macOS resource-fork dotfiles served as screen content, B2 — `stop-server.sh` can kill a reused PID, B3 — WebSocket client: silent reconnect, stale "Connected" (+20 more)
 
 ### Community 14 - "Testing Skills With Subagents"
-Cohesion: 0.04
-Nodes (41): Codex App Finishing, Environment Detection, Model routing on spawns, Subagent dispatch requires multi-agent support, Waiting on children, Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions file (+33 more)
+Cohesion: 0.07
+Nodes (29): 1. Explicit Negation in Rules, 2. Entry in Rationalization Table, 3. Red Flag Entry, 4. Update description, Common Mistakes (Same as TDD), Example: TDD Skill Bulletproofing, GREEN Phase: Write Minimal Skill (Make It Pass), Initial Test (Failed) (+21 more)
 
 ### Community 15 - "Superpowers v2.0.0 Release Notes"
 Cohesion: 0.07
@@ -365,7 +368,7 @@ Nodes (26): Breaking Changes, Bug Fixes, Commit History, Credits, Documentation,
 
 ### Community 16 - "Two-Model SDD Pipeline (Script-Autonomous Orchestration)"
 Cohesion: 0.07
-Nodes (25): Brief structure (in order), Brief-Writing Guidance for the Strategist Session (B), Rules, When you write a brief, 0. Pre-Pipeline Gate, Approval Policy (no approval gates after decisions), B (Strategist — the interactive session), C (Coder — Operational, `two-model-coder`) (+17 more)
+Nodes (26): Brief structure (in order), Brief-Writing Guidance for the Strategist Session (B), Corrective briefs, Rules, When you write a brief, 0. Pre-Pipeline Gate, Approval Policy (no approval gates after decisions), B (Strategist — the interactive session) (+18 more)
 
 ### Community 17 - "Lift drill into superpowers as `evals/` — implementation plan"
 Cohesion: 0.08
@@ -464,8 +467,8 @@ Cohesion: 0.11
 Nodes (17): 1. `using-git-worktrees/SKILL.md` — Add Step 0 (~12 lines), 2. `finishing-a-development-branch/SKILL.md` — Add Step 1.5 + cleanup guard (~20 lines), 3. `subagent-driven-development/SKILL.md` and `executing-plans/SKILL.md` — 1 line edit each, 4. `codex-tools.md` — Add environment detection docs (~15 lines), Automated (run in Claude Code after implementation), Changes, Codex App Compatibility: Worktree and Finishing Skill Adaptation, Decision Matrix (+9 more)
 
 ### Community 41 - "run_script"
-Cohesion: 0.26
-Nodes (6): DispatchTestBase, run_script(), TestDispatchFresh, TestDispatchResume, TestDispatchUsage, write_stub()
+Cohesion: 0.24
+Nodes (7): DispatchTestBase, Regression for the corrective-resume defect: a resumed session must be told the…, run_script(), TestDispatchFresh, TestDispatchResume, TestDispatchUsage, write_stub()
 
 ### Community 42 - "FinalGateBase"
 Cohesion: 0.32
@@ -1039,9 +1042,9 @@ Nodes (12): 70.0 sits exactly on the AUTO_APPROVE threshold (24+20+20+0+6+0+0).,
 Cohesion: 0.67
 Nodes (3): Files Changed, New Features, v3.2.1 (2025-10-20)
 
-### Community 190 - "v5.0.7 (2026-03-31)"
-Cohesion: 0.67
-Nodes (3): GitHub Copilot CLI Support, OpenCode Fixes, v5.0.7 (2026-03-31)
+### Community 190 - "codex-tools.md"
+Cohesion: 0.22
+Nodes (5): Codex App Finishing, Environment Detection, Model routing on spawns, Subagent dispatch requires multi-agent support, Waiting on children
 
 ### Community 200 - "Evaluation and iteration"
 Cohesion: 0.50
@@ -1068,8 +1071,8 @@ Cohesion: 0.13
 Nodes (6): README-LLM.md must reflect the new project-level template stage: template-…, The Quality Score table must show the re-weighted pkg-score (health signals…, README-LLM.md must mention the Category Skeleton elicitation., README.txt's deterministic scripts list must include the new template-search /…, TestReadmeLlmReflectsTemplateStage, TestReadmeTxtReflectsTemplateStage
 
 ### Community 259 - "extract_verdict"
-Cohesion: 0.11
-Nodes (12): _cli(), extract_from_log(), extract_verdict(), Deterministic parser for the Reviewer's verdict from opencode event logs.…, CLI entry-point: parse-review LOGFILE OUTFILE., Return the verdict dict parsed from *text*, or None if absent. Tolerates prose…, Parse an opencode JSONL event stream and return the verdict dict. Iterates…, review_log_lines() (+4 more)
+Cohesion: 0.09
+Nodes (16): _cli(), _extract_brace_block(), extract_from_log(), extract_verdict(), Deterministic parser for the Reviewer's verdict from opencode event logs.…, Parse an opencode JSONL event stream and return the verdict dict. Iterates…, CLI entry-point: parse-review LOGFILE OUTFILE., Run a balanced-brace scan from *start* and return the matching slice, or None… (+8 more)
 
 ### Community 261 - "Pipeline Hardening: Corrective-Resume Reliability + Permanent Verdict Parsing"
 Cohesion: 0.22
@@ -1079,20 +1082,32 @@ Nodes (8): 1. Resume reliability (`dispatch` + B-side brief convention), 2. Perm
 Cohesion: 0.67
 Nodes (3): Files Added, New Features, v3.3.0 (2025-10-28)
 
+### Community 264 - "Gemini CLI Tool Mapping"
+Cohesion: 0.29
+Nodes (7): Additional Gemini CLI tools, Gemini CLI Tool Mapping, Instructions file, Parallel dispatch, Personal skills directory, Prompt filling, Subagent support
+
+### Community 265 - "v4.1.0 (2026-01-23)"
+Cohesion: 0.67
+Nodes (3): Breaking Changes, Fixes, v4.1.0 (2026-01-23)
+
+### Community 266 - "v3.2.2 (2025-10-21)"
+Cohesion: 0.67
+Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
+
 ## Knowledge Gaps
-- **1332 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1327 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1674 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **1333 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1328 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1678 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **59 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.3.0 (2025-10-28)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
+- **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.3.0 (2025-10-28)`, `v4.1.0 (2026-01-23)`, `v3.2.2 (2025-10-21)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **Why does `Writing Skills` connect `Writing Skills` to `Anti-Patterns`, `Testing All Skill Types`, `RED-GREEN-REFACTOR for Skills`, `Testing Skills With Subagents`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`?**
+- **Why does `Writing Skills` connect `Writing Skills` to `Anti-Patterns`, `Testing All Skill Types`, `RED-GREEN-REFACTOR for Skills`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`, `codex-tools.md`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
 - **What connects `__dirname`, `extensionDir`, `packageRoot` to the rest of the system?**
-  _1332 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1333 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `server.cjs` be split into smaller, more focused modules?**
   _Cohesion score 0.051923076923076926 - nodes in this community are weakly interconnected._
 - **Should `run_script` be split into smaller, more focused modules?**
@@ -1100,4 +1115,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `data` be split into smaller, more focused modules?**
   _Cohesion score 0.10591133004926108 - nodes in this community are weakly interconnected._
 - **Should `Superpowers Release Notes` be split into smaller, more focused modules?**
-  _Cohesion score 0.05405405405405406 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.058823529411764705 - nodes in this community are weakly interconnected._

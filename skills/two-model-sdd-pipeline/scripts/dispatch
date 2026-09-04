@@ -57,7 +57,7 @@ if [ -n "$cont" ]; then
 fi
 
 if [ -n "$cont" ]; then
-  prompt="You are dispatched by Script A on a CORRECTIVE round. The attached brief has CHANGED since your last round. Re-read it FULLY and apply its new requirements; do NOT assume prior work is complete. Report concisely."
+  prompt="You are dispatched by Script A on a CORRECTIVE round. The attached brief may have CHANGED since your last round. Re-read it FULLY and apply its requirements; do NOT assume prior work is complete. Report concisely."
 else
   prompt="You are dispatched by Script A. Read the attached file and execute per its instructions. Report concisely."
 fi
@@ -77,7 +77,11 @@ set -e
 # Refuse a silent fallback: if the requested agent is mode: subagent, opencode
 # warns and runs the default agent instead. Dispatching the wrong agent breaks
 # the two-tier contract, so fail loudly rather than continue wrongly.
-if grep -qE 'is a subagent, not a primary agent|Falling back to default agent' "$log" 2>/dev/null; then
+# Check only the first line — the fallback warning is opencode's own stderr
+# banner and never appears inside a JSON event (grepping the whole log would
+# false-positive on file content embedded in tool_use output).
+first=$(head -n 1 "$log" 2>/dev/null || true)
+if printf '%s\n' "$first" | grep -qE 'is a subagent, not a primary agent|Falling back to default agent'; then
   echo "DISPATCH: agent \"$agent\" is not a primary agent (mode: all required). Refusing to continue with the wrong agent." >&2
   exit 3
 fi

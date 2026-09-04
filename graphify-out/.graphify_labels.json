@@ -189,7 +189,7 @@
   "187": "v3.2.3 (2025-10-23)",
   "188": "tdata",
   "189": "v3.2.1 (2025-10-20)",
-  "190": "v5.0.7 (2026-03-31)",
+  "190": "codex-tools.md",
   "191": "start-server.sh",
   "192": "dispatch",
   "193": "final-gate",
@@ -262,5 +262,8 @@
   "260": "template-search",
   "261": "Pipeline Hardening: Corrective-Resume Reliability + Permanent Verdict Parsing",
   "262": "v3.3.0 (2025-10-28)",
-  "263": "parse-review script"
+  "263": "parse-review script",
+  "264": "Gemini CLI Tool Mapping",
+  "265": "v4.1.0 (2026-01-23)",
+  "266": "v3.2.2 (2025-10-21)"
 }
