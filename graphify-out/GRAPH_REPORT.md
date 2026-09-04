@@ -1,23 +1,23 @@
 # Graph Report - superpowers-two-model-pipeline  (2026-09-04)
 
 ## Corpus Check
-- 243 files · ~255,852 words
+- 246 files · ~256,600 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2629 nodes · 3161 edges · 253 communities (187 shown, 57 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 34 edges (avg confidence: 0.78)
+- 2665 nodes · 3197 edges · 257 communities (190 shown, 57 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 19 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7eb3d17e`
+- Built from commit: `f75b6663`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - server.cjs
 - run_script
-- compute_score
+- data
 - Superpowers Release Notes
 - Worktree Rototill: Detect-and-Defer
 - test-sync-to-codex-plugin.sh
@@ -202,7 +202,7 @@
 - v4.3.0 (2026-02-12)
 - v6.1.1 (2026-07-02)
 - v3.2.3 (2025-10-23)
-- v3.2.2 (2025-10-21)
+- tdata
 - v3.2.1 (2025-10-20)
 - v5.0.7 (2026-03-31)
 - start-server.sh
@@ -259,18 +259,21 @@
 - test-plugin-manifest.sh
 - opencode/run-tests.sh
 - session-clean
+- pkg_score.py
+- gather_data
+- v3.3.0 (2025-10-28)
 
 ## God Nodes (most connected - your core abstractions)
 1. `Superpowers Release Notes` - 43 edges
 2. `main()` - 27 edges
 3. `run_script()` - 24 edges
 4. `Writing Skills` - 22 edges
-5. `compute_score()` - 18 edges
-6. `Lift drill into superpowers as `evals/` — implementation plan` - 17 edges
-7. `data()` - 16 edges
-8. `main()` - 16 edges
-9. `runTests()` - 16 edges
-10. `Testing Skills With Subagents` - 16 edges
+5. `Lift drill into superpowers as `evals/` — implementation plan` - 17 edges
+6. `data()` - 16 edges
+7. `main()` - 16 edges
+8. `runTests()` - 16 edges
+9. `Testing Skills With Subagents` - 16 edges
+10. `tdata()` - 15 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `run_and_check()` --calls--> `cleanup_test_project()`  [EXTRACTED]
@@ -287,7 +290,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (253 total, 57 thin omitted)
+## Communities (257 total, 57 thin omitted)
 
 ### Community 0 - "server.cjs"
 Cohesion: 0.05
@@ -297,13 +300,13 @@ Nodes (59): bootstrapPage(), brandMarkup(), broadcast(), browserLauncherForPlatf
 Cohesion: 0.08
 Nodes (20): GateTestBase, green-gate no longer rebuilds the project graph: the Reviewer reads the review…, --no-commit (Phase 4 revalidation) changes nothing, so it must not rebuild the…, On all-green + commit with a workspace/task/base, green-gate must: commit the…, --no-commit validation must not update the graph nor dispatch the reviewer…, A RED failure whose report does NOT contain the brief's expected failure text…, A brief without an EXPECTED-RED block cannot be verified: the gate must reject…, red-gate no longer rebuilds the project graph: the Coder reads the brief and… (+12 more)
 
-### Community 2 - "compute_score"
-Cohesion: 0.09
-Nodes (24): compute_score(), _days_ago(), _dependents_count(), _fetch_json(), gather_data(), _github_repo(), main(), Best-effort SDK compatibility. 'compatible' unless the project SDK constraint… (+16 more)
+### Community 2 - "data"
+Cohesion: 0.11
+Nodes (13): data(), Re-weighted: pub points now weight 20 of 100 (was 30)., Recency (20) + SDK (20) + issue ratio (15) = 55 of 100., 70.0 sits exactly on the AUTO_APPROVE threshold (0+0+20+20+15+15)., TestDependentsBuckets, TestGateVerdicts, TestHealthWeight, TestIssueRatioBands (+5 more)
 
 ### Community 3 - "Superpowers Release Notes"
 Cohesion: 0.05
-Nodes (37): Breaking Changes, Bug Fixes, Bug Fixes, Bug Fixes, Changed, Changes, Codex Fixes, Files Added (+29 more)
+Nodes (37): Breaking Changes, Bug Fixes, Bug Fixes, Bug Fixes, Changed, Changes, Codex Fixes, Files Changed (+29 more)
 
 ### Community 4 - "Worktree Rototill: Detect-and-Defer"
 Cohesion: 0.06
@@ -1021,9 +1024,9 @@ Nodes (3): Codex, Packaging, v6.1.1 (2026-07-02)
 Cohesion: 0.67
 Nodes (3): Files Changed, Improvements, v3.2.3 (2025-10-23)
 
-### Community 188 - "v3.2.2 (2025-10-21)"
-Cohesion: 0.67
-Nodes (3): Files Changed, Improvements, v3.2.2 (2025-10-21)
+### Community 188 - "tdata"
+Cohesion: 0.11
+Nodes (12): 70.0 sits exactly on the AUTO_APPROVE threshold (24+20+20+0+6+0+0)., Stars (30) must be the heaviest-weight criterion: the primary sort key of the…, tdata(), TestFlutterReadiness, TestGateVerdicts, TestIssueRatioBands, TestLicense, TestReadmeQuality (+4 more)
 
 ### Community 189 - "v3.2.1 (2025-10-20)"
 Cohesion: 0.67
@@ -1037,25 +1040,37 @@ Nodes (3): GitHub Copilot CLI Support, OpenCode Fixes, v5.0.7 (2026-03-31)
 Cohesion: 0.50
 Nodes (4): Build evaluations first, Develop Skills iteratively with the agent, Evaluation and iteration, Observe how agents navigate Skills
 
+### Community 253 - "pkg_score.py"
+Cohesion: 0.27
+Nodes (11): compute_score(), _days_ago(), _dependents_count(), _fetch_json(), gather_data(), _github_repo(), main(), Best-effort SDK compatibility. 'compatible' unless the project SDK constraint… (+3 more)
+
+### Community 254 - "gather_data"
+Cohesion: 0.39
+Nodes (7): compute_score(), _days_ago(), _fetch_json(), gather_data(), main(), Fetch GitHub data for a template repository., Score a candidate template from structured data (pure, no I/O). data keys:…
+
+### Community 255 - "v3.3.0 (2025-10-28)"
+Cohesion: 0.67
+Nodes (3): Files Added, New Features, v3.3.0 (2025-10-28)
+
 ## Knowledge Gaps
 - **1322 isolated node(s):** `__dirname`, `extensionDir`, `packageRoot`, `skillsDir`, `bootstrapSkillPath` (+1317 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1608 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1613 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **57 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.2 (2025-10-21)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
-  _High betweenness centrality (0.005) - this node is a cross-community bridge._
+- **Why does `Superpowers Release Notes` connect `Superpowers Release Notes` to `v3.3.0 (2025-10-28)`, `v3.1.0 (2025-10-17)`, `Superpowers v2.0.0 Release Notes`, `v6.2.0 (2026-07-23)`, `v5.0.6 (2026-03-24)`, `v4.2.0 (2026-02-05)`, `v4.0.0 (2025-12-17)`, `v5.0.2 (2026-03-11)`, `v5.0.0 (2026-03-09)`, `v3.2.0 (2025-10-18)`, `v5.0.4 (2026-03-16)`, `v6.1.0 (2026-06-30)`, `v4.3.1 (2026-02-21)`, `v3.5.0 (2025-11-23)`, `v5.0.5 (2026-03-17)`, `v5.0.3 (2026-03-15)`, `v3.3.1 (2025-10-28)`, `v4.3.0 (2026-02-12)`, `v6.1.1 (2026-07-02)`, `v3.2.3 (2025-10-23)`, `v3.2.1 (2025-10-20)`, `v5.0.7 (2026-03-31)`, `v6.0.0 (2026-06-16)`, `v5.1.0 (2026-04-30)`, `v6.3.0 (2026-08-12)`, `v5.0.1 (2026-03-10)`?**
+  _High betweenness centrality (0.003) - this node is a cross-community bridge._
 - **Why does `Writing Skills` connect `Writing Skills` to `Anti-Patterns`, `Testing All Skill Types`, `RED-GREEN-REFACTOR for Skills`, `Testing Skills With Subagents`, `File Organization`, `Skill Types`, `Skill Discovery Optimization (SDO)`, `Bulletproofing Skills Against Rationalization`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Are the 15 inferred relationships involving `compute_score()` (e.g. with `.test_buckets()` and `.test_auto_approve_above_70()`) actually correct?**
-  _`compute_score()` has 15 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `__dirname`, `extensionDir`, `packageRoot` to the rest of the system?**
   _1322 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `server.cjs` be split into smaller, more focused modules?**
   _Cohesion score 0.051923076923076926 - nodes in this community are weakly interconnected._
 - **Should `run_script` be split into smaller, more focused modules?**
   _Cohesion score 0.07811447811447811 - nodes in this community are weakly interconnected._
-- **Should `compute_score` be split into smaller, more focused modules?**
-  _Cohesion score 0.09268292682926829 - nodes in this community are weakly interconnected._
+- **Should `data` be split into smaller, more focused modules?**
+  _Cohesion score 0.10591133004926108 - nodes in this community are weakly interconnected._
+- **Should `Superpowers Release Notes` be split into smaller, more focused modules?**
+  _Cohesion score 0.05405405405405406 - nodes in this community are weakly interconnected._

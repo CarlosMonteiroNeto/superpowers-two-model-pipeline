@@ -1,7 +1,7 @@
 {
   "0": "server.cjs",
   "1": "run_script",
-  "2": "compute_score",
+  "2": "data",
   "3": "Superpowers Release Notes",
   "4": "Worktree Rototill: Detect-and-Defer",
   "5": "test-sync-to-codex-plugin.sh",
@@ -187,7 +187,7 @@
   "185": "v4.3.0 (2026-02-12)",
   "186": "v6.1.1 (2026-07-02)",
   "187": "v3.2.3 (2025-10-23)",
-  "188": "v3.2.2 (2025-10-21)",
+  "188": "tdata",
   "189": "v3.2.1 (2025-10-20)",
   "190": "v5.0.7 (2026-03-31)",
   "191": "start-server.sh",
@@ -251,5 +251,9 @@
   "249": "graphify-package",
   "250": "pkg-score",
   "251": "hermes/__init__.py",
-  "252": "session-clean"
+  "252": "session-clean",
+  "253": "pkg_score.py",
+  "254": "gather_data",
+  "255": "v3.3.0 (2025-10-28)",
+  "256": "template-score"
 }

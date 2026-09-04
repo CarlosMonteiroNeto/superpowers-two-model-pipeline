@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Deterministic template-search orchestrator.
+#
+# Searches GitHub for Flutter/Dart templates matching the app's specific
+# category first (stars descending), scores each candidate with
+# template_score.py, and applies the spec's search order, stop rule,
+# fallback, and presentation rules.
+#
+# Usage: template-search --specific "QUERY" --generic "QUERY" [--token TOKEN]
+#
+# Exit codes:
+#   0 = candidates presented (comparison table on stdout)
+#   1 = from-scratch (nothing >= 50)
+#   2 = usage error
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+specific=""
+generic=""
+token=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --specific) specific="${2:-}"; shift 2 ;;
+    --generic)  generic="${2:-}";  shift 2 ;;
+    --token)    token="${2:-}";    shift 2 ;;
+    *) echo "usage: template-search --specific QUERY --generic QUERY [--token TOKEN]" >&2; exit 2 ;;
+  esac
+done
+
+if [ -z "$specific" ] || [ -z "$generic" ]; then
+  echo "usage: template-search --specific QUERY --generic QUERY [--token TOKEN]" >&2
+  exit 2
+fi
+
+# Write collected candidates to a temp file
+TMPFILE=$(mktemp)
+trap 'rm -f "$TMPFILE"' EXIT
+
+python3 "$SCRIPT_DIR/_template_search_collect.py" \
+  --specific "$specific" --generic "$generic" \
+  ${token:+--github-token "$token"} \
+  > "$TMPFILE" 2>/dev/null || true
+
+# Extract exit_code from the JSON
+exit_code=$(python3 -c "import sys,json; print(json.load(open(sys.argv[1])).get('exit_code', 2))" "$TMPFILE" 2>/dev/null || echo "2")
+
+if [ "$exit_code" = "2" ]; then
+  echo "usage: template-search --specific QUERY --generic QUERY [--token TOKEN]" >&2
+  exit 2
+fi
+
+# Format and print comparison table
+python3 -c "
+import sys, json
+
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+
+presentation = data.get('presentation', [])
+
+if not presentation:
+    sys.exit(1)
+
+# Header
+print('{:<30} {:>6} {:>8} {:>13} {:>11} {:>18} {:>7} {:>7} {:>6} {:<16}'.format(
+    'Template', 'Stars', 'Recency', 'FlutterReady', 'IssueRatio', 'SustainedInterest',
+    'License', 'Readme', 'Total', 'Verdict'))
+print('-' * 130)
+
+for c in presentation:
+    criteria = c.get('criteria', {})
+    print('{:<30} {:>6} {:>8} {:>13} {:>11} {:>18} {:>7} {:>7} {:>6} {:<16}'.format(
+        c.get('template', ''),
+        criteria.get('stars', 0),
+        criteria.get('recency', 0),
+        criteria.get('flutter_ready', 0),
+        criteria.get('issue_ratio', 0),
+        criteria.get('sustained_interest', 0),
+        criteria.get('license', 0),
+        criteria.get('readme', 0),
+        c.get('total', 0),
+        c.get('verdict', '')))
+
+print()
+print('Templates presented: {}'.format(len(presentation)))
+" "$TMPFILE" 2>/dev/null
+
+exit "$exit_code"

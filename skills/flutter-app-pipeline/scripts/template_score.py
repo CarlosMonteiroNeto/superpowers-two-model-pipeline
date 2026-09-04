@@ -159,6 +159,36 @@ def _days_ago(iso):
     return (datetime.datetime.now(datetime.timezone.utc) - dt).days
 
 
+def _detect_flutter_ready(owner, repo, token):
+    """Detect Flutter readiness from pubspec.yaml SDK constraint.
+
+    Returns 'current' if the SDK lower bound is >= 2.12 (null-safe),
+    'dated' if the SDK is present but < 2.12, 'none' otherwise.
+    """
+    import base64
+    import re
+    try:
+        pubspec_resp = _fetch_json(
+            "{}/repos/{}/{}/contents/pubspec.yaml".format(GH_API, owner, repo), token
+        )
+        if not pubspec_resp or not pubspec_resp.get("content"):
+            return "none"
+        content = base64.b64decode(pubspec_resp["content"]).decode("utf-8", errors="ignore")
+        match = re.search(r'sdk:\s*["\']?([>=<.0-9]+)', content)
+        if not match:
+            return "none"
+        version_str = match.group(1)
+        parts = re.findall(r"(\d+)", version_str)
+        if len(parts) >= 2:
+            major, minor = int(parts[0]), int(parts[1])
+            if major > 2 or (major == 2 and minor >= 12):
+                return "current"
+            return "dated"
+        return "none"
+    except Exception:
+        return "none"
+
+
 def gather_data(owner, repo, token):
     """Fetch GitHub data for a template repository."""
     data = {"template": "{}/{}".format(owner, repo)}
@@ -215,9 +245,8 @@ def gather_data(owner, repo, token):
         else:
             data["stars_per_year"] = 0.0
 
-        # Flutter readiness: best-effort from pubspec analysis
-        # For now default to 'none'; Task 3 will refine this
-        data["flutter_ready"] = "none"
+        # Flutter readiness: detect from pubspec.yaml SDK constraint
+        data["flutter_ready"] = _detect_flutter_ready(owner, repo, token)
 
         # Readme: best-effort from README contents API
         try:
@@ -255,22 +284,110 @@ def gather_data(owner, repo, token):
     return data
 
 
+def collect_candidates(specific_query, generic_query, token=None):
+    """Search GitHub for templates and score them.
+
+    Search order: specific category first (stars descending), then generic
+    as fallback. Returns a dict with 'specific' and 'generic' lists of
+    scored candidates, plus 'presentation' (the combined presentation list).
+    """
+    result = {"specific": [], "generic": [], "presentation": []}
+
+    def _search_and_score(query):
+        """Search repos by query, score each, return list of scored results."""
+        if not query:
+            return []
+        encoded = urllib.parse.quote(query)
+        try:
+            search_resp = _fetch_json(
+                "{}/search/repositories?q={}&sort=stars&order=desc".format(GH_API, encoded),
+                token,
+            )
+        except Exception:
+            return []
+        items = search_resp.get("items", [])
+        candidates = []
+        for item in items:
+            full_name = item.get("full_name", "")
+            parts = full_name.split("/")
+            if len(parts) != 2:
+                continue
+            owner, repo = parts
+            try:
+                data = gather_data(owner, repo, token)
+                score = compute_score(data)
+                score["data"] = data
+                candidates.append(score)
+            except Exception:
+                continue
+        return candidates
+
+    # Search specific category first
+    specific_candidates = _search_and_score(specific_query)
+    result["specific"] = specific_candidates
+
+    # Check stop rule: collect until 3 AUTO_APPROVE from specific
+    auto_approve = [c for c in specific_candidates if c["verdict"] == "AUTO_APPROVE"]
+    if len(auto_approve) >= 1:
+        # Iterate in search order; stop after 3rd AUTO_APPROVE
+        stop_candidates = []
+        auto_count = 0
+        for c in specific_candidates:
+            stop_candidates.append(c)
+            if c["verdict"] == "AUTO_APPROVE":
+                auto_count += 1
+                if auto_count >= 3:
+                    break
+        result["presentation"] = stop_candidates
+    else:
+        # No AUTO_APPROVE in specific: collect 50-69 range
+        dev_decision = [c for c in specific_candidates if c["verdict"] == "DEVELOPER_DECISION"]
+
+        # Search generic category for AUTO_APPROVE
+        generic_candidates = _search_and_score(generic_query)
+        result["generic"] = generic_candidates
+        generic_auto = [c for c in generic_candidates if c["verdict"] == "AUTO_APPROVE"]
+
+        # Presentation: both groups
+        result["presentation"] = dev_decision + generic_auto
+
+    return result
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Deterministic GitHub-based template quality score")
-    parser.add_argument("template", help="owner/repo template identifier")
-    parser.add_argument("--github-token", default=os.environ.get("GITHUB_TOKEN"))
-    args = parser.parse_args(argv)
+    args_list = argv if argv is not None else sys.argv[1:]
 
-    parts = args.template.split("/")
-    if len(parts) != 2:
-        print("Error: template must be owner/repo format", file=sys.stderr)
-        sys.exit(1)
-    owner, repo = parts
-
-    data = gather_data(owner, repo, args.github_token)
-    report = compute_score(data)
-    report["data"] = data
-    print(json.dumps(report, indent=2))
+    # Detect mode from first argument
+    if args_list and args_list[0] == "collect":
+        parser = argparse.ArgumentParser(description="Search and collect template candidates")
+        parser.add_argument("command")
+        parser.add_argument("--specific", required=True, help="Specific-category search query")
+        parser.add_argument("--generic", required=True, help="Generic-category fallback search query")
+        parser.add_argument("--github-token", default=os.environ.get("GITHUB_TOKEN"))
+        args = parser.parse_args(args_list)
+        result = collect_candidates(
+            args.specific, args.generic, args.github_token
+        )
+        print(json.dumps(result, indent=2))
+    elif args_list:
+        # Legacy single-score mode: OWNER/REPO
+        parser = argparse.ArgumentParser(description="Deterministic GitHub-based template quality score")
+        parser.add_argument("template", help="owner/repo template identifier")
+        parser.add_argument("--github-token", default=os.environ.get("GITHUB_TOKEN"))
+        args = parser.parse_args(args_list)
+        parts = args.template.split("/")
+        if len(parts) != 2:
+            print("Error: template must be owner/repo format", file=sys.stderr)
+            sys.exit(1)
+        owner, repo = parts
+        data = gather_data(owner, repo, args.github_token)
+        report = compute_score(data)
+        report["data"] = data
+        print(json.dumps(report, indent=2))
+    else:
+        parser = argparse.ArgumentParser(description="Deterministic GitHub-based template quality score")
+        parser.print_help()
+        sys.exit(2)
 
 
 if __name__ == "__main__":
