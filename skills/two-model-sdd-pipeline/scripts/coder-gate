@@ -130,7 +130,7 @@ PY
         "$SCRIPT_DIR/ledger-append" "$ledger" commit "$task" "green $sha" commits="$sha"
         [ -x "$GRAPHIFY_UPDATE" ] && "$GRAPHIFY_UPDATE" "$(pwd)" || true
         pkg="$ws/task-$task-review-package.diff"
-        "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" || true
+        "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" "$task" || true
         DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
         "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
           --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
