@@ -15,16 +15,24 @@ next brief.
 
 ## Brief structure (in order)
 
+Write the brief's **context first**, then derive the RED test from it. The
+RED test is not an independent artifact: it is the behavioral encoding of the
+exact values and out-of-scope you just stated, so it must be written AFTER
+the context that defines it. Order:
+
 1. **Task statement** — what to build and why it matters, in 3-6 sentences an
    Operational-tier coder can act on without asking questions.
 2. **Exact values** — every number, magic string, file path, signature, and
-   format the task needs, stated once, verbatim.
+   format the task needs, stated once, verbatim. This is the context the RED
+   test must encode.
 3. **RED test** — complete, runnable, BLACK-BOX behavioral test code (per the
    pipeline's TDD rule: integration/behavior, never internal implementation
-   details — do not constrain the Coder's internals). Fails today for the
-   expected reason; passes when the task is done correctly. Follow the
-   project's existing test conventions and file layout. If several files are
-   needed, provide each in full.
+   details — do not constrain the Coder's internals). Derived from items 1-2:
+   it fails today for the expected reason and passes when the task is done
+   correctly. Write it only after the context is fixed — a RED test written
+   before the brief risks encoding wrong values. Follow the project's existing
+   test conventions and file layout. If several files are needed, provide each
+   in full.
 4. **Expected RED failure** — the short verbatim substring the failing output
    must contain (a few words). The red-gate verifies it.
 5. **Out of scope** — what this task must NOT do (YAGNI fence).

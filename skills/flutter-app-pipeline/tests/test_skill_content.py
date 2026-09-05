@@ -36,9 +36,8 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         self.assertIn("graphify-regen", text)
         self.assertIn("graphify-package", text)
 
-    def test_graphify_is_post_commit_and_subgraph(self):
+    def test_graphify_is_update_before_commit_and_subgraph(self):
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("post-commit", text)
         self.assertIn("graphify-subgraph", text)
         self.assertIn("never per Coder iteration", text)
 

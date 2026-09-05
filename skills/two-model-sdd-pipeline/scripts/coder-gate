@@ -24,6 +24,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 FLUTTER_GATE="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/green-gate"
 GRAPHIFY_UPDATE="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/graphify-update"
+GRAPHIFY_SUBGRAPH="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/graphify-subgraph"
 
 if [ $# -ne 2 ]; then
   echo "usage: coder-gate WORKSPACE TASK" >&2
@@ -120,15 +121,18 @@ PY
       "Coder round $round passed" status=PASS round="$round/4"
 
     if [ "$lang" != "flutter" ]; then
-      # Flutter's green-gate already committed + dispatched D above. The
-      # generic engine's run-gates deliberately never commits (it is a
-      # check-only mirror) - Script A (this script) owns that step here,
-      # mirroring green-gate's post-commit chain exactly.
+      # Flutter's green-gate already updated the graph + committed + dispatched
+      # D above. The generic engine's run-gates deliberately never commits (it
+      # is a check-only mirror) - Script A (this script) owns that step here,
+      # mirroring green-gate's chain exactly: graph update + subgraph read
+      # BEFORE the commit so the graph enters the task's own commit and is
+      # read immediately after being written.
+      [ -x "$GRAPHIFY_UPDATE" ] && "$GRAPHIFY_UPDATE" "$(pwd)" || true
+      [ -x "$GRAPHIFY_SUBGRAPH" ] && "$GRAPHIFY_SUBGRAPH" "$ws" "$task" || true
       git add -A
       if git commit -m "task $task green (round $round)" >/dev/null 2>&1; then
         sha=$(git rev-parse --short HEAD)
         "$SCRIPT_DIR/ledger-append" "$ledger" commit "$task" "green $sha" commits="$sha"
-        [ -x "$GRAPHIFY_UPDATE" ] && "$GRAPHIFY_UPDATE" "$(pwd)" || true
         pkg="$ws/task-$task-review-package.diff"
         "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" "$task" || true
         DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"

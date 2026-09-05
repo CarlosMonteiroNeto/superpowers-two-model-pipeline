@@ -79,13 +79,14 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("NOT a dispatch template", text)
         self.assertIn("Strategist Session", text)
 
-    def test_graphify_is_post_commit_subgraph(self):
-        """Graphify is post-commit only (ADR-0004): the skill must say the
-        graph rebuilds after an approved task's commit and that subgraph
-        extraction feeds B/D - never per-Coder-iteration, never whole source."""
+    def test_graphify_is_update_before_commit_subgraph(self):
+        """Graphify (ADR-0004): the skill must say the graph updates BEFORE
+        the task's commit (so it enters the commit), that graphify-subgraph
+        reads immediately after the update, and that extraction feeds B/D -
+        never per-Coder-iteration, never whole source."""
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("post-commit", text)
         self.assertIn("graphify-subgraph", text)
+        self.assertIn("before", text)
 
 
 if __name__ == "__main__":

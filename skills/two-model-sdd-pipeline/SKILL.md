@@ -150,8 +150,10 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   between every round — see `orchestrator`'s `CODER*` comment for the one
   case it still hands back (a resumed/interrupted session).
 - **`green-gate`** — chains full suite + `flutter analyze` + format + commit.
-  On success: post-commit `graphify-update`, builds the review package, and
-  dispatches D headlessly (Item 3). `--no-commit` validates only.
+  On success: graph update + subgraph read BEFORE the commit (so the graph
+  enters the task's own commit and is read immediately after being written),
+  then builds the review package and dispatches D headlessly (Item 3).
+  `--no-commit` validates only.
 - **`dispatch`** — headless launcher: `opencode run --agent <def> --format
   json <prompt-file> <prompt> [--continue --session <id>]`, tees the JSON event
   stream to `<ws>/task-N-coder.log` / `task-N-reviewer.log` (observability —
@@ -172,9 +174,12 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   raw run).
 - **`token-kill`** — RTK minification: error logs, source payloads to C/D,
   JSON reports.
-- **`graphify-update`** — post-commit graph rebuild only (ADR-0004).
+- **`graphify-update`** — graph rebuild before commit only (the subgraph read
+  immediately follows; ADR-0004).
 - **`graphify-subgraph WS TASK`** — affected-dependency subgraph extraction →
-  `<ws>/task-N-interfaces.md` for B's next brief and D's review.
+  `<ws>/task-N-interfaces.md` for B's next brief and D's review. Runs
+  immediately after `graphify-update` in the green-gate/coder-gate chain —
+  the read that justifies the write.
 - **`review-package` / `ledger-append` / `red-integrity` / `final-gate` /
   `doc-check`** — as before.
 - **`parse-review`** — deterministic parser: reads the Reviewer's JSONL event
@@ -195,6 +200,12 @@ Script A never implements, reviews, or fixes anything itself.
   RED tests — written directly, no Controller subagent (Item 1).
 - Receives feedback only through Script A's outputs (stdout, ledger, gate
   reports, the subgraph feed).
+- **B reads only what the scripts hand it** — `OUTCOME:` lines from the
+  orchestrator, the JSONL ledger, the parsed Reviewer verdict
+  (`parse-review` → `task-N-review.json`), and the interfaces file
+  (`graphify-subgraph` → `task-N-interfaces.md`) for the next brief. B never
+  reads raw coder/reviewer dispatch logs or full gate reports into context;
+  those are observability files for the developer, not LLM inputs.
 - Writes corrective briefs on `CORRECTIVE` (SEND_BACK), arbitrates
   TEST_DEFECT / defective briefs / coder overflow on `ARBITRATE`, and
   documents minor findings (PARKED — never fix loops).
@@ -271,8 +282,8 @@ digraph pipeline {
     "coder-gate: run gate, ledger coder_round" -> "resume C (--continue), re-check" [label="fail, budget left"];
     "resume C (--continue), re-check" -> "coder-gate: run gate, ledger coder_round";
     "coder-gate: run gate, ledger coder_round" -> "ARBITRATE to B" [label="fail at 4/4 or TEST_DEFECT"];
-    "coder-gate: run gate, ledger coder_round" -> "green-gate: commit + graphify-update" [label="green"];
-    "green-gate: commit + graphify-update" -> "dispatch D (headless, fresh) + review package";
+    "coder-gate: run gate, ledger coder_round" -> "green-gate: graph update + subgraph read, then commit" [label="green"];
+    "green-gate: graph update + subgraph read, then commit" -> "dispatch D (headless, fresh) + review package";
     "dispatch D (headless, fresh) + review package" -> "D JSON verdict: APPROVED / SEND_BACK / ESCALATE";
     "D JSON verdict: APPROVED / SEND_BACK / ESCALATE" -> "route-next";
     "route-next" -> "APPROVED -> NEXT (minors PARKED)" [label="APPROVED"];
@@ -352,9 +363,11 @@ For each task in order:
    stops the loop and `route-next` emits ARBITRATE. Ledger: `coder_round`
    each round, `escalated` on TEST_DEFECT.
 
-4. **Wrap-up on success.** All gates green → `green-gate` commits, appends
-   the `commit` ledger entry, runs `graphify-update` (post-commit, ADR-0004),
-   builds the review package, and dispatches D. Run
+4. **Wrap-up on success.** All gates green → `green-gate` runs the graph
+   update + subgraph read BEFORE the commit (so the graph enters the task's
+   own commit and the interfaces are read immediately after the write),
+   commits, appends the `commit` ledger entry, builds the review package, and
+   dispatches D. Run
    `scripts/interface-check <workspace> TASK BASE`; on exit 1 ledger
    `interface_change` (the semantic "did it break the contract" stays with
    D).
@@ -444,10 +457,12 @@ deterministic, no dispatch.
   `rtk err` wrappers derived from the full file (the verdict always comes
   from the raw run — RTK wrappers mask child exit codes, verified).
   `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
-- **Graphify is post-commit + subgraph-only (ADR-0004):** `graphify-update`
-  runs only after an approved task's commit; `graphify-subgraph` extracts the
-  affected-dependency slice for B's next brief and D's review. It is no
-  longer chained into per-Coder iteration, and never sends whole source.
+- **Graphify is update-before-commit + read-immediately-after (ADR-0004):**
+  `graphify-update` runs just before the task's commit so the graph enters the
+  commit; `graphify-subgraph` runs right after the update and extracts the
+  affected-dependency slice for B's next brief and D's review. The graph is
+  only updated at the moment it is about to be read — it is never orphaned
+  (updated but unread) and never rebuilt per Coder iteration.
 
 ## Language Policy
 

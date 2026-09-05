@@ -54,7 +54,7 @@ recorded so it is never asked again for that branch.
 | OpenCode | Harness (CLI + agent runtime); `opencode run --agent` is the headless dispatch mechanism |
 | Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline |
 | RTK (`rtk`) | CLI proxy that compresses command output before it reaches an LLM context window (60-90% token savings); also the "Token Killer" (`token-kill` script) |
-| Graphify (`graphifyy`) | On-device code knowledge graph; Script A rebuilds it post-commit and extracts the affected-dependency subgraph for B/D |
+| Graphify (`graphifyy`) | On-device code knowledge graph; Script A updates it just before each task commit and reads it immediately after (subgraph extraction) for B/D |
 | Tavily | Programmatic web search for solution research |
 | pub.dev API | Package metadata, score, popularity, SDK constraints |
 | GitHub REST | Commit recency, issue counts, dependents fallbacks |
@@ -82,7 +82,7 @@ recorded so it is never asked again for that branch.
    (script-autonomous per-task loop). Flutter additions: `pub-sync` ->
    `red-gate` (dispatches C on RED verified, then chains straight into
    `coder-gate`, which owns every round after that: gate check -> PASS
-   (`green-gate` commit + `graphify-update` + dispatch D) | FAIL-with-budget
+(`green-gate` graph update + subgraph read + commit + dispatch D) |  FAIL-with-budget
    (fix prompt + redispatch C with `--continue`) | FAIL-at-4 or TEST_DEFECT
    (stop, `route-next` emits ARBITRATE) -> `route-next` (CORRECTIVE /
    ARBITRATE / NEXT / FINAL_REVIEW). `orchestrator`'s own CODER/REVIEW cases
@@ -126,10 +126,10 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `red-gate WORKSPACE TASK [TEST_CMD]` (two-model, generic) | Language-agnostic mirror of the Flutter `red-gate` above, for non-Flutter branches: same materialize-and-verify-expected-reason logic, but the test command comes from the ledger's `gate.test_cmd` (written by `resolve-toolchain`) instead of a hardcoded `flutter test`. Same dispatch-C-then-`coder-gate` behavior | exit = `coder-gate`'s exit; exit 1 defective brief; exit 2 usage/no test_cmd |
 | `coder-gate WORKSPACE TASK` (two-model) | Closes the gap that used to require B between rounds: after **every** Coder round (round 1 from `red-gate`, or a resume), runs the gate (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers `coder_round`, and decides by exit code/log content alone — PASS → commit (generic engine) or `green-gate` already committed (Flutter) + `review-package` + dispatch D; FAIL and budget left → build the fix prompt (prior diff + gate report + brief, pure path interpolation) and redispatch C with `--continue`; FAIL at round 4 → stop, `route-next` will ARBITRATE; `TEST_DEFECT` seen in the round's log → ledger `escalated` and stop immediately, no more retries | exit 0 green+committed+D dispatched; 1 budget exhausted; 2 TEST_DEFECT escalated; 3 usage |
 | `resolve-toolchain WORKSPACE [ROOT]` (two-model) | One-time-per-branch, no-LLM detection: inspects `ROOT` for a known ecosystem marker (`pubspec.yaml`, `Cargo.toml`, `go.mod`, `package.json`, `pyproject.toml`/`requirements.txt`) and resolves `TEST_CMD`/`ANALYZE_CMD`; on success chains directly into `ledger-append` (`gate` entry). This is what lets `orchestrator` pick the right `red-gate` and lets the generic `red-gate`/`run-gates` run without ever asking | exit 0 resolved + ledgered; exit 1 ambiguous (multiple markers — manual fallback); exit 2 usage/no marker (manual fallback) |
-| `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: `graphify-update` + review package + **dispatches D**. `--no-commit` never commits/never dispatches | exit 0 green (+commit +graphify +D); 1 tests; 2 analyze; 3 format |
-| `graphify-update [ROOT]` | Rebuild project graph via `graphify update <root>` — post-commit only (ADR-0004) | exit code of graphify; 0 when disabled |
-| `graphify-subgraph WS TASK` | Query the graph (`explain`) for the task's `touches` nodes; write `<ws>/task-N-interfaces.md` (capped) for B/D | exit 0 wrote; 2 usage/unknown task |
-| `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form); Script-A-side, post-commit | exit code of graphify |
+| `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: graph update + subgraph read BEFORE the commit (so the graph enters the task's own commit and the interfaces are read immediately after the write), then review package + **dispatches D**. `--no-commit` never commits/never dispatches | exit 0 green (+graph +subgraph +commit +D); 1 tests; 2 analyze; 3 format |
+| `graphify-update [ROOT]` | Rebuild project graph via `graphify update <root>` — before the task's commit, immediately before the subgraph read (ADR-0004) | exit code of graphify; 0 when disabled |
+| `graphify-subgraph WS TASK` | Query the graph (`explain`) for the task's `touches` nodes; write `<ws>/task-N-interfaces.md` (capped) for B/D. Runs immediately after `graphify-update` in the green-gate/coder-gate chain — the read that justifies the write | exit 0 wrote; 2 usage/unknown task |
+| `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form); Script-A-side, before commit | exit code of graphify |
 | `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` (B feed from `pub-sync`) | resolves dir from `.dart_tool/package_config.json` |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER N ROUND / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
 | `red-integrity WORKSPACE TASK` | Byte-compare committed tests vs brief RED-TESTS | exit 0 intact; 1 tampered; 2 usage/missing |
@@ -145,7 +145,7 @@ All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN
 (passthrough) and `RTK_BIN` (binary override); if RTK has no filter/wrapper for a
 command it passes the full output through — nothing is lost. `pub-sync` keeps the
 graphify-package chain (B feed, non-fatal; disable with `GRAPHIFY_ENABLED=0`);
-`graphify-update` runs post-commit only; `red-gate`/`green-gate` dispatch C/D on
+`graphify-update` runs before commit (immediately before the `graphify-subgraph` read); `red-gate`/`green-gate` dispatch C/D on
 success but never read the graph. Tests live in
 `skills/flutter-app-pipeline/tests/` (flutter scripts) and
 `skills/two-model-sdd-pipeline/tests/` (router + cmd runner + dispatch + gates),
@@ -175,7 +175,8 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
 - **D reviews compiler-approved code only (Item 2):** the Reviewer never
   runs or re-runs test/analyze; scope is design, architecture, spec
   compliance, interface discipline. Returns a structured JSON verdict.
-- **Graphify is post-commit + subgraph-only (ADR-0004):** `graphify-update`
+- **Graphify is update-before-commit + read-immediately-after (ADR-0004):**
+  `graphify-update`
   rebuilds the graph only after an approved task's commit — never per Coder
   iteration. `graphify-subgraph` extracts the affected-dependency slice
   (`graphify explain`) into `<ws>/task-N-interfaces.md` for B's next brief
@@ -351,6 +352,6 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, c
    CHANGED and to re-read it fully); ESCALATE / overflow → `ARBITRATE` (B
    rules). After all tasks: `final-gate` then B's fresh `/new` holistic review.
    The router, not the LLM, decides every transition. All command lines go
-   through `scripts/cmd`; Graphify is post-commit + subgraph-only.
+   through `scripts/cmd`; Graphify is update-before-commit + read-immediately-after.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.

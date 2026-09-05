@@ -10,9 +10,11 @@
 #   -t TASK       task number (for reviewer dispatch paths)
 #   -b BASE       base commit for the review package (default: HEAD~1)
 #
-# On all-green + commit, when -w/-t are given: runs the post-commit graph update
-# (ADR-0004), builds the review package, and dispatches the Reviewer headlessly
-# (Item 3). --no-commit short-circuits before all of that.
+# On all-green + commit, when -w/-t are given: runs the graph update BEFORE
+# the commit (so the graph enters the task's own commit), the subgraph read
+# (interfaces) right after the write, then builds the review package and
+# dispatches the Reviewer headlessly (Item 3). --no-commit short-circuits
+# before all of that.
 #
 # Exit codes: 0 = all gates passed (and committed unless --no-commit),
 #             1 = tests failed, 2 = analyze found issues, 3 = format drift.
@@ -71,6 +73,19 @@ if [ "$no_commit" = "1" ]; then
   exit 0
 fi
 
+# Graph first, then commit: the graph update runs BEFORE the commit so the
+# regenerated graph artifacts (graphify-out/) enter the task's own commit,
+# and the subgraph read (interfaces) runs immediately after the write - the
+# graph is only ever updated at the moment it is about to be read (brief /
+# review), never orphaned. Both are best-effort: a missing graphify binary
+# must not block the gate.
+if [ -x "$SCRIPT_DIR/graphify-update" ]; then
+  "$SCRIPT_DIR/graphify-update" "$(pwd)" || true
+fi
+if [ -n "$ws" ] && [ -n "$task" ] && [ -x "$SCRIPT_DIR/graphify-subgraph" ]; then
+  "$SCRIPT_DIR/graphify-subgraph" "$ws" "$task" || true
+fi
+
 "$GIT_BIN" add -A
 if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
   sha=$("$GIT_BIN" rev-parse --short HEAD)
@@ -85,23 +100,11 @@ else
   echo "GREEN-GATE: nothing to commit" >&2
 fi
 
-# Graphify is NOT chained here: the Reviewer reads the review package (diff),
-# not the graph; graphify rebuilds are a Controller-side lazy optimization at
-# brief time. Removing the chain keeps the gate fast and deterministic. RTK
-# (via scripts/cmd) now covers the LLM-facing context compression the eager
-# chain used to aim at.
-
 # Post-commit Script-A chain (ADR-0004, ADR-0001):
-# 1. graphify-update - rebuild the graph only after an approved task's commit
-#    (never per Coder iteration - that is wasted overhead).
-# 2. Build the review package for D (base..head, range-named file).
-# 3. Dispatch the Reviewer headlessly (Item 3): tests + syntax are already
+# 1. Build the review package for D (base..head, range-named file).
+# 2. Dispatch the Reviewer headlessly (Item 3): tests + syntax are already
 #    green, so D reviews design/architecture only (Item 2).
-if [ "$no_commit" = "0" ] && [ -n "$ws" ] && [ -n "$task" ]; then
-  if [ -x "$SCRIPT_DIR/graphify-update" ]; then
-    "$SCRIPT_DIR/graphify-update" "$(pwd)" || true
-  fi
-
+if [ -n "$ws" ] && [ -n "$task" ]; then
   base=${base:-HEAD~1}
   pkg="$ws/task-$task-review-package.diff"
   "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/review-package" \

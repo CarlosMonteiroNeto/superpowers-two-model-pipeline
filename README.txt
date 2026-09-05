@@ -64,9 +64,10 @@ PRINCIPLES
 - Cache-aware LLM calls with curated context; within-task resume
   (--continue --session) is allowed (prefix-cached); fresh dispatch when
   the task changes (ADR-0003). The ledger + git are the source of truth.
-- Graphify-before-LLM (post-commit + subgraph, ADR-0004): the graph is
-  rebuilt only after an approved task's commit; graphify-subgraph extracts
-  the affected-dependency slice for B's next brief and D's review.
+- Graphify-before-LLM (update-before-commit + read-immediately-after, ADR-0004): the graph is
+  updated just before each task's commit (so it enters the commit);
+  graphify-subgraph extracts the affected-dependency slice for B's next brief
+  and D's review immediately after the write.
 - Observability without pollution: C/D progress is teed to workspace logs
   (task-N-coder.log, task-N-reviewer.log) you can tail; headless sessions
   never pollute the main session's history.
@@ -153,9 +154,11 @@ skills/flutter-app-pipeline/scripts/:
                        EXPECTED-RED reason, and dispatch the Coder on success
                        (then chains into coder-gate, which owns the retry
                        loop through commit + Reviewer dispatch)
-  green-gate           chain test + analyze + format + commit; on commit:
-                       graphify-update + review package + Reviewer dispatch
-  graphify-update      rebuild the graph post-commit only (ADR-0004)
+  green-gate           chain test + analyze + format + commit; before the
+                       commit: graphify-update + graphify-subgraph read, then
+                       review package + Reviewer dispatch
+  graphify-update      rebuild the graph before commit (immediately before the
+                       subgraph read; ADR-0004)
   graphify-subgraph    extract the affected-dependency subgraph
                        (task-N-interfaces.md) for B's next brief and D
   graphify-regen       rebuild the project knowledge graph
@@ -235,7 +238,7 @@ full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
 escalation packages, red-integrity byte-compare) is ever compressed.
 
 Dispatch is script-owned too: red-gate dispatches the Coder on RED verified;
-green-gate commits, runs graphify-update (post-commit only - never per Coder
+green-gate commits, runs graphify-update (before commit - never per Coder
 iteration), builds the review package, and dispatches the Reviewer. The
 Reviewer reviews compiler-approved code only and returns a structured JSON
 verdict; minor findings are documented by the strategist, never fix loops.
