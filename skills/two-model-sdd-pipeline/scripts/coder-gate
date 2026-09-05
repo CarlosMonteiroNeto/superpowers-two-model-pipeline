@@ -57,11 +57,47 @@ while true; do
     log="$ws/task-$task-coder-round-$round.log"
   fi
 
-  if [ -f "$log" ] && grep -q "TEST_DEFECT" "$log"; then
-    "$SCRIPT_DIR/ledger-append" "$ledger" escalated "$task" \
-      "TEST_DEFECT reported by Coder round $round" round="$round/4"
-    echo "CODER-GATE: TEST_DEFECT (round $round) - escalated, no further retries; B arbitrates" >&2
-    exit 2
+  if [ -f "$log" ]; then
+    # Scoped TEST_DEFECT detection: only the Coder's final status line counts.
+    # A whole-log grep would false-positive on the fix prompt text this script
+    # itself writes into the round-N log (it contains the word TEST_DEFECT as
+    # instruction) - the same whole-log-grep class dispatch guards against.
+    # The Coder's report contract ends with `Status: DONE | ... | TEST_DEFECT`,
+    # so parse the JSONL text events and check the LAST one's tail.
+    coder_status=$(python3 - "$log" <<'PY'
+import json, re, sys
+statuses = ("DONE", "DONE_WITH_CONCERNS", "BLOCKED", "TEST_DEFECT")
+last = None
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except Exception:
+                continue
+            if ev.get("type") != "text":
+                continue
+            part = ev.get("part", {})
+            t = part.get("text", "")
+            if isinstance(t, str):
+                last = t
+except Exception:
+    last = None
+if last is not None:
+    m = re.findall(r"Status:\s*(" + "|".join(statuses) + ")", last)
+    if m:
+        print(m[-1])
+PY
+)
+      if [ "$coder_status" = "TEST_DEFECT" ]; then
+        "$SCRIPT_DIR/ledger-append" "$ledger" escalated "$task" \
+          "TEST_DEFECT reported by Coder round $round" round="$round/4"
+        echo "CODER-GATE: TEST_DEFECT (round $round) - escalated, no further retries; B arbitrates" >&2
+        exit 2
+      fi
   fi
 
   report="$ws/task-$task-gate-round-$round.txt"

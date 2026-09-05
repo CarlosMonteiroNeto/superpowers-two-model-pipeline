@@ -179,7 +179,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             cwd=str(self.repo),
             env_extra=self._env(STUB_GATE_EXIT="1"),
         )
-        self.assertIn(r.returncode, (0, 1), r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         fix_prompts = list(self.ws.glob("task-1-fix-round-*.md"))
         self.assertGreaterEqual(len(fix_prompts), 1, "fix prompt not built")
         dcalls = dispatch_log.read_text(encoding="utf-8") if dispatch_log.exists() else ""
@@ -189,7 +189,11 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         with open(self.ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
-        (self.ws / "task-1-coder.log").write_text("TEST_DEFECT: the test is wrong\n", encoding="utf-8")
+        # round-1 log whose final text event carries the Status: TEST_DEFECT contract
+        (self.ws / "task-1-coder.log").write_text(
+            '{"type":"text","part":{"type":"text","text":"This test contradicts. Status: TEST_DEFECT"}}\n',
+            encoding="utf-8",
+        )
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -201,6 +205,34 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         ledger_text = self.ledger_path.read_text(encoding="utf-8")
         self.assertIn("escalated", ledger_text)
+
+    def test_fix_prompt_text_does_not_false_escalate(self):
+        """Regression for the whole-log-grep false-positive: the fix prompt
+        coder-gate itself writes into the round-N log contains the word
+        TEST_DEFECT as instruction text. A round-2 log with that text but a
+        final Status: DONE must NOT escalate (budget-exhausted exit 1)."""
+        self.brief()
+        with open(self.ledger_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
+            f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
+                                "summary": "round 1", "status": "FAIL", "round": "1/4"}) + "\n")
+        # round-2 log: fix-prompt-style text + final Status: DONE
+        (self.ws / "task-1-coder-round-2.log").write_text(
+            '{"type":"text","part":{"type":"text","text":"Report TEST_DEFECT if the test is wrong."}}\n'
+            '{"type":"text","part":{"type":"text","text":"Fixed. Status: DONE"}}\n',
+            encoding="utf-8",
+        )
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        r = run_script(
+            "coder-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra=self._env(STUB_GATE_EXIT="1"),
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        ledger_text = self.ledger_path.read_text(encoding="utf-8")
+        self.assertNotIn("escalated", ledger_text)
 
 
 class TestGenericRedGate(CoderGateTestBase):
