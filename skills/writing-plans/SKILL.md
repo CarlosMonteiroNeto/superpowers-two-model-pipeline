@@ -7,6 +7,14 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline / flutter-app-pipeline)
+
+- **This skill produces Phase 2c artifacts.** Per-task plans are written *after* research/scoring (`pkg-score`, developer selection between as-is / modified / from-scratch) and are technically complete with no code pre-downloaded — dependency resolution happens later via `pub-sync`, lockfile only.
+- **Plans are machine-readable, not just prose.** Tasks live in a JSON plan that `route-next` reads directly to drive the deterministic per-task loop — write plans expecting a script consumer, not only a human reading a markdown doc.
+- **Each task pairs with a RED-TESTS brief** (consumed by `red-gate`, see `test-driven-development`'s integration note) — a plan task without a corresponding brief is incomplete on this fork.
+- **English-only, per policy** — plan documents, task briefs, and ADRs, regardless of the developer's spoken language.
+
+
 Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.

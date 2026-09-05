@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Deterministic test-tamper check (mirrors two-model-sdd-pipeline's
+# red-integrity, adapted to this skill's git-range workflow): confirms the
+# implementer's diff left every RED test file byte-identical to what the
+# controller verified failing before dispatch. This is a script decision,
+# not a reviewer's manual read of the diff - "did C touch a test file" is
+# always checkable by `git diff`, so it never waits on the task reviewer to
+# happen to notice.
+#
+# Run this BEFORE dispatching the task reviewer (step 3, "Review the
+# task"). A non-zero exit means the implementer edited a test it was told
+# not to touch - do not dispatch the reviewer; handle it exactly like a
+# TEST_DEFECT report (see SKILL.md "Handle the report"), except the
+# defect is the implementer's, not yours: read what changed, decide
+# whether to revert the test edit and resume the implementer with the
+# finding, or (rare) accept the edit only after confirming for yourself
+# the original test was wrong - and ledger which you chose and why.
+#
+# Usage: test-integrity BASE HEAD TEST_FILE [TEST_FILE...]
+#   BASE, HEAD   the commit range the implementer produced (same BASE/HEAD
+#                passed to scripts/review-package)
+#   TEST_FILE    one or more RED test file paths named in the brief's
+#                read-only inputs list
+#
+# Exit codes: 0 = all listed test files unchanged; 1 = at least one
+# changed (details on stdout); 2 = usage error.
+set -euo pipefail
+
+if [ $# -lt 3 ]; then
+  echo "usage: test-integrity BASE HEAD TEST_FILE [TEST_FILE...]" >&2
+  exit 2
+fi
+
+base=$1
+head=$2
+shift 2
+
+git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
+git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&2; exit 2; }
+
+tampered=0
+for f in "$@"; do
+  if ! git diff --quiet "${base}..${head}" -- "$f" 2>/dev/null; then
+    echo "TEST-INTEGRITY: TAMPERED - $f changed between ${base}..${head}"
+    tampered=1
+  else
+    echo "TEST-INTEGRITY: clean - $f unchanged"
+  fi
+done
+
+if [ "$tampered" -eq 1 ]; then
+  echo "TEST-INTEGRITY: FAILED - do not dispatch the reviewer; handle as implementer TEST_DEFECT" >&2
+  exit 1
+fi
+
+echo "TEST-INTEGRITY: all $# test file(s) unchanged"
+exit 0

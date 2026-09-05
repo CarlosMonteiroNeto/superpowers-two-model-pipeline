@@ -7,6 +7,13 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **The completion gate is a script, not a self-check.** Before any holistic/finishing review, `final-gate WORKSPACE TOTAL_TASKS` must exit 0: all tasks complete, no unresolved reviewer verdicts, no blocking parked items, and tests/analyze both green. This replaces manual "did I finish everything" verification with a deterministic precondition.
+- **Holistic review still needs a human-facing session**, but it starts *after* `final-gate` passes — B opens a fresh `/new` session for it, so the review isn't polluted by the implementation session's context.
+- **Docs are gated too.** If this branch changed the pipeline itself (scripts, skills, invariants, phases), `scripts/doc-check` deterministically fails the branch unless `README.txt` and `README-LLM.md` were updated in the same push. Don't churn docs when behavior didn't change — `doc-check` only cares when it did.
+
+
 **Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."

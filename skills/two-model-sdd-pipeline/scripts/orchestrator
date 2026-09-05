@@ -5,8 +5,9 @@
 # The per-task flow is autonomous once B hands over a brief:
 #   route-next -> execute the action -> re-route -> print OUTCOME for B
 # The gates own their dispatch calls: red-gate dispatches C on RED success
-# (Item 4), green-gate dispatches D after commit (Item 3). The orchestrator
-# is the sequencer - it never judges, it executes emitted actions.
+# (Item 4) then chains into coder-gate, which owns every retry round; the
+# green path commits and dispatches D. The orchestrator is the sequencer -
+# it never judges, it executes emitted actions.
 #
 # Usage: orchestrator WS TASK [TOTAL_TASKS]
 #   WS          - pipeline workspace (ledger.jsonl, plan.json)
@@ -14,10 +15,14 @@
 #   TOTAL_TASKS - optional; total task count (for NEXT vs FINAL_REVIEW)
 #
 # Env:
-#   RED_GATE_BIN   override red-gate script (default: flutter-app-pipeline)
-#   RUN_GATES_BIN  override the generic gate runner (non-Flutter layer)
-#   GATE_CMD       test command (non-Flutter layer, via run-gates)
-#   ANALYZE_CMD    analyze command (non-Flutter layer, via run-gates)
+#   RED_GATE_BIN   override red-gate script (default: auto-selected from
+#                  the ledger's `gate.lang` - flutter-app-pipeline's for
+#                  lang=flutter, this skill's generic one otherwise)
+#   CODER_GATE_BIN override coder-gate (default: this skill's coder-gate)
+#
+# Toolchain detection is a one-time, pre-loop step: `resolve-toolchain`
+# writes the `gate` ledger entry (lang, test_cmd, analyze_cmd) before task 1
+# ever routes. This orchestrator only reads that entry - it never asks.
 #
 # Exit codes: 0 = handed control to B (BRIEF/CORRECTIVE/ARBITRATE/NEXT/
 #             FINAL_REVIEW or a script-owned action completed);
@@ -60,18 +65,49 @@ case "$action" in
     exit 0
     ;;
   RED*)
-    # Execute the action: red-gate materializes + verifies the RED tests and
-    # dispatches C on success (Item 4). Then re-route and report.
-    RED_GATE_BIN="${RED_GATE_BIN:-$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate}"
+    # Execute the action: red-gate materializes + verifies the RED tests,
+    # dispatches C on success (Item 4), then chains into coder-gate which
+    # owns the retry loop. Then re-route and report.
+    #
+    # Which red-gate runs is itself a script decision, not an LLM one: read
+    # the `lang` recorded by resolve-toolchain's ledger `gate` entry (or
+    # RED_GATE_BIN, if the caller already knows) and pick the Flutter
+    # binary only for lang=flutter; every other detected/manual lang uses
+    # this skill's own generic red-gate, which reads TEST_CMD from the same
+    # ledger entry.
+    if [ -z "${RED_GATE_BIN:-}" ]; then
+      gate_lang=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null | tail -1 \
+        | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+      if [ "$gate_lang" = "flutter" ]; then
+        RED_GATE_BIN="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate"
+      else
+        RED_GATE_BIN="$SCRIPT_DIR/red-gate"
+      fi
+    fi
     "$RED_GATE_BIN" "$ws" "$task" || true
     action=$(route)
     echo "OUTCOME: $action"
     exit 0
     ;;
-  CODER*|REVIEW*)
-    # C was already dispatched by red-gate (CODER is its hand-off state);
-    # REVIEW means a commit exists and the reviewer dispatch is owned by
-    # green-gate. The orchestrator records the state and hands back.
+  CODER*)
+    # Normal flow never lands here: red-gate now chains straight into
+    # coder-gate after round 1, which owns every retry until PASS/
+    # TEST_DEFECT/budget-exhausted. Reaching CODER here means a resume
+    # after an interrupted session (round N's dispatch happened, its gate
+    # check did not) - drive it the same way red-gate would have.
+    CODER_GATE="${CODER_GATE:-$SCRIPT_DIR/coder-gate}"
+    "$CODER_GATE" "$ws" "$task" || true
+    action=$(route)
+    echo "OUTCOME: $action"
+    exit 0
+    ;;
+  REVIEW*)
+    # A commit exists; the Reviewer dispatch is owned by whichever gate
+    # committed (green-gate for Flutter, coder-gate's own commit step for
+    # the generic engine) and already fired. The orchestrator just reports
+    # the outcome - re-dispatching a second reviewer on the same diff would
+    # duplicate the review seat, exactly what task_reviewer's "no
+    # worker-spawned reviewer" rule exists to prevent.
     echo "OUTCOME: $action"
     exit 0
     ;;

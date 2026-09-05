@@ -7,6 +7,13 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **Compress before you read.** Route any log, stack trace, or diagnostic dump through `token-kill err|src|json FILE` (RTK minification) before it enters context — the 60-90% token savings matters most exactly here, where debugging tends to pull in the largest raw artifacts. It falls back losslessly to raw output if RTK has no filter for the format.
+- **Use the graph instead of grepping for dependents.** When Graphify is enabled, `graphify-subgraph WS TASK` gives you the affected-dependency subgraph for the task under investigation — prefer it over manually tracing call sites when root-causing a regression that crosses files.
+- **Findings stay in English**, per this fork's artifact language policy, even when the bug report or reproduction steps came from a Portuguese-speaking client.
+
+
 **Core principle:** ALWAYS find root cause before attempting fixes. Symptom fixes are failure.
 
 **Violating the letter of this process is violating the spirit of debugging.**

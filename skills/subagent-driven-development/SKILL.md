@@ -7,6 +7,23 @@ description: Use when executing implementation plans with independent tasks in t
 
 Execute plan by dispatching a fresh implementer subagent per task, a task review (spec compliance + code quality) after each, and a broad whole-branch review at the end.
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+**This skill's generic pattern is superseded on this fork by a fixed four-role engine.** Map the roles directly:
+
+| This skill's concept | Fork equivalent |
+|---|---|
+| Orchestrating session | **Script A** (deterministic; gates, routing, dispatch, commits, graph, ledger — never implements or reviews) |
+| Planning / task breakdown | **B**, the strategist session (`writing-plans` output → per-task briefs + RED tests, corrective briefs, arbitration, final review) |
+| Implementer subagent | **C**, `two-model-coder` (Operational tier, write-only, never runs commands, max 4 attempts — 1 round + 3 fixes — resumable within a task via `--continue`) |
+| Reviewer subagent | **D**, `two-model-reviewer` (Strategic tier, structured JSON verdict only: APPROVED / SEND_BACK / ESCALATE; never runs test/analyze itself) |
+| Ad-hoc "strategic coder" escalation | **Removed.** Escalation is B's `ARBITRATE` step — there is no third coder tier. |
+
+- **State is external, not conversational.** Everything this skill would have tracked in the orchestrating session's memory instead lives in the JSON plan, git history, and a script-maintained JSONL ledger. This is what makes the loop compaction-safe: any stage can resume purely from `route-next` reading the ledger.
+- **Dispatch always goes through `scripts/dispatch`**, targeting the named agent definition explicitly (never letting the model inherit).
+- **RED tests move to the brief.** The single biggest behavioral change from the generic skill above: B (or, on the non-two-tier fork, the controller session) writes the task's RED tests itself, at the same moment it writes the brief — not the implementer/C. `red-gate` (Flutter fork) or the controller's own pre-dispatch check (generic fork) materializes and verifies those tests fail for the expected reason *before* the coder is ever dispatched. C/the implementer only ever sees already-verified-RED tests as read-only input and is forbidden from writing or editing any test file — see the updated `implementer-prompt.md` and `two-model-sdd-pipeline/coder-prompt.md`'s "NEVER write or edit test files" rule.
+
+
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
 **Core principle:** Fresh subagent per task + task review (spec + quality) + broad final review = high quality, fast iteration
@@ -67,7 +84,7 @@ digraph process {
         "Dispatch implementer subagent (./implementer-prompt.md)" [shape=box];
         "Implementer asks questions?" [shape=diamond];
         "Answer questions, provide context" [shape=box];
-        "Implementer implements, tests, commits, self-reviews" [shape=box];
+        "Implementer implements against pre-written RED tests, commits, self-reviews" [shape=box];
         "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)" [shape=box];
         "Spec ✅ and quality approved?" [shape=diamond];
         "Finding conflicts with plan text?" [shape=diamond];
@@ -93,9 +110,9 @@ digraph process {
     "Setup: worktree, ledger check, read plan, pre-flight review" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer asks questions?";
     "Implementer asks questions?" -> "Answer questions, provide context" [label="yes"];
-    "Answer questions, provide context" -> "Implementer implements, tests, commits, self-reviews";
-    "Implementer asks questions?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
-    "Implementer implements, tests, commits, self-reviews" -> "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)";
+    "Answer questions, provide context" -> "Implementer implements against pre-written RED tests, commits, self-reviews";
+    "Implementer asks questions?" -> "Implementer implements against pre-written RED tests, commits, self-reviews" [label="no"];
+    "Implementer implements against pre-written RED tests, commits, self-reviews" -> "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)";
     "Generate review package, dispatch task reviewer (./task-reviewer-prompt.md)" -> "Spec ✅ and quality approved?";
     "Spec ✅ and quality approved?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "Spec ✅ and quality approved?" -> "Finding conflicts with plan text?" [label="no"];
@@ -260,6 +277,17 @@ and fix-round diffs need it.
   (5) the report-file path and report contract. Exact values (numbers,
   magic strings, signatures, test cases) appear only in the brief. Never
   make a subagent read the whole plan file.
+- **RED tests: written and verified by you, before dispatch — not by the
+  implementer.** Write the task's test file(s) yourself at brief-creation
+  time, alongside the brief, and confirm they fail for the expected reason
+  (the same check `red-gate` automates for the Flutter fork: the failure
+  output must contain the stated expected-failure text, not just "it
+  failed"). Only dispatch the implementer once that RED verification
+  passes. Pass the RED test file paths in the dispatch prompt as read-only
+  inputs — see `implementer-prompt.md`'s "Tests Are Not Yours To Write". A
+  RED test that passes before implementation, or fails for the wrong
+  reason, means the brief is defective: fix it yourself before dispatching,
+  never hand it off broken.
 - **Report file:** name the implementer's report file after the brief
   (brief `…/task-N-brief.md` → report `…/task-N-report.md`) and put it in
   the dispatch prompt. The implementer writes the full report there and
@@ -285,13 +313,15 @@ Template: [implementer-prompt.md](implementer-prompt.md)
 
 ### 2. Handle the report
 
-Implementer subagents report one of four statuses. Handle each appropriately:
+Implementer subagents report one of five statuses. Handle each appropriately:
 
 **DONE:** Generate the review package (`scripts/review-package PLAN_FILE BASE HEAD`, from this skill's directory — it prints the unique file path it wrote; BASE is the commit you recorded before dispatching the implementer — never `HEAD~1`, which silently drops all but the last commit of a multi-commit task), then dispatch the task reviewer with the printed path.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
+
+**TEST_DEFECT:** The implementer found a provided RED test that contradicts the brief or asserts something that can't be right — it did not touch the test file (see `implementer-prompt.md`'s "Tests Are Not Yours To Write"). This is your defect, not the implementer's: read its reasoning, correct the test yourself (or correct the brief, if the test was right and the brief was wrong), re-run the RED check to confirm it now fails for the intended reason, and re-dispatch the same implementer agent with the corrected test path. Never ask the implementer to fix its own RED test — that reintroduces exactly the failure mode this paradigm removed.
 
 **BLOCKED:** The implementer cannot complete the task. Assess the blocker:
 1. If it's a context problem, provide more context and re-dispatch with the same model
@@ -312,6 +342,19 @@ final whole-branch review. Never skip the task review, and never accept a
 report missing either verdict — spec compliance AND task quality are both
 required. Implementer self-review never replaces the task review; both are
 needed.
+
+- **Test-integrity check, before you dispatch the reviewer:** run this
+  skill's `scripts/test-integrity BASE HEAD TEST_FILE...` against the RED
+  test file paths you passed the implementer as read-only inputs (BASE is
+  the commit you recorded before dispatch, HEAD is the implementer's
+  latest commit). This is a script decision, not something left for the
+  reviewer to happen to notice: a non-zero exit means the implementer
+  edited a test it was told not to touch. Do not dispatch the reviewer on
+  a tampered diff — handle it like the implementer had reported
+  TEST_DEFECT (see "Handle the report"): read what changed, decide whether
+  to revert and resume the implementer with the finding or (rare) accept
+  the edit only after confirming yourself the original test was wrong, and
+  ledger which you chose and why.
 
 - Hand the reviewer its diff as a file: run this skill's
   `scripts/review-package PLAN_FILE BASE HEAD` and pass the reviewer the file path
@@ -394,7 +437,10 @@ covering test files in the fix message — a one-line fix does not need the
 whole suite.
 
 **The re-review is scoped.** Run `scripts/review-package PLAN_FILE FIX_BASE HEAD`
-where FIX_BASE is the head the previous review saw, and dispatch
+where FIX_BASE is the head the previous review saw, and re-run
+`scripts/test-integrity FIX_BASE HEAD TEST_FILE...` on the same RED test
+paths before dispatching — a fix round can tamper a test as easily as the
+first round can. Then dispatch
 [re-review-prompt.md](re-review-prompt.md) with the findings list, the
 brief, the report file, and the printed diff path. The re-reviewer verdicts
 each finding ADDRESSED or NOT ADDRESSED and flags new breakage in the fix

@@ -2,6 +2,17 @@
 
 Use this template when dispatching an implementer subagent.
 
+**New paradigm (aligned with two-model-sdd-pipeline):** RED tests are
+written by the controller (you) at brief-creation time, not by the
+implementer subagent. Before dispatching, materialize the brief's RED
+tests into the working tree and confirm they fail for the expected
+reason — mirroring `red-gate`'s check (`EXPECTED-RED:` text must appear
+in the failure output) even when this skill's own `scripts/` don't
+include a dedicated gate script. A brief whose RED tests pass before
+implementation, or fail for the wrong reason, is defective — fix the
+brief yourself before dispatching; never hand a defective RED test to
+the subagent and let it improvise.
+
 ```
 Subagent (general-purpose):
   description: "Implement Task N: [task name]"
@@ -13,7 +24,11 @@ Subagent (general-purpose):
     ## Task Description
 
     Read your task brief first: [BRIEF_FILE]
-    It contains the full task text from the plan.
+    It contains the full task text from the plan, including the exact
+    RED test file(s) already written and verified failing for the
+    right reason — those files are already present at
+    [RED_TEST_PATHS]. Read them before you write any code; they are
+    your acceptance criteria.
 
     ## Context
 
@@ -25,15 +40,17 @@ Subagent (general-purpose):
     - The requirements or acceptance criteria
     - The approach or implementation strategy
     - Dependencies or assumptions
-    - Anything unclear in the task description
+    - Anything unclear in the task description or the provided RED tests
 
     **Ask them now.** Raise any concerns before starting work.
 
     ## Your Job
 
     Once you're clear on requirements:
-    1. Implement exactly what the task specifies
-    2. Write tests (following TDD if task says to)
+    1. Implement exactly what the task specifies, against the RED tests
+       already provided in [RED_TEST_PATHS] — nothing extra (YAGNI)
+    2. Verify the provided tests now pass (GREEN); do not write new
+       test files or broaden coverage beyond the brief
     3. Verify implementation works
     4. Commit your work
     5. Self-review (see below)
@@ -46,6 +63,28 @@ Subagent (general-purpose):
 
     While iterating, run the focused test for what you're changing; run the
     full suite once before committing, not after every edit.
+
+    ## Tests Are Not Yours To Write
+
+    The RED tests at [RED_TEST_PATHS] were written and verified by the
+    controller before you were dispatched — that verification is what
+    authorized this dispatch. You implement against them; you do not
+    author them.
+
+    - **NEVER create new test files, and NEVER edit the provided ones** —
+      not to fix them, not to "adjust" an expectation, not even
+      whitespace. Editing a RED test erases the brief's ground truth and
+      invalidates the verification that happened before you started.
+    - **If a provided test looks wrong** (contradicts the brief, asserts
+      something that can't be right, or references something that
+      doesn't exist), **do not fix it yourself.** Stop and report status
+      **TEST_DEFECT** with your reasoning — the controller owns the
+      test/brief and will correct it, then re-verify RED, then re-dispatch.
+    - If the task genuinely needs test coverage the brief didn't
+      anticipate (e.g. an edge case the RED tests don't exercise), note
+      it as a concern in your report rather than adding tests
+      unilaterally — the controller decides whether that's a brief gap
+      or out of scope.
 
     ## You Do Not Dispatch Subagents
 
@@ -83,11 +122,14 @@ Subagent (general-purpose):
     - You feel uncertain about whether your approach is correct
     - The task involves restructuring existing code in ways the plan didn't anticipate
     - You've been reading file after file trying to understand the system without progress
+    - A provided RED test looks wrong (see **Tests Are Not Yours To Write** — report
+      TEST_DEFECT, don't fix it)
 
-    **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
-    specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
-    or break the task into smaller pieces.
+    **How to escalate:** Report back with status BLOCKED, NEEDS_CONTEXT, or
+    TEST_DEFECT. Describe specifically what you're stuck on, what you've
+    tried, and what kind of help you need. The controller can provide more
+    context, re-dispatch with a more capable model, correct a defective
+    test and re-verify RED, or break the task into smaller pieces.
 
     ## Before Reporting Back: Self-Review
 
@@ -107,12 +149,13 @@ Subagent (general-purpose):
     - Did I avoid overbuilding (YAGNI)?
     - Did I only build what was requested?
     - Did I follow existing patterns in the codebase?
+    - Did I leave every provided test file byte-for-byte as given?
 
     **Testing:**
-    - Do tests actually verify behavior (not just mock behavior)?
-    - Did I follow TDD if required?
-    - Are tests comprehensive?
+    - Do the provided tests now pass, for the right reason (not vacuously)?
+    - Did I run the full provided suite, not just the tests I expected to pass?
     - Is the test output pristine (no stray warnings or noise)?
+    - Did I avoid writing, editing, or deleting any test file?
 
     If you find issues during self-review, fix them now before reporting.
 
@@ -123,32 +166,38 @@ Subagent (general-purpose):
     report to your report file: what you changed, the covering tests you
     ran, the command, and the output. Reviewers will not re-run tests for
     you — your report is the test evidence. Then reply with the same short
-    status contract as your first report.
+    status contract as your first report. A review finding is never
+    licence to edit a test file — if the fix seems to require that, stop
+    and report TEST_DEFECT instead.
 
     ## Report Format
 
     Write your full report to [REPORT_FILE]:
     - What you implemented (or what you attempted, if blocked)
     - What you tested and test results
-    - **TDD Evidence** (if TDD was required for this task):
-      - RED: command run, relevant failing output before implementation, and why the failure was expected
-      - GREEN: command run and relevant passing output after implementation
+    - **GREEN Evidence** (the RED tests were already verified failing before
+      you started — that record lives in the brief, not your report):
+      - command run and relevant passing output after implementation, for
+        every test file in [RED_TEST_PATHS]
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns
 
     Then report back with ONLY (under 15 lines — the detail lives in the
     report file):
-    - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+    - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT | TEST_DEFECT
     - Commits created (short SHA + subject)
     - One-line test summary (e.g. "14/14 passing, output pristine")
     - Your concerns, if any
     - The report file path
 
-    If BLOCKED or NEEDS_CONTEXT, put the specifics in the final message
-    itself — the controller acts on it directly.
+    If BLOCKED, NEEDS_CONTEXT, or TEST_DEFECT, put the specifics in the
+    final message itself — the controller acts on it directly.
 
     Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
     Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need
-    information that wasn't provided. Never silently produce work you're unsure about.
+    information that wasn't provided. Use TEST_DEFECT if a provided test
+    contradicts the brief or asserts something that can't be right. Never
+    silently produce work you're unsure about, and never silently "fix" a
+    test to make it agree with your implementation.
 ```

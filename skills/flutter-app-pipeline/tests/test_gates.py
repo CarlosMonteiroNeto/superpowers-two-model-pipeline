@@ -101,6 +101,18 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             )
         else:
             self.graphify_cmd = self.graphify
+        # coder-gate stub: red-gate now chains into coder-gate after dispatch.
+        # The chain is stubbed out so red-gate tests assert RED verification +
+        # dispatch without exercising the full retry loop (covered separately
+        # in test_coder_gate.py).
+        self.coder_gate = write_stub(
+            self.stub_dir,
+            "coder-gate",
+            """
+echo "coder-gate ran" >&2
+exit "${STUB_CODER_GATE_EXIT:-0}"
+""",
+        )
         self.env = {
             "FLUTTER_BIN": self.flutter,
             "DART_BIN": self.dart,
@@ -108,6 +120,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             "GIT_BIN": shutil.which("git") or "git",
             "RTK_ENABLED": "0",
             "DISPATCH_BIN": self.dispatch,
+            "CODER_GATE": self.coder_gate,
         }
 
     def tearDown(self):

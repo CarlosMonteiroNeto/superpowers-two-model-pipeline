@@ -7,6 +7,13 @@ description: Use when receiving code review feedback, before implementing sugges
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **Feedback arrives as structured JSON, not prose.** The reviewer role (D, `two-model-reviewer`) returns a verdict object — `APPROVED` / `SEND_BACK` / `ESCALATE` — never a free-text review to interpret. This skill's "read the reviewer's comments and decide how to respond" step is replaced by `route-next` reading that verdict directly.
+- **Routing is deterministic, not a judgment call.** `SEND_BACK` always routes to `CORRECTIVE` (B writes a corrective brief, C resumes within-session via `--continue`); `ESCALATE` or attempt-overflow always routes to `ARBITRATE` (B decides, per the project's arbitration rules). There is no ad-hoc "let me just fix it myself" branch — the coder (C) is write-only and never receives review feedback directly; it only ever sees briefs from B.
+- **Integrity is checked before the verdict is trusted.** `red-integrity WORKSPACE TASK` byte-compares the committed tests against the brief's RED-TESTS before D's verdict is acted on — a reviewer verdict on tampered tests is not actionable.
+
+
 Code review requires technical evaluation, not emotional performance.
 
 **Core principle:** Verify before implementing. Ask before assuming. Technical correctness over social comfort.

@@ -33,8 +33,16 @@ Before `brainstorming` starts:
 - The tiers are **pre-configured locally** (e.g. `~/.config/opencode/agent/`
   defines `two-model-coder` as Operational and `two-model-reviewer` as
   Strategic, both `mode: all`). When they exist, do **not** ask which model
-  maps to which tier — the gate is: "use this pipeline? (default YES) + test
-  command + analyze command", asked once per branch.
+  maps to which tier — the gate is: "use this pipeline? (default YES)",
+  asked once per branch.
+- **Test/analyze commands are resolved, not asked.** Run
+  `scripts/resolve-toolchain WORKSPACE` before task 1 ever routes. It
+  inspects the project for a known ecosystem marker and ledgers `TEST_CMD`/
+  `ANALYZE_CMD` itself — this is the same "script decides and routes,
+  no LLM approval" principle applied to the gate's own setup, not just its
+  per-task checks. Ask the human only when it exits 1 (ambiguous — more than
+  one ecosystem marker) or 2 (no known marker); in that case ledger the
+  answer yourself so it is never asked again on this branch.
 - Ask about tier models **only when the local pipeline is not installed**
   (no pre-configured tier agents found).
 
@@ -86,8 +94,9 @@ depends on them, and they must survive compaction.
   stdout), so raw command output never enters an LLM context window. LLMs
   never run bare commands.
 - **C is write-only (ADR-0002):** the Coder never runs tests or analysis.
-  Script A runs task tests → full suite → analyze, deciding each by exit
-  code inside the script, and feeds failures back to C for fix rounds.
+  `coder-gate` runs the full gate (`green-gate` for Flutter, `run-gates`
+  otherwise), deciding by exit code alone, and on failure builds the fix
+  prompt and redispatches C itself — B is never in this loop.
 - **The Reviewer reviews compiler-approved code only (Item 2):** D never
   runs or re-runs test/analyze; its scope is design, architecture, spec
   compliance, and interface discipline on the committed diff.
@@ -115,10 +124,31 @@ the spike: subagent-mode agents cannot be targeted headlessly by
 
 - **`orchestrator WS TASK [TOTAL]`** — thin driver: runs `route-next`, executes
   the emitted action, re-routes, prints `OUTCOME:` for B.
-- **`red-gate WS TASK`** — materializes the brief's RED tests and verifies the
-  expected failure for the expected reason (`EXPECTED-RED:` substring). On
-  success it dispatches C headlessly (Item 4). Defective brief → exit 1,
-  no dispatch, back to B.
+- **`resolve-toolchain WS [ROOT]`** — one-time-per-branch, no-LLM detection:
+  reads the project's ecosystem marker (`pubspec.yaml`, `Cargo.toml`, ...)
+  and ledgers `TEST_CMD`/`ANALYZE_CMD`/`lang` before task 1 ever routes.
+  Ambiguous or unknown → exit 1/2, the only case that still asks a human.
+- **`red-gate WS TASK [TEST_CMD]`** — materializes the brief's RED tests and
+  verifies the expected failure for the expected reason (`EXPECTED-RED:`
+  substring). On success it dispatches C headlessly (Item 4), then chains
+  into `coder-gate` (below) — this call does not return until the task is
+  green-and-reviewed or genuinely stuck. Defective brief → exit 1, no
+  dispatch, back to B. `orchestrator` auto-selects which `red-gate` binary
+  runs (Flutter's hardcoded one, or this skill's generic one reading
+  `TEST_CMD` from `resolve-toolchain`'s ledger entry) from `gate.lang` —
+  never asked, never guessed by an LLM.
+- **`coder-gate WS TASK`** — owns every round after the first: runs the gate
+  (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers
+  `coder_round`, and on failure builds the fix prompt (prior diff + gate
+  report + brief — file-path interpolation only, no LLM call) and resumes C
+  with `--continue`. Stops (no more retries) on a 4th failure or on
+  `TEST_DEFECT` found in the round's log, ledgering `escalated` in the
+  latter case so `route-next` goes straight to ARBITRATE. On PASS: commits
+  (generic engine) or leaves the commit to `green-gate` (Flutter, which
+  already did it as part of the passing check), then builds the review
+  package and dispatches D. This is the piece that used to require B
+  between every round — see `orchestrator`'s `CODER*` comment for the one
+  case it still hands back (a resumed/interrupted session).
 - **`green-gate`** — chains full suite + `flutter analyze` + format + commit.
   On success: post-commit `graphify-update`, builds the review package, and
   dispatches D headlessly (Item 3). `--no-commit` validates only.
@@ -237,9 +267,11 @@ digraph pipeline {
     "B: JIT brief + RED test (task N)" -> "red-gate: materialize + verify RED";
     "red-gate: materialize + verify RED" -> "defective? ARBITRATE to B" [label="no (exit 1)"];
     "red-gate: materialize + verify RED" -> "dispatch C (headless, fresh)" [label="yes"];
-    "dispatch C (headless, fresh)" -> "Script A: task tests -> full suite -> analyze";
-    "Script A: task tests -> full suite -> analyze" -> "fail -> resume C (--continue)" [label="red"];
-    "Script A: task tests -> full suite -> analyze" -> "green-gate: commit + graphify-update" [label="green"];
+    "dispatch C (headless, fresh)" -> "coder-gate: run gate, ledger coder_round";
+    "coder-gate: run gate, ledger coder_round" -> "resume C (--continue), re-check" [label="fail, budget left"];
+    "resume C (--continue), re-check" -> "coder-gate: run gate, ledger coder_round";
+    "coder-gate: run gate, ledger coder_round" -> "ARBITRATE to B" [label="fail at 4/4 or TEST_DEFECT"];
+    "coder-gate: run gate, ledger coder_round" -> "green-gate: commit + graphify-update" [label="green"];
     "green-gate: commit + graphify-update" -> "dispatch D (headless, fresh) + review package";
     "dispatch D (headless, fresh) + review package" -> "D JSON verdict: APPROVED / SEND_BACK / ESCALATE";
     "D JSON verdict: APPROVED / SEND_BACK / ESCALATE" -> "route-next";
@@ -306,14 +338,19 @@ For each task in order:
    failure reason against `EXPECTED-RED:` — a RED that passes, or that fails
    for the wrong reason (e.g. a compile error in test setup instead of the
    missing symbol), is a defective brief: exit 1, no dispatch, back to B
-   (`arbitrate`). On success red-gate dispatches C. Ledger: `red_check`.
+   (`arbitrate`). On success red-gate dispatches C, then chains straight
+   into `coder-gate` (step 3) — this call does not return to B until the
+   task is green-and-reviewed or genuinely stuck. Ledger: `red_check`.
 
-3. **Coder rounds.** C (Operational, `two-model-coder`) writes code only —
-   it never runs commands (ADR-0002). Script A runs task tests → full suite →
-   `flutter analyze`; any failure resumes the same C session
-   (`dispatch --continue --session`) with the failure output (minified by
-   `token-kill`) for the next fix round. Budget: round 1 + 3 fixes (4
-   attempts). Ledger: `coder_round` each.
+3. **Coder rounds — fully script-driven.** C (Operational, `two-model-coder`)
+   writes code only — it never runs commands (ADR-0002). `coder-gate` runs
+   the gate (task's full suite + `flutter analyze`, or `run-gates` for the
+   generic engine) by exit code alone, ledgers `coder_round`, and on failure
+   builds the fix prompt (prior diff + gate report + brief) and resumes the
+   same C session (`dispatch --continue --session`) for the next fix round.
+   Budget: round 1 + 3 fixes (4 attempts); a 4th failure or `TEST_DEFECT`
+   stops the loop and `route-next` emits ARBITRATE. Ledger: `coder_round`
+   each round, `escalated` on TEST_DEFECT.
 
 4. **Wrap-up on success.** All gates green → `green-gate` commits, appends
    the `commit` ledger entry, runs `graphify-update` (post-commit, ADR-0004),

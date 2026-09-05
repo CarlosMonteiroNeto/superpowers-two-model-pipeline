@@ -7,32 +7,59 @@
 # multi-round tasks intact. Range-named output means a re-review after
 # fixes gets a distinct fresh file.
 #
-# Usage: review-package WORKSPACE BASE HEAD [OUTFILE]
+# When TASK is given, the task's brief (task-TASK-brief.md) and interfaces
+# file (task-TASK-interfaces.md, if present) are inlined ahead of the commit
+# list, so the Reviewer receives the context the dispatch contract promises
+# ("read the attached review package, the task brief, and the interfaces
+# file when provided") in the single file already delivered via
+# --prompt-file.
+#
+# Usage: review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]
 # Default OUTFILE: <workspace>/review-<base7>..<head7>.diff
 set -euo pipefail
 
-if [ $# -lt 3 ] || [ $# -gt 4 ]; then
-  echo "usage: review-package WORKSPACE BASE HEAD [OUTFILE]" >&2
+if [ $# -lt 3 ] || [ $# -gt 5 ]; then
+  echo "usage: review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]" >&2
   exit 2
 fi
 
 ws=$1
 base=$2
 head=$3
+task=${5:-}
 [ -d "$ws" ] || { echo "no such workspace: $ws" >&2; exit 2; }
 
 git rev-parse --verify --quiet "$base" >/dev/null || { echo "bad BASE: $base" >&2; exit 2; }
 git rev-parse --verify --quiet "$head" >/dev/null || { echo "bad HEAD: $head" >&2; exit 2; }
 
-if [ $# -eq 4 ]; then
+if [ $# -ge 4 ] && [ -n "$4" ]; then
   out=$4
 else
   out="$ws/review-$(git rev-parse --short "$base")..$(git rev-parse --short "$head").diff"
 fi
 
+brief="$ws/task-$task-brief.md"
+interfaces="$ws/task-$task-interfaces.md"
+
 {
   echo "# Review package: ${base}..${head}"
   echo
+  if [ -n "$task" ]; then
+    if [ -f "$brief" ]; then
+      echo "## Task Brief"
+      echo "(task-$task-brief.md)"
+      echo
+      cat "$brief"
+      echo
+    fi
+    if [ -f "$interfaces" ]; then
+      echo "## Interfaces"
+      echo "(task-$task-interfaces.md)"
+      echo
+      cat "$interfaces"
+      echo
+    fi
+  fi
   echo "## Commits"
   git log --oneline "${base}..${head}"
   echo

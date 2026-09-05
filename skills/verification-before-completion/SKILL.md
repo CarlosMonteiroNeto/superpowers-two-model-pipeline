@@ -7,6 +7,13 @@ description: Use when about to claim work is complete, fixed, or passing, before
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **Anything a script can check, a script checks — not the LLM's self-report.** Tests passing, lints clean, the build succeeding: these are `run-gates` / `green-gate` / `final-gate` exit codes, not a completion checklist the LLM fills in from memory. `green-gate` alone chains `flutter test` + `flutter analyze` + format + commit, and only proceeds to graph update + reviewer dispatch on a real 0 exit.
+- **LLM verification is reserved for what scripts cannot judge**: does the result actually match stated intent, and is there scope creep beyond what was asked — the parts no exit code captures.
+- **A green exit code is necessary, not sufficient**, before this skill's own "am I actually done" pass — never treat a passing gate alone as completion.
+
+
 **Core principle:** Evidence before claims, always.
 
 **Violating the letter of this rule is violating the spirit of this rule.**

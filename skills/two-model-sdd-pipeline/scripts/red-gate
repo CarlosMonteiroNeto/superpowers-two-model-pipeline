@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Generic-engine RED confirmation (language-agnostic mirror of
+# flutter-app-pipeline/scripts/red-gate). Materializes the brief's RED test
+# files into the working tree and verifies they FAIL for the expected
+# reason, using the TEST_CMD resolved once per branch by resolve-toolchain
+# (ledger `gate` entry) instead of a hardcoded test runner. A RED test that
+# passes before implementation, or fails for the wrong reason, means the
+# brief is defective (exit 1) - back to B, never silently "fixed".
+#
+# Brief convention (task-N-brief.md), identical to the Flutter fork:
+#   RED-TESTS:
+#   <workspace>/task-N-test.EXT -> <real test path>
+#
+#   EXPECTED-RED:
+#   <text that must appear verbatim in the failure report>
+#
+# Usage: red-gate WORKSPACE TASK [TEST_CMD]
+#   TEST_CMD  optional override; default is the ledger's gate entry
+#             (test_cmd=... from resolve-toolchain, auto or manual).
+#
+# Exit codes: 0 = RED verified (expected failure, expected reason) + C
+#             dispatched; 1 = defective brief (no dispatch);
+#             2 = usage / missing brief / missing test_cmd.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "usage: red-gate WORKSPACE TASK [TEST_CMD]" >&2
+  exit 2
+fi
+
+ws=$1
+task=$2
+brief="$ws/task-$task-brief.md"
+ledger="$ws/ledger.jsonl"
+
+[ -f "$brief" ] || { echo "RED-GATE: no brief: $brief" >&2; exit 2; }
+
+test_cmd=${3:-}
+if [ -z "$test_cmd" ]; then
+  [ -f "$ledger" ] || { echo "RED-GATE: no TEST_CMD given and no ledger to read it from" >&2; exit 2; }
+  test_cmd=$(grep -E '"type": *"gate"' "$ledger" | tail -1 | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
+  [ -n "$test_cmd" ] || { echo "RED-GATE: no test_cmd in ledger - run resolve-toolchain first" >&2; exit 2; }
+fi
+
+targets=()
+# RED-TESTS block ends at the first blank line (or EXPECTED-RED marker).
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  case "$line" in
+    EXPECTED-RED:*) break ;;
+  esac
+  src=${line%% -> *}
+  dst=${line#* -> }
+  if [ -z "$src" ] || [ -z "$dst" ]; then
+    echo "RED-GATE: bad RED-TESTS entry: $line" >&2
+    exit 2
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst" || { echo "RED-GATE: cannot materialize $src -> $dst" >&2; exit 2; }
+  echo "RED-GATE: materialized $src -> $dst"
+  targets+=("$dst")
+done < <(sed -n '/^RED-TESTS:/,/^$/p' "$brief" | sed -n '2,$p' | grep -v '^```')
+
+if [ "${#targets[@]}" -eq 0 ]; then
+  echo "RED-GATE: no RED-TESTS entries in brief" >&2
+  exit 2
+fi
+
+# Expected failure reason: first non-empty line after the EXPECTED-RED marker.
+expected=$(sed -n '/^EXPECTED-RED:/,$p' "$brief" | sed -n '2,$p' | grep -v '^```' | grep -v '^[[:space:]]*$' | head -1)
+
+# Same command chain the flutter fork uses: full report to file, verdict is
+# the raw exit code - never a wrapper's interpretation of it. Deliberately
+# NOT appending target file paths to $test_cmd: pytest/jest/go test/cargo
+# test all auto-discover newly materialized test files under their normal
+# conventions, and per-runner path syntax differs too much to genericize
+# safely. If a project's test command needs explicit paths, encode that in
+# the resolved TEST_CMD itself (resolve-toolchain's manual fallback), not here.
+if "$SCRIPT_DIR/cmd" --full-file "$ws/red-gate-report.txt" -- $test_cmd; then
+  echo "RED-GATE: RED tests PASSED before implementation - brief defective (see $ws/red-gate-report.txt)" >&2
+  exit 1
+fi
+
+if [ -z "$expected" ]; then
+  echo "RED-GATE: brief has no EXPECTED-RED text - cannot verify the failure reason (see $ws/red-gate-report.txt)" >&2
+  exit 1
+fi
+
+if ! grep -Fq "$expected" "$ws/red-gate-report.txt"; then
+  echo "RED-GATE: RED failure does not match the expected reason - brief defective (see $ws/red-gate-report.txt)" >&2
+  exit 1
+fi
+
+echo "RED-GATE: RED verified (expected failure, expected reason)"
+
+if [ -f "$ledger" ]; then
+  "$SCRIPT_DIR/ledger-append" "$ledger" red_check "$task" \
+    "RED verified (expected failure, expected reason)" || true
+fi
+
+# Dispatch the Coder headlessly, same as the Flutter fork: RED verified
+# means the brief is sound, Script A launches C directly - no B
+# intermediation, no LLM approval of a check the exit code already decided.
+DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+"$DISPATCH_BIN" --agent two-model-coder --task "$task" \
+  --prompt-file "$brief" --log "$ws/task-$task-coder.log"
+
+# Close the loop here instead of stopping at "C was dispatched": run the
+# gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
+# commit and dispatch the Reviewer on green - all without waiting on B.
+CODER_GATE="${CODER_GATE:-$SCRIPT_DIR/coder-gate}"
+"$CODER_GATE" "$ws" "$task"
+exit $?

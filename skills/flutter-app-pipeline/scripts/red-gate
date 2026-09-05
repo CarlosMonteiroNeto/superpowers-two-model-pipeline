@@ -77,6 +77,13 @@ fi
 
 echo "RED-GATE: RED verified (expected failure, expected reason)"
 
+TWO_MODEL_SCRIPTS="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts"
+
+if [ -x "$TWO_MODEL_SCRIPTS/ledger-append" ]; then
+  "$TWO_MODEL_SCRIPTS/ledger-append" "$ws/ledger.jsonl" red_check "$task" \
+    "RED verified (expected failure, expected reason)" || true
+fi
+
 # Graphify is NOT chained here: the Coder reads only curated artifacts (the
 # brief and the materialized tests), and graphify rebuilds are a
 # Controller-side lazy optimization at brief time - not a per-task gate
@@ -85,8 +92,14 @@ echo "RED-GATE: RED verified (expected failure, expected reason)"
 # Dispatch the Coder headlessly (Item 4, ADR-0001): RED verified means the
 # brief is sound; Script A launches C directly, no main-agent intermediation.
 # C writes code only; Script A runs the gates (write-only Coder, ADR-0002).
-DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/dispatch}"
+DISPATCH_BIN="${DISPATCH_BIN:-$TWO_MODEL_SCRIPTS/dispatch}"
 "$DISPATCH_BIN" --agent two-model-coder --task "$task" \
   --prompt-file "$brief" --log "$ws/task-$task-coder.log"
 
-exit 0
+# Close the loop here instead of stopping at "C was dispatched": run the
+# gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
+# commit and dispatch the Reviewer on green - all without waiting on B.
+# See coder-gate's header for the full state machine.
+CODER_GATE="${CODER_GATE:-$TWO_MODEL_SCRIPTS/coder-gate}"
+"$CODER_GATE" "$ws" "$task"
+exit $?
