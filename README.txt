@@ -151,6 +151,8 @@ skills/flutter-app-pipeline/scripts/:
   pub-sync             download + lockfile + version-conflict report
   red-gate             materialize RED tests, verify the failure is the
                        EXPECTED-RED reason, and dispatch the Coder on success
+                       (then chains into coder-gate, which owns the retry
+                       loop through commit + Reviewer dispatch)
   green-gate           chain test + analyze + format + commit; on commit:
                        graphify-update + review package + Reviewer dispatch
   graphify-update      rebuild the graph post-commit only (ADR-0004)
@@ -163,7 +165,21 @@ skills/flutter-app-pipeline/scripts/:
 
 skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace
+  resolve-toolchain    one-time-per-branch ecosystem detection: inspects the
+                       project for a known marker (pubspec.yaml, Cargo.toml,
+                       go.mod, package.json, pyproject.toml, requirements.txt)
+                       and ledgers TEST_CMD/ANALYZE_CMD (exit 1/2 = ask once,
+                       then ledger manually)
   ledger-append        append one structured JSONL ledger entry
+  red-gate             generic-engine RED confirmation: materializes the
+                       brief's RED tests and verifies the EXPECTED-RED reason
+                       using the ledger's test_cmd; dispatches C then chains
+                       into coder-gate
+  coder-gate           owns every Coder round after round 1: runs the gate
+                       (green-gate for Flutter, run-gates otherwise), ledgers
+                       coder_round, builds the fix prompt + resumes C with
+                       --continue on failure; on green commits (generic) and
+                       dispatches D; stops at 4/4 or TEST_DEFECT -> ARBITRATE
   cmd                  generic command runner: saves FULL output to a file,
                        prints the RTK-compressed view on stdout, returns the
                        command's true exit code (flutter test/analyze via

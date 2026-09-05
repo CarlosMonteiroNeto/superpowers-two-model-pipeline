@@ -19,6 +19,26 @@ to EVERY task on EVERY path below — the ceremony scales with the task;
 the approval gate never does.
 </HARD-GATE>
 
+## Pipeline Integration (two-model-sdd-pipeline / flutter-app-pipeline)
+
+- **Pre-flight is deterministic, not memory.** Before classifying anything,
+  run `scripts/orient-llm` — it locates and prints this repo's `README-LLM.md`
+  so every session starts from the same mental model instead of relying on
+  what the LLM "remembers" from earlier in the conversation. Exit 1 (missing)
+  is a hard gate: stop.
+- **This skill covers Phase 1 only.** Architectural output (the written spec)
+  feeds Phase 1a/1b (commercial + technical requirements) and terminates into
+  `writing-plans`, never directly into implementation. Per-task design
+  decisions (Phase 2) belong to `flutter-app-pipeline`'s research/selection
+  loop, not to this skill.
+- **Artifacts are English-only.** The spec document, `CONTEXT.md`, and any
+  ADRs this phase produces are written in English regardless of the
+  developer's spoken language — the one exception anywhere in the pipeline is
+  user-facing UI copy.
+- **The human-approval gate is untouched by automation.** Nothing above
+  changes the HARD-GATE: no script substitutes for the human's explicit "yes"
+  on scope or design.
+
 ## Pre-flight: orient on the pipeline (deterministic)
 
 Before classifying anything, if this skill's `scripts/orient-llm` exists,

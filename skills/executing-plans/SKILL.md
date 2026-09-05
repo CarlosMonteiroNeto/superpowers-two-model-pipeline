@@ -7,6 +7,13 @@ description: Use when you have a written implementation plan to execute in a sep
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **The router decides "what's next," not the LLM.** This skill's manual "work through tasks in order" loop is replaced, per task, by `route-next WORKSPACE TASK [TOTAL]`: it reads the ledger and deterministically emits the next action (BRIEF / RED / CODER N ROUND / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW). `orchestrator` executes the emitted action and prints `OUTCOME:` back to B.
+- **Every command line is compressed and logged.** Task/test/analyze runs go through `scripts/cmd --full-file FILE -- CMD...`, which saves full output to FILE and prints an RTK-compressed view to context — the plan's execution trail is never lost, but the LLM never pays full token cost for it.
+- **Resume is structural.** Because state is the ledger (not conversation memory), an interrupted or compacted session resumes correctly just by re-running `route-next` against the same workspace/task.
+
+
 Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."

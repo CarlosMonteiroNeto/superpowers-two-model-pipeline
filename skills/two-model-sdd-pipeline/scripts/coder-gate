@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# Closes the gap between round-1 dispatch (red-gate) and completion: runs
+# the gate check after EVERY Coder round, decides PASS/FAIL/TEST_DEFECT by
+# exit code and log content alone, and drives the whole retry loop itself -
+# ledgering coder_round, redispatching C with --continue, or handing off to
+# commit + Reviewer dispatch on green. Zero LLM involvement between "C just
+# finished a round" and "task is committed and D is dispatched" or "budget
+# exhausted / TEST_DEFECT, hand to B for ARBITRATE".
+#
+# Chained by red-gate immediately after round 1's dispatch. Safe to call
+# again standalone on manual resume (e.g. after a crashed session) - it
+# recomputes the round from the ledger, not from memory.
+#
+# Requires a `gate` ledger entry (resolve-toolchain) with lang/test_cmd/
+# analyze_cmd, and a brief at WORKSPACE/task-N-brief.md.
+#
+# Usage: coder-gate WORKSPACE TASK
+# Exit codes: 0 = green, committed, Reviewer dispatched; 1 = budget
+# exhausted (4/4 rounds, no pass - route-next will emit ARBITRATE);
+# 2 = TEST_DEFECT reported (escalated ledgered - route-next will emit
+# ARBITRATE); 3 = usage / missing gate or brief.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+FLUTTER_GATE="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/green-gate"
+GRAPHIFY_UPDATE="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/graphify-update"
+
+if [ $# -ne 2 ]; then
+  echo "usage: coder-gate WORKSPACE TASK" >&2
+  exit 3
+fi
+
+ws=$1
+task=$2
+ledger="$ws/ledger.jsonl"
+brief="$ws/task-$task-brief.md"
+
+[ -f "$ledger" ] || { echo "CODER-GATE: no ledger: $ledger" >&2; exit 3; }
+[ -f "$brief" ] || { echo "CODER-GATE: no brief: $brief" >&2; exit 3; }
+
+gate_entry=$(grep -E '"type":"gate"|"type": *"gate"' "$ledger" | tail -1)
+[ -n "$gate_entry" ] || { echo "CODER-GATE: no gate entry - run resolve-toolchain first" >&2; exit 3; }
+lang=$(printf '%s' "$gate_entry" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+test_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
+analyze_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)".*/\1/p')
+
+base=$(git rev-parse HEAD)
+
+while true; do
+  task_entries=$(grep -E '"task": *"'"$task"'"' "$ledger" || true)
+  rounds=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"coder_round"' || true)
+  round=$((rounds + 1))
+
+  if [ "$round" -eq 1 ]; then
+    log="$ws/task-$task-coder.log"
+  else
+    log="$ws/task-$task-coder-round-$round.log"
+  fi
+
+  if [ -f "$log" ] && grep -q "TEST_DEFECT" "$log"; then
+    "$SCRIPT_DIR/ledger-append" "$ledger" escalated "$task" \
+      "TEST_DEFECT reported by Coder round $round" round="$round/4"
+    echo "CODER-GATE: TEST_DEFECT (round $round) - escalated, no further retries; B arbitrates" >&2
+    exit 2
+  fi
+
+  report="$ws/task-$task-gate-round-$round.txt"
+  passed=0
+  if [ "$lang" = "flutter" ]; then
+    if GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" \
+        -w "$ws" -t "$task" -b "$base" -l "$ledger" \
+        -m "task $task green (round $round)"; then
+      passed=1
+    fi
+  else
+    RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
+    if "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd"; then
+      passed=1
+    fi
+  fi
+
+  if [ "$passed" -eq 1 ]; then
+    "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
+      "Coder round $round passed" status=PASS round="$round/4"
+
+    if [ "$lang" != "flutter" ]; then
+      # Flutter's green-gate already committed + dispatched D above. The
+      # generic engine's run-gates deliberately never commits (it is a
+      # check-only mirror) - Script A (this script) owns that step here,
+      # mirroring green-gate's post-commit chain exactly.
+      git add -A
+      if git commit -m "task $task green (round $round)" >/dev/null 2>&1; then
+        sha=$(git rev-parse --short HEAD)
+        "$SCRIPT_DIR/ledger-append" "$ledger" commit "$task" "green $sha" commits="$sha"
+        [ -x "$GRAPHIFY_UPDATE" ] && "$GRAPHIFY_UPDATE" "$(pwd)" || true
+        pkg="$ws/task-$task-review-package.diff"
+        "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" || true
+        DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+        "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
+          --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
+      else
+        echo "CODER-GATE: gate green but nothing to commit (round $round)" >&2
+      fi
+    fi
+    exit 0
+  fi
+
+  "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
+    "Coder round $round failed" status=FAIL round="$round/4"
+
+  if [ "$round" -ge 4 ]; then
+    echo "CODER-GATE: budget exhausted (4/4, no pass) - B arbitrates" >&2
+    exit 1
+  fi
+
+  # Build the fix prompt: purely mechanical (file paths + the static
+  # coder-prompt.md Round 2+ framing) - no LLM needed to construct it.
+  diff_file="$ws/task-$task-diff-round-$round.txt"
+  git diff > "$diff_file"
+  next_round=$((round + 1))
+  fix_prompt="$ws/task-$task-fix-round-$next_round.md"
+  cat > "$fix_prompt" << FIXEOF
+# Fix Round $next_round/4 — Task $task
+
+A previous coder attempt did not satisfy the gate. Read these first:
+
+- Prior diff (your uncommitted changes so far): $diff_file
+- Gate failure output: $report
+- Your original brief remains the authority: $brief
+
+Fix the failure. You decide fresh what to keep from the prior diff; the
+brief and RED tests are unchanged and still binding. Do not edit any test
+file — if the failure indicates the test itself is wrong, report
+TEST_DEFECT instead of changing it.
+
+Report using the same status contract as before.
+FIXEOF
+
+  session=""
+  [ -f "$ws/task-$task-session.txt" ] && session=$(cat "$ws/task-$task-session.txt")
+  next_log="$ws/task-$task-coder-round-$next_round.log"
+  DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+
+  if [ -n "$session" ]; then
+    "$DISPATCH_BIN" --agent two-model-coder --task "$task" \
+      --continue "$session" --prompt-file "$fix_prompt" --log "$next_log"
+  else
+    echo "CODER-GATE: no session recorded for round 1 - dispatching fresh (context reset)" >&2
+    "$DISPATCH_BIN" --agent two-model-coder --task "$task" \
+      --prompt-file "$fix_prompt" --log "$next_log"
+  fi
+  # loop: next iteration recomputes round from the ledger and re-checks.
+done

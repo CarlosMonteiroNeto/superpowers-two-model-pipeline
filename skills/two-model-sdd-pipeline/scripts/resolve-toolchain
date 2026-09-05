@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Deterministic toolchain detection: inspects the project root for known
+# ecosystem markers and resolves the TEST_CMD / ANALYZE_CMD the generic
+# engine's gates will run — no LLM/human question on the common path.
+#
+# This is the script-side half of the "ask once per branch" gate: it runs
+# BEFORE that question is ever asked. The question is now a fallback for
+# genuine ambiguity (two ecosystems present) or absence (no known marker),
+# not a routine step. On success it chains directly into ledger-append, so
+# the resolved commands are durable state the moment detection succeeds —
+# no LLM has to remember or re-type them.
+#
+# Usage: resolve-toolchain WORKSPACE [ROOT]
+#   WORKSPACE  the pipeline workspace (holds ledger.jsonl)
+#   ROOT       project root to inspect (default: git top-level)
+#
+# Exit codes:
+#   0 = resolved unambiguously; TEST_CMD/ANALYZE_CMD printed to stdout and
+#       recorded to the ledger as a `gate` entry (task '-').
+#   1 = ambiguous: more than one ecosystem marker found; candidates listed
+#       on stderr. Caller must ask the human once, then call
+#       `ledger-append WORKSPACE/ledger.jsonl gate - "manual: <lang>"
+#       test_cmd=... analyze_cmd=... detected=manual` itself.
+#   2 = usage, or no known marker found (same manual fallback as above,
+#       with detected=manual and no candidates to disambiguate).
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "usage: resolve-toolchain WORKSPACE [ROOT]" >&2
+  exit 2
+fi
+
+ws=$1
+root=${2:-$(git rev-parse --show-toplevel)}
+ledger="$ws/ledger.jsonl"
+
+# Ordered marker -> (label, test_cmd, analyze_cmd). Order only matters for
+# display; ambiguity is decided by count, not by priority - a repo with two
+# markers is genuinely ambiguous, not "first one wins".
+declare -A MARKERS=(
+  [pubspec.yaml]="flutter|flutter test|flutter analyze"
+  [Cargo.toml]="rust|cargo test|cargo clippy -- -D warnings"
+  [go.mod]="go|go test ./...|go vet ./..."
+  [package.json]="node|npm test --silent|npx eslint ."
+  [pyproject.toml]="python|pytest -q|ruff check ."
+  [requirements.txt]="python|pytest -q|ruff check ."
+)
+
+found=()
+for marker in "${!MARKERS[@]}"; do
+  [ -f "$root/$marker" ] && found+=("$marker")
+done
+
+if [ "${#found[@]}" -eq 0 ]; then
+  echo "RESOLVE-TOOLCHAIN: no known ecosystem marker in $root - manual fallback needed" >&2
+  echo "RESOLVE-TOOLCHAIN: ask once, then ledger-append the gate entry yourself (detected=manual)" >&2
+  exit 2
+fi
+
+if [ "${#found[@]}" -gt 1 ]; then
+  echo "RESOLVE-TOOLCHAIN: ambiguous - multiple ecosystem markers in $root:" >&2
+  printf '  %s\n' "${found[@]}" >&2
+  echo "RESOLVE-TOOLCHAIN: ask once which applies, then ledger-append the gate entry yourself (detected=manual)" >&2
+  exit 1
+fi
+
+marker=${found[0]}
+IFS='|' read -r label test_cmd analyze_cmd <<< "${MARKERS[$marker]}"
+
+echo "TEST_CMD=$test_cmd"
+echo "ANALYZE_CMD=$analyze_cmd"
+echo "LANG=$label"
+
+if [ -f "$ledger" ]; then
+  "$SCRIPT_DIR/ledger-append" "$ledger" gate - "auto-detected: $label ($marker)" \
+    test_cmd="$test_cmd" analyze_cmd="$analyze_cmd" detected=auto lang="$label"
+fi
+
+echo "RESOLVE-TOOLCHAIN: resolved $label via $marker" >&2
+exit 0

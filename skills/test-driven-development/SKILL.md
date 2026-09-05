@@ -7,6 +7,13 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **RED is written by the strategist, verified by a script, then handed to the coder.** B writes each task's RED tests as part of the per-task brief. `red-gate WORKSPACE TASK` materializes them and verifies the failure matches the brief's stated `EXPECTED-RED:` reason — not just "it failed," but "it failed for the right reason." Only on that verified match does `red-gate` dispatch C.
+- **The coder never chooses when GREEN is real.** C (write-only, never runs commands) implements against the RED test; Script A alone decides GREEN via `run-gates`/`green-gate` — task tests, then full suite, then analyze — up to 4 attempts (1 + 3 fixes) before the loop escalates.
+- **Tampering is checked, not assumed.** `red-integrity WORKSPACE TASK` byte-compares the committed tests against the brief before any reviewer verdict on them is trusted.
+
+
 Write the test first. Watch it fail. Write minimal code to pass.
 
 **Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.

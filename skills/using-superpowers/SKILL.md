@@ -3,6 +3,13 @@ name: using-superpowers
 description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
 ---
 
+## Pipeline Integration (two-model-sdd-pipeline / flutter-app-pipeline)
+
+- **Session start is self-updating, not manual.** Before anything else, the agent runs `scripts/check-superpowers` (compares the local checkout SHA to `origin/main`); if behind, `scripts/sync-superpowers` (fetch + reset + run the pipeline test suite); if not installed, `scripts/install-superpowers`. Either case ends with "restart OpenCode" — skills load at session start, not mid-session.
+- **This fork adds two harness-level skills on top of the generic set**: `two-model-sdd-pipeline` (the deterministic per-task engine — see `subagent-driven-development`'s integration note for the role mapping) and `flutter-app-pipeline` (the Flutter-specific layer: package research + scoring, `pub-sync`, and the RTK-compression / Graphify-before-LLM ordering rules). For any Flutter/Dart request, default to running `flutter-app-pipeline` end to end after `brainstorming`.
+- **Language policy applies globally**: every internal artifact (briefs, specs, ADRs, ledger summaries, commit messages, code comments) is English-only; only user-facing UI copy defaults to the developer's language.
+
+
 <SUBAGENT-STOP>
 If you were dispatched as a subagent to execute a specific task, ignore this skill.
 </SUBAGENT-STOP>

@@ -7,6 +7,13 @@ description: Use when creating new skills, editing existing skills, or verifying
 
 ## Overview
 
+## Pipeline Integration (two-model-sdd-pipeline)
+
+- **Skills are dev-facing artifacts: English-only**, same as specs, briefs, and ADRs — the UI-language exception in this fork's language policy never extends to skill files themselves.
+- **Prefer a deterministic script over an LLM judgment call whenever one is checkable.** When drafting a new skill's checklist, ask whether a step is "the LLM decides X" that could instead be "a script computes X and returns an exit code / verdict" (mirroring the `route-next` / gate pattern used throughout this fork). Reserve LLM calls for genuinely ambiguous, non-mechanical decisions.
+- **If the new skill dispatches subagents**, it must go through `scripts/dispatch --agent NAME` (never inline prompts) and should be cache-aware (`--continue` on same-task resume) — see `dispatching-parallel-agents`'s integration note.
+
+
 **Writing skills IS Test-Driven Development applied to process documentation.**
 
 **Personal skills live in your runtime's skills directory** (`~/.claude/skills/` on Claude Code) — see [codex-tools.md](../using-superpowers/references/codex-tools.md) or [gemini-tools.md](../using-superpowers/references/gemini-tools.md) for the path on those runtimes. Codex, Copilot CLI, and Gemini CLI all also recognize `~/.agents/skills/` as a cross-runtime alias.
