@@ -201,7 +201,9 @@ skills/two-model-sdd-pipeline/scripts/:
   token-kill           RTK minification of error logs / source / JSON
                        reports (lossless fallback)
   run-gates            generic green approval: full suite + analysis via cmd
-  review-package       build a review bundle (commits + diff)
+  review-package       build a review bundle (commits + diff); with a TASK
+                       arg, inlines the task brief + interfaces so the
+                       Reviewer gets them in the single package file
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW)

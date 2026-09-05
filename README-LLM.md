@@ -133,6 +133,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` (B feed from `pub-sync`) | resolves dir from `.dart_tool/package_config.json` |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER N ROUND / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
 | `red-integrity WORKSPACE TASK` | Byte-compare committed tests vs brief RED-TESTS | exit 0 intact; 1 tampered; 2 usage/missing |
+| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` and `task-TASK-interfaces.md` (if present) ahead of the commit list so the Reviewer receives the brief + interfaces in the single `--prompt-file` package | exit 0 wrote; 2 usage |
 | `keep-discard WORKSPACE TASK` | Escalation pre-gate: empty diff / out-of-scope files → DISCARD; else KEEP | exit 0 KEEP; 1 DISCARD; 2 usage |
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-holistic: all complete + no unresolved verdicts + no blocking parked + tests/analyze green | exit 0 ready; 1 blockers; 2 usage |
