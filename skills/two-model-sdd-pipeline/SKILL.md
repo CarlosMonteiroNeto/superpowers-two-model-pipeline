@@ -479,7 +479,7 @@ deterministic, no dispatch.
 | "I'll dispatch the Coder myself via the task tool" | Script A owns dispatch (`red-gate`/`green-gate`/`orchestrator`). You dispatching re-inserts the session into the hot path and pollutes your context — the thing the design removes. |
 | "C should run the tests to iterate faster" | Write-only Coder (ADR-0002) keeps C's context minimal and gates deterministic. Script A decides test/analyze passes; C gets failures fed back. |
 | "A fresh Reviewer per correction is safer" | Within-task D resume (ADR-0003) reuses prior findings; the final verdict is still a fresh judgment recorded in the ledger. |
-| "I'll rebuild the graph after each Coder round" | Post-commit only (ADR-0004). Per-iteration rebuilds are wasted overhead — the graph is consumed at brief/review time, not mid-edit. |
+| "I'll rebuild the graph after each Coder round" | Update-before-commit, read-immediately-after (ADR-0004). Per-iteration rebuilds are wasted overhead — the graph is consumed at brief/review time, not mid-edit. |
 | "One more Coder round will converge" | Four attempts is the budget. Round 5 is arbitration denial — dispatch `ARBITRATE` to B. |
 | "The RED test is slightly wrong, I'll adjust it" | Test files change only through B arbitration. You adjusting tests destroys the pipeline's ground truth. |
 | "I'll note the minor finding and fix it in this task" | Minor findings are documented by B (PARKED) — never a fix loop. The final review triages them. |

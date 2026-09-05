@@ -10,7 +10,7 @@ description: Use when starting feature work that needs isolation from current wo
 ## Pipeline Integration (two-model-sdd-pipeline)
 
 - **Worktree state is harness-tracked.** The two-model-sdd-pipeline's `pipeline-workspace` script is the worktree-aware task-state directory this skill's manual worktree bookkeeping maps onto — treat it as the source of truth for which task lives in which worktree, not a side note in chat.
-- **The knowledge graph is rebuilt per worktree root.** `graphify-update [ROOT]` / `graphify-regen [ROOT]` take the worktree root explicitly and run post-commit only (never mid-edit) — don't assume a single global graph when working across multiple worktrees at once.
+- **The knowledge graph is rebuilt per worktree root.** `graphify-update [ROOT]` / `graphify-regen [ROOT]` take the worktree root explicitly and run just before each task's commit (never mid-edit) — don't assume a single global graph when working across multiple worktrees at once.
 
 
 Ensure work happens in an isolated workspace. Prefer your platform's native worktree tools. Fall back to manual git worktrees only when no native tool is available.

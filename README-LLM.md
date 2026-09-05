@@ -177,8 +177,10 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   compliance, interface discipline. Returns a structured JSON verdict.
 - **Graphify is update-before-commit + read-immediately-after (ADR-0004):**
   `graphify-update`
-  rebuilds the graph only after an approved task's commit — never per Coder
-  iteration. `graphify-subgraph` extracts the affected-dependency slice
+  rebuilds the graph just before the task's commit (so it enters the commit) —
+  never per Coder
+  iteration. `graphify-subgraph` runs immediately after the update and extracts
+  the affected-dependency slice
   (`graphify explain`) into `<ws>/task-N-interfaces.md` for B's next brief
   and D's review. The graph exposes structure, not method bodies.
 - **Gates are exit codes:** never judge "did the test fail for the expected
@@ -343,7 +345,7 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, c
 3. Per task: `pkg-score` candidates -> select with the developer -> `writing-plans`
    tasks -> `pub-sync` -> B writes the brief -> `red-gate` (expected-reason
    check; dispatches C) -> Script A gates (task tests -> full suite -> analyze;
-   resume C up to 4 attempts) -> `green-gate` (commit + `graphify-update` +
+   resume C up to 4 attempts) -> `green-gate` (graph update + subgraph read + commit +
    dispatch D) -> `red-integrity` (byte-compare) -> D JSON verdict ->
    `route-next` -> `orchestrator` hands `OUTCOME` to B. SEND_BACK →
    `CORRECTIVE` (B writes corrective brief to `task-N-corrective.md`,

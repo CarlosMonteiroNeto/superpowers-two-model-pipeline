@@ -42,7 +42,7 @@ PRINCIPLES
   dispatch) are chained into deterministic scripts whose verdict is an
   exit code or a stdout action line.
 - Script-autonomous dispatch (ADR-0001): red-gate dispatches the Coder on
-  RED verified; green-gate commits, updates the graph, and dispatches the
+  RED verified; green-gate updates the graph, reads it (subgraph), then commits and dispatches the
   Reviewer; route-next + the orchestrator driver route every transition.
   The interactive session is never a link in the dispatch chain.
 - The Coder is write-only (ADR-0002): it never runs tests or analysis.
