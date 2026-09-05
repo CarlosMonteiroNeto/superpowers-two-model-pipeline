@@ -70,7 +70,10 @@ PRINCIPLES
   and D's review immediately after the write.
 - Observability without pollution: C/D progress is teed to workspace logs
   (task-N-coder.log, task-N-reviewer.log) you can tail; headless sessions
-  never pollute the main session's history.
+  never pollute the main session's history. B reads only curated script
+  outputs (OUTCOME lines, the ledger, the parsed verdict JSON, and the
+  task-N-interfaces.md subgraph feed) - never raw dispatch logs or full gate
+  reports.
 - No approval after decisions: approval happens at the gate (once per
   branch) and at solution selection; from Phase 2c onward the branch runs
   to completion without check-ins. The ledger is the compaction-safe state

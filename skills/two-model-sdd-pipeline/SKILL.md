@@ -502,7 +502,7 @@ Task 1: Invoice model and serialization
 You: [write task-1-brief.md with BLACK-BOX RED test + EXPECTED-RED]
 [scripts/orchestrator ws 1 5]  -> red-gate verifies RED, dispatches C (headless)
   C writes code (write-only)  -> Script A: task tests -> full suite -> analyze
-  green-gate commits + graphify-update + dispatches D (headless)
+  green-gate updates graph + reads subgraph + commits + dispatches D (headless)
   D returns JSON -> route-next -> OUTCOME: NEXT 2
 You: [read OUTCOME; minors PARKED; write task-2 brief]
 
