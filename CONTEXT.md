@@ -37,8 +37,9 @@ Persistence — architectural path only).
   directly (item 4). No main-agent intermediation.
 - **green-gate** — chains full suite + `flutter analyze` + format check + commit.
   The test/analyze pass/fail decisions are made inside the script (item 2). On
-  success, Script A dispatches D directly (item 3) and triggers the post-commit
-  graph update.
+  success, Script A updates the graph + reads the subgraph BEFORE the commit
+  (so the graph enters the task's own commit and is read immediately after
+  being written), then dispatches D directly (item 3).
 - **route-next** — deterministic router; Script A executes its emitted action.
   Actions: BRIEF / RED / CODER N ROUND / REVIEW / FIX / CORRECTIVE / ARBITRATE /
   NEXT / FINAL_REVIEW. `STRATEGIC` action removed (Strategic Coder removed).
@@ -51,8 +52,10 @@ Persistence — architectural path only).
   git diff → `rtk diff`, JSON → `rtk json`.
 - **token-kill** — NEW script. RTK-based minification: error-log minification,
   comment/whitespace stripping from source fed to C/D, report trimming.
-- **graphify-update** — NEW script. Rebuilds the project graph ONLY after an approved
-  task's commit (never per C iteration).
+- **graphify-update** — NEW script. Rebuilds the project graph just before the
+  task's commit (green-gate / coder-gate chain), so the regenerated graph enters
+  the task's own commit; never per C iteration. The `graphify-subgraph` read
+  runs immediately after.
 - **graphify-subgraph** — NEW script. Queries the graph (`explain` / `path`) for the
   task's `touches`/`depends_on` modules and writes `<ws>/task-N-interfaces.md` — the
   affected-dependency slice fed to B's next brief and D's review. Replaces the main

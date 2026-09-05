@@ -42,7 +42,7 @@ PRINCIPLES
   dispatch) are chained into deterministic scripts whose verdict is an
   exit code or a stdout action line.
 - Script-autonomous dispatch (ADR-0001): red-gate dispatches the Coder on
-  RED verified; green-gate commits, updates the graph, and dispatches the
+  RED verified; green-gate updates the graph, reads it (subgraph), then commits and dispatches the
   Reviewer; route-next + the orchestrator driver route every transition.
   The interactive session is never a link in the dispatch chain.
 - The Coder is write-only (ADR-0002): it never runs tests or analysis.
@@ -64,12 +64,16 @@ PRINCIPLES
 - Cache-aware LLM calls with curated context; within-task resume
   (--continue --session) is allowed (prefix-cached); fresh dispatch when
   the task changes (ADR-0003). The ledger + git are the source of truth.
-- Graphify-before-LLM (post-commit + subgraph, ADR-0004): the graph is
-  rebuilt only after an approved task's commit; graphify-subgraph extracts
-  the affected-dependency slice for B's next brief and D's review.
+- Graphify-before-LLM (update-before-commit + read-immediately-after, ADR-0004): the graph is
+  updated just before each task's commit (so it enters the commit);
+  graphify-subgraph extracts the affected-dependency slice for B's next brief
+  and D's review immediately after the write.
 - Observability without pollution: C/D progress is teed to workspace logs
   (task-N-coder.log, task-N-reviewer.log) you can tail; headless sessions
-  never pollute the main session's history.
+  never pollute the main session's history. B reads only curated script
+  outputs (OUTCOME lines, the ledger, the parsed verdict JSON, and the
+  task-N-interfaces.md subgraph feed) - never raw dispatch logs or full gate
+  reports.
 - No approval after decisions: approval happens at the gate (once per
   branch) and at solution selection; from Phase 2c onward the branch runs
   to completion without check-ins. The ledger is the compaction-safe state
@@ -153,9 +157,11 @@ skills/flutter-app-pipeline/scripts/:
                        EXPECTED-RED reason, and dispatch the Coder on success
                        (then chains into coder-gate, which owns the retry
                        loop through commit + Reviewer dispatch)
-  green-gate           chain test + analyze + format + commit; on commit:
-                       graphify-update + review package + Reviewer dispatch
-  graphify-update      rebuild the graph post-commit only (ADR-0004)
+  green-gate           chain test + analyze + format + commit; before the
+                       commit: graphify-update + graphify-subgraph read, then
+                       review package + Reviewer dispatch
+  graphify-update      rebuild the graph before commit (immediately before the
+                       subgraph read; ADR-0004)
   graphify-subgraph    extract the affected-dependency subgraph
                        (task-N-interfaces.md) for B's next brief and D
   graphify-regen       rebuild the project knowledge graph
@@ -235,7 +241,7 @@ full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
 escalation packages, red-integrity byte-compare) is ever compressed.
 
 Dispatch is script-owned too: red-gate dispatches the Coder on RED verified;
-green-gate commits, runs graphify-update (post-commit only - never per Coder
+green-gate commits, runs graphify-update (before commit - never per Coder
 iteration), builds the review package, and dispatches the Reviewer. The
 Reviewer reviews compiler-approved code only and returns a structured JSON
 verdict; minor findings are documented by the strategist, never fix loops.

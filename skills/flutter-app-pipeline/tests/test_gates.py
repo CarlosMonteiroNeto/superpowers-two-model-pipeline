@@ -213,22 +213,28 @@ class TestGreenGate(GateTestBase):
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self._log(repo), before)
 
-    def test_does_not_chain_graphify_after_commit(self):
-        """green-gate no longer rebuilds the project graph: the Reviewer reads
-        the review package (diff), not the graph, and graphify is a
-        Controller-side lazy optimization at brief time. The gate must stay
-        fast and deterministic with no graphify side effect."""
+    def test_chains_graphify_update_and_subgraph_before_commit(self):
+        """green-gate runs the graph update + subgraph read BEFORE the commit
+        (ADR-0004): the regenerated graph enters the task's own commit and the
+        interfaces read (graphify-subgraph) happens immediately after the
+        write - never orphaned, never per Coder iteration."""
         repo = self._git_repo()
         (repo / "lib" / "app.dart").write_text("void main() { print('chained'); }\n", encoding="utf-8")
+        ws = self._ws_with_plan()
         log = pathlib.Path(self._tmp) / "g.log"
         r = run_script(
-            "green-gate", ["-m", "Task 1: chained"],
+            "green-gate", ["-m", "Task 1: chained", "-w", str(ws), "-t", "3"],
             cwd=repo,
             env_extra={**self.env, "STUB_LOG": str(log)},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = log.read_text(encoding="utf-8") if log.exists() else ""
-        self.assertEqual(calls, "", f"green-gate must not invoke graphify, got: {calls}")
+        self.assertTrue(any("update" in c for c in calls.splitlines()),
+                        f"green-gate must run graphify update, got: {calls}")
+        self.assertTrue(any("explain" in c for c in calls.splitlines()),
+                        f"green-gate must run graphify-subgraph (the read), got: {calls}")
+        # the interfaces file was produced for D's review / B's next brief
+        self.assertTrue((ws / "task-3-interfaces.md").exists())
 
     def test_no_commit_does_not_chain_graphify(self):
         """--no-commit (Phase 4 revalidation) changes nothing, so it must not
@@ -257,8 +263,9 @@ class TestGreenGate(GateTestBase):
 
     def test_green_commits_updates_graph_and_dispatches_reviewer(self):
         """On all-green + commit with a workspace/task/base, green-gate must:
-        commit the task, run the post-commit graph update (ADR-0004), build the
-        review package, and dispatch the Reviewer headlessly (Item 3)."""
+        commit the task, run the graph update + subgraph read before the
+        commit (ADR-0004), build the review package, and dispatch the
+        Reviewer headlessly (Item 3)."""
         repo = self._git_repo()
         (repo / "lib" / "app.dart").write_text("void main() { print('done'); }\n", encoding="utf-8")
         ws = self._ws_with_plan()
@@ -273,9 +280,10 @@ class TestGreenGate(GateTestBase):
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("Task 3: done", self._log(repo))
-        # post-commit graph update happened
+        # graph update + subgraph read happened
         calls = g_log.read_text(encoding="utf-8") if g_log.exists() else ""
         self.assertTrue(any("update" in c for c in calls.splitlines()), calls)
+        self.assertTrue(any("explain" in c for c in calls.splitlines()), calls)
         # reviewer dispatched headlessly
         dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
         self.assertIn("two-model-reviewer", dcalls)
