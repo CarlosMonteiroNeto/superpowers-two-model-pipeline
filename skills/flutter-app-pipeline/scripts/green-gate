@@ -96,11 +96,12 @@ if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
     # ledger file's own directory never contains the script, so the old
     # dirname() resolution silently dropped the `commit` entry and made
     # route-next loop the round.
+    task_field="${task:--}"
     if [ -x "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append" ]; then
       "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append" \
-        "$ledger" commit - "green $sha" "commits=$sha"
+        "$ledger" commit "$task_field" "green $sha" "commits=$sha"
     elif [ -x "$(dirname "$ledger")/ledger-append" ]; then
-      "$(dirname "$ledger")/ledger-append" "$ledger" commit - "green $sha" "commits=$sha"
+      "$(dirname "$ledger")/ledger-append" "$ledger" commit "$task_field" "green $sha" "commits=$sha"
     fi
   fi
 else
