@@ -157,9 +157,11 @@ skills/flutter-app-pipeline/scripts/:
                        EXPECTED-RED reason, and dispatch the Coder on success
                        (then chains into coder-gate, which owns the retry
                        loop through commit + Reviewer dispatch)
-  green-gate           chain test + analyze + format + commit; before the
-                       commit: graphify-update + graphify-subgraph read, then
-                       review package + Reviewer dispatch
+green-gate           chain test + analyze + format + commit; before the
+                        commit: graphify-update + graphify-subgraph read, then
+                        review package + Reviewer dispatch. On commit appends
+                        the ledger `commit` entry (task from -t when given;
+                        ledger-append resolved from the two-model scripts dir)
   graphify-update      rebuild the graph before commit (immediately before the
                        subgraph read; ADR-0004)
   graphify-subgraph    extract the affected-dependency subgraph
