@@ -91,9 +91,16 @@ if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
   sha=$("$GIT_BIN" rev-parse --short HEAD)
   echo "GREEN-GATE: committed $sha"
   if [ -n "$ledger" ]; then
-    dir=$(dirname "$ledger")
-    if [ -x "$dir/ledger-append" ]; then
-      "$dir/ledger-append" "$ledger" commit - "green $sha" "commits=$sha"
+    # Resolve ledger-append from the two-model scripts dir (the canonical
+    # location), falling back to a workspace copy for legacy layouts. The
+    # ledger file's own directory never contains the script, so the old
+    # dirname() resolution silently dropped the `commit` entry and made
+    # route-next loop the round.
+    if [ -x "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append" ]; then
+      "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append" \
+        "$ledger" commit - "green $sha" "commits=$sha"
+    elif [ -x "$(dirname "$ledger")/ledger-append" ]; then
+      "$(dirname "$ledger")/ledger-append" "$ledger" commit - "green $sha" "commits=$sha"
     fi
   fi
 else
