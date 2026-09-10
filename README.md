@@ -5,7 +5,7 @@ Source: [`obra/superpowers`](https://github.com/obra/superpowers/tree/main/skill
 Each of the 14 original skills was kept intact and given a **"Pipeline Integration"** section inserted right after its title, applying the principles from `README-LLM.md` (the `two-model-sdd-pipeline` / `flutter-app-pipeline` harness):
 
 - **LLMs reason, scripts decide** — every checkable judgment call this skill used to leave to the LLM is pointed at the deterministic script/exit-code that now owns it (`route-next`, `red-gate`, `green-gate`, `final-gate`, `doc-check`, `run-gates`).
-- **Fixed four-role engine** — Script A (deterministic loop owner), B (strategist), C (`two-model-coder`, write-only, Operational), D (`two-model-reviewer`, Strategic). `subagent-driven-development`'s SKILL.md carries the full role-mapping table.
+- **Fixed five-role engine** — Script CEO (deterministic loop owner, invokable as `run-pipeline`), Agente estratégico (plan shell + spec, then DONE), Agente diretor (`two-model-task-generator`: task expansion, correctives, closing), Agente operador (`two-model-coder`, write-only, Operational), Agente revisor (`two-model-reviewer`, Strategic). `subagent-driven-development`'s SKILL.md carries the full role-mapping table.
 - **Structured verdicts, not prose** — review-related skills (`requesting-code-review`, `receiving-code-review`) now route on D's fixed JSON shape (APPROVED / SEND_BACK / ESCALATE) instead of free-text comments.
 - **State is external** — plan.json + git + JSONL ledger, never conversational memory; this is what makes every loop resumable after compaction.
 - **Cache-aware, logged dispatch** — all subagent calls go through `scripts/dispatch --agent NAME [--continue SESSION]`, never inline/ad-hoc prompts.

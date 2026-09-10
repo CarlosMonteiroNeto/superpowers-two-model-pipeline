@@ -24,13 +24,13 @@ class TestParseReviewWiredInDocs(unittest.TestCase):
         self.assertNotIn("Script A after D's log lands", text)
         self.assertNotIn("(B does not run it)", text)
 
-    def test_corrective_path_convention_documented(self):
-        """The corrective brief must go to task-N-corrective.md (distinct path,
-        never overwriting task-N-brief.md)."""
+    def test_corrective_task_convention_documented(self):
+        """Correctives are new plan tasks (`corrects: N`), not corrective
+        brief files: Agente diretor appends the task, brief-scaffold builds
+        the brief, the same operador session resumes."""
         skill = (SKILLS / "two-model-sdd-pipeline" / "SKILL.md").read_text(encoding="utf-8")
-        brief = (SKILLS / "two-model-sdd-pipeline" / "controller-brief-prompt.md").read_text(encoding="utf-8")
-        self.assertIn("task-N-corrective.md", skill)
-        self.assertIn("task-N-corrective.md", brief)
+        self.assertIn("corrects", skill)
+        self.assertIn("same operador session", skill.lower())
 
 
 if __name__ == "__main__":

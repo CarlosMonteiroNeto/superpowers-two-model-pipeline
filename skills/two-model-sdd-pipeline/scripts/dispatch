@@ -2,8 +2,10 @@
 # Deterministic headless subagent launcher (ADR-0001): dispatches C or D via
 # `opencode run --agent`, tees the JSON event stream to a workspace log
 # (observability - the developer can tail it; the main session never sees it),
-# and records the sessionID for `--continue --session` resume on fix/correction
-# rounds (ADR-0003 context retention).
+# prints a live progress digest to stdout (short lines - the calling session
+# watches the agent work without opening the log), and records the sessionID
+# for `--continue --session` resume on fix/correction rounds (ADR-0003
+# context retention).
 #
 # Usage:
 #   dispatch --agent <two-model-coder|two-model-reviewer> --task N \
@@ -57,19 +59,63 @@ if [ -n "$cont" ]; then
 fi
 
 if [ -n "$cont" ]; then
-  prompt="You are dispatched by Script A on a CORRECTIVE round. The attached brief may have CHANGED since your last round. Re-read it FULLY and apply its requirements; do NOT assume prior work is complete. Report concisely."
+  prompt="You are dispatched by Script CEO on a CORRECTIVE round. The attached brief may have CHANGED since your last round. Re-read it FULLY and apply its requirements; do NOT assume prior work is complete. Report concisely."
 else
-  prompt="You are dispatched by Script A. Read the attached file and execute per its instructions. Report concisely."
+  prompt="You are dispatched by Script CEO. Read the attached file and execute per its instructions. Report concisely."
 fi
 
 set +e
+# Live digest filter (python program via -c so stdin stays on the pipe;
+# a heredoc would steal stdin and leave tee readerless -> SIGPIPE).
+# Prints short progress lines to stdout; full stream still lands in $log
+# via tee. Never fails the dispatch: all errors swallowed, exit 0 always.
+DIGEST_FILTER='import json, sys
+agent, task = sys.argv[1], sys.argv[2]
+printed = 0
+session = None
+try:
+    for raw in sys.stdin:
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        if session is None:
+            sid = ev.get("sessionID")
+            if sid:
+                session = sid
+                print("[%s:%s] session %s" % (agent, task, sid), flush=True)
+        if ev.get("type") != "text":
+            continue
+        part = ev.get("part", {})
+        text = part.get("text", "") if isinstance(part, dict) else ""
+        if not isinstance(text, str) or len(text) <= printed:
+            continue
+        printed = len(text)
+        tail = text.splitlines()[-1][-160:] if text.splitlines() else ""
+        if tail.strip():
+            print("[%s:%s] %s" % (agent, task, tail.strip()), flush=True)
+except Exception:
+    pass
+sys.exit(0)'
+stream_run() {
+  # Verdict is opencode's (PIPESTATUS[0]); the filter always exits 0.
+  "$OPENCODE_BIN" "${args[@]}" "$prompt_file" "$prompt" 2>&1 \
+    | tee "$log" \
+    | python3 -c "$DIGEST_FILTER" "$agent" "$task"
+  return "${PIPESTATUS[0]}"
+}
 if [ -n "$workdir" ]; then
   # The brief is passed as a positional so opencode auto-attaches it. --file
   # is deliberately NOT used: this opencode version treats the positional
   # message as a file path whenever --file is present, which breaks every run.
-  (cd "$workdir" && "$OPENCODE_BIN" "${args[@]}" "$prompt_file" "$prompt" > "$log" 2>&1)
+  (cd "$workdir" && stream_run)
 else
-  "$OPENCODE_BIN" "${args[@]}" "$prompt_file" "$prompt" > "$log" 2>&1
+  stream_run
 fi
 rc=$?
 set -e
@@ -90,8 +136,8 @@ fi
 sid=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$log" | head -1)
 if [ -n "$sid" ]; then
   sid_dir=$(dirname "$log")
-  # Generic record (last writer, read by B) + per-agent record so
-  # session-clean can delete both the Coder and Reviewer sessions.
+  # Generic record (last writer, read by the runner) + per-agent record so
+  # session-clean can delete both the operador and revisor sessions.
   printf '%s\n' "$sid" > "$sid_dir/task-$task-session.txt"
   printf '%s\n' "$sid" > "$sid_dir/task-$task-$agent-session.txt"
 fi

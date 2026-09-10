@@ -8,7 +8,12 @@
 #   3. No task_complete carries a blocking parked finding (PARKED containing
 #      "Critical" or "Important").
 #   4. The test and analyze commands recorded in the `gate` ledger entry both
-#      succeed.
+#      succeed - SKIPPED when the tree is unchanged since the last green task
+#      commit (clean `git status` + HEAD == last ledger `commit` sha): the
+#      last task's gates already proved this tree.
+#
+# Reads `test_cmd`/`analyze_cmd` (resolve-toolchain shape), falling back to
+# legacy `test`/`analyze` keys.
 #
 # Usage: final-gate WORKSPACE TOTAL_TASKS
 # Exit codes: 0 = mechanically ready, 1 = blocker(s) listed, 2 = usage /
@@ -32,13 +37,28 @@ if [ -z "$gate_line" ]; then
   exit 2
 fi
 
-test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test": *"\([^"]*\)".*/\1/p')
-analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
+test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
+[ -n "$test_cmd" ] || test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test": *"\([^"]*\)".*/\1/p')
+analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)".*/\1/p')
+[ -n "$analyze_cmd" ] || analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
 
 blockers=0
 emit() {
   echo "FINAL-GATE: $1" >&2
   blockers=$((blockers + 1))
+}
+
+# True when the working tree provably matches the last green task commit:
+# clean status AND HEAD resolving to the last ledger `commit` sha. Anything
+# uncertain (not a repo, no commit entries) returns false - re-run instead.
+tree_unchanged_since_green() {
+  [ -z "$(git status --porcelain 2>/dev/null)" ] || return 1
+  full_head=$(git rev-parse HEAD 2>/dev/null) || return 1
+  last_commit=$(grep -E '"type": *"commit"' "$ledger" 2>/dev/null \
+    | tail -1 | sed -n 's/.*"commits": *"\([0-9a-fA-F]*\)".*/\1/p')
+  [ -n "$last_commit" ] || return 1
+  resolved=$(git rev-parse --verify "$last_commit" 2>/dev/null) || return 1
+  [ "$resolved" = "$full_head" ]
 }
 
 for t in $(seq 1 "$total"); do
@@ -61,17 +81,27 @@ for t in $(seq 1 "$total"); do
   fi
 done
 
+skip_rerun=0
+if tree_unchanged_since_green; then
+  echo "FINAL-GATE: tree unchanged since last green commit - skipping test/analyze re-run"
+  skip_rerun=1
+fi
+
 if [ -n "$test_cmd" ]; then
-  read -ra cmd <<< "$test_cmd"
-  if ! "${cmd[@]}" >/dev/null 2>&1; then
-    emit "test command failed: $test_cmd"
+  if [ "$skip_rerun" -eq 0 ]; then
+    read -ra cmd <<< "$test_cmd"
+    if ! "${cmd[@]}" >/dev/null 2>&1; then
+      emit "test command failed: $test_cmd"
+    fi
   fi
 fi
 
 if [ -n "$analyze_cmd" ]; then
-  read -ra cmd <<< "$analyze_cmd"
-  if ! "${cmd[@]}" >/dev/null 2>&1; then
-    emit "analyze command failed: $analyze_cmd"
+  if [ "$skip_rerun" -eq 0 ]; then
+    read -ra cmd <<< "$analyze_cmd"
+    if ! "${cmd[@]}" >/dev/null 2>&1; then
+      emit "analyze command failed: $analyze_cmd"
+    fi
   fi
 fi
 

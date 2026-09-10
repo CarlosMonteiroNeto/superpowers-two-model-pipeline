@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generate a review package: commit list, stat summary, and the net
 # implementation-only diff with extended context, written to a file the
-# reviewer reads in one call. The package never passes through the
+# revisor reads in one call. The package never passes through the
 # orchestrator's context.
 #
 # Using the recorded per-task BASE (not HEAD~1) keeps multi-commit and
@@ -9,7 +9,7 @@
 # fixes gets a distinct fresh file.
 #
 # When TASK is given, the task's brief (task-TASK-brief.md) is inlined ahead
-# of the commit list, so the Reviewer receives the context the dispatch
+# of the commit list, so the revisor receives the context the dispatch
 # contract promises ("read the attached review package and the task brief")
 # in the single file already delivered via --prompt-file.
 #

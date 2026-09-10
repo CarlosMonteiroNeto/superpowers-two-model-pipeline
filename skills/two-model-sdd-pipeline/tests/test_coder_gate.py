@@ -261,24 +261,149 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.assertNotIn("escalated", ledger_text)
 
 
+class TestRedProof(CoderGateTestBase):
+    """RED-proof: operador-authored tests must fail without the
+    implementation (stash `touches`, fail with `expected_red`, restore)."""
+
+    def _plan(self, task):
+        (self.ws / "plan.json").write_text(
+            json.dumps({"feature": "t", "tasks": [task]}), encoding="utf-8")
+
+    def _gate_entry(self, test_cmd):
+        with open(self.ledger_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "ts": "x", "type": "gate", "task": "-",
+                "summary": "go", "lang": "go",
+                "test_cmd": test_cmd, "analyze_cmd": "true",
+            }) + "\n")
+
+    def _stubs(self, gate_log, dispatch_log):
+        self.gate = write_stub(
+            self.stub_dir, "run-gates",
+            """
+echo "gate args: $*" >> "${STUB_GATE_LOG:?}"
+exit 0
+""",
+        )
+        self.dispatch = write_stub(
+            self.stub_dir, "dispatch",
+            """
+echo "$*" >> "${STUB_DISPATCH_LOG:?}"
+exit "${STUB_DISPATCH_EXIT:-0}"
+""",
+        )
+        self.gate_log = gate_log
+        self.dispatch_log = dispatch_log
+
+    def _env(self, **extra):
+        env = {
+            "STUB_GATE_LOG": str(self.gate_log),
+            "STUB_DISPATCH_LOG": str(self.dispatch_log),
+            "RUN_GATES_BIN": self.gate,
+            "DISPATCH_BIN": self.dispatch,
+            "GIT_BIN": "git",
+        }
+        env.update(extra)
+        return env
+
+    def _tree_aware_stub(self):
+        # Fails with the expected reason while the MARKER (implementation)
+        # is absent; passes once it exists. Proves the stash actually
+        # removes the implementation for the fail-run.
+        return write_stub(
+            self.stub_dir, "redproof-stub",
+            """
+if grep -q MARKER lib/app.go 2>/dev/null; then exit 0; fi
+echo "missing feature"
+exit 1
+""",
+        )
+
+    def _repo_with_coder_work(self):
+        (self.repo / "lib").mkdir(exist_ok=True)
+        (self.repo / "lib" / "app.go").write_text("package app\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=str(self.repo), check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "scaffold"], cwd=str(self.repo), check=True)
+        # simulated coder output: implementation marker + new test file
+        (self.repo / "lib" / "app.go").write_text(
+            "package app\n// MARKER implemented\n", encoding="utf-8")
+        (self.repo / "lib" / "app_test.go").write_text(
+            "package app\n", encoding="utf-8")
+
+    def test_red_proved_then_committed(self):
+        self.brief()
+        self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
+                    "expected_red": "missing feature"})
+        self._repo_with_coder_work()
+        stub = self._tree_aware_stub()
+        self._gate_entry(pathlib.Path(stub).as_posix())
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        r = run_script(
+            "coder-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra=self._env(),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # snapshot + flag written; no stash leaked; tree intact
+        snap = (self.ws / "task-1-test-snapshot.txt").read_text(encoding="utf-8")
+        self.assertIn("lib/app_test.go", snap)
+        self.assertTrue((self.ws / "task-1-redproof.done").exists())
+        stash = subprocess.run(["git", "stash", "list"], cwd=str(self.repo),
+                               capture_output=True, text=True).stdout
+        self.assertEqual(stash.strip(), "", stash)
+        self.assertIn("MARKER", (self.repo / "lib" / "app.go").read_text(encoding="utf-8"))
+        # committed (scaffold + task) and reviewer dispatched
+        log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
+                             capture_output=True, text=True).stdout
+        self.assertGreaterEqual(log.count("\n"), 3, log)
+        self.assertIn("two-model-reviewer", dispatch_log.read_text(encoding="utf-8"))
+
+    def test_vacuous_tests_fail_then_recover(self):
+        """Tests passing without implementation fail RED-proof (dedicated
+        report, fix prompt, resume); strengthened tests on retry pass."""
+        self.brief()
+        self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
+                    "expected_red": "missing feature"})
+        self._repo_with_coder_work()
+        count = self._tmp / "rp.count"
+        count.write_text("0", encoding="utf-8")
+        stub = write_stub(
+            self.stub_dir, "redproof-stub",
+            """
+n=$(cat "${STUB_COUNT_FILE:?}" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo "$n" > "$STUB_COUNT_FILE"
+if [ "$n" -lt 2 ]; then exit 0; fi
+echo "missing feature"
+exit 1
+""",
+        )
+        self._gate_entry(pathlib.Path(stub).as_posix())
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        r = run_script(
+            "coder-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra=self._env(STUB_COUNT_FILE=str(count)),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # a RED-proof failure built the fix prompt before recovery
+        self.assertTrue((self.ws / "task-1-fix.md").exists())
+        ledger_text = self.ledger_path.read_text(encoding="utf-8")
+        self.assertIn("Coder failed the gate", ledger_text)
+        self.assertIn("Coder passed the gate", ledger_text)
+
+
 class TestGenericRedGate(CoderGateTestBase):
-    def test_materializes_and_verifies_red_with_explicit_test_cmd(self):
-        src = self._tmp / "test.py"
-        src.write_text("assert False\n", encoding="utf-8")
-        brief = self.ws / "task-1-brief.md"
-        brief.write_text(
-            "RED-TESTS:\n"
-            f"{src} -> {self._tmp}/real_test.py\n"
-            "\n"
-            "EXPECTED-RED:\n"
-            "assert False\n",
-            encoding="utf-8",
-        )
-        # A stub test runner: report the expected failure text + exit 1.
-        test_runner = write_stub(
-            self.stub_dir, "runner",
-            'echo "assert False" >&2\nexit 1\n',
-        )
+    def test_dispatches_coder_and_chains_coder_gate(self):
+        """On a scaffolded brief, generic red-gate dispatches Agente
+        operador and chains coder-gate — no materialization: the operador
+        authors the RED tests."""
+        (self.ws / "task-1-brief.md").write_text(
+            "# Task 1 Brief (scaffolded)\n", encoding="utf-8")
         dispatch_stub = write_stub(
             self.stub_dir, "dispatch",
             'echo "$*" >> "${STUB_DISPATCH_LOG:?}"\nexit 0\n',
@@ -289,7 +414,7 @@ class TestGenericRedGate(CoderGateTestBase):
         )
         dispatch_log = self._tmp / "dispatch.log"
         r = run_script(
-            "red-gate", [str(self.ws), "1", test_runner],
+            "red-gate", [str(self.ws), "1"],
             cwd=str(self.repo),
             env_extra={
                 "DISPATCH_BIN": dispatch_stub,
@@ -299,9 +424,10 @@ class TestGenericRedGate(CoderGateTestBase):
             },
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue((self._tmp / "real_test.py").exists())
         self.assertIn("two-model-coder", dispatch_log.read_text(encoding="utf-8"))
         self.assertIn("coder-gate ran", r.stderr)
+        self.assertIn(
+            "red_check", self.ledger_path.read_text(encoding="utf-8"))
 
     def test_missing_test_cmd_and_no_ledger_is_usage(self):
         brief = self.ws / "task-1-brief.md"

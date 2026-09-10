@@ -9,9 +9,9 @@ description: Use when receiving code review feedback, before implementing sugges
 
 ## Pipeline Integration (two-model-sdd-pipeline)
 
-- **Feedback arrives as structured JSON, not prose.** The reviewer role (D, `two-model-reviewer`) returns a verdict object — `APPROVED` / `SEND_BACK` / `ESCALATE` — never a free-text review to interpret. This skill's "read the reviewer's comments and decide how to respond" step is replaced by `route-next` reading that verdict directly.
-- **Routing is deterministic, not a judgment call.** `SEND_BACK` always routes to `CORRECTIVE` (B writes a corrective brief, C resumes within-session via `--continue`); `ESCALATE` always routes to `ARBITRATE` (B decides, per the project's arbitration rules). There is no ad-hoc "let me just fix it myself" branch — the coder (C) is write-only and never receives review feedback directly; it only ever sees briefs from B.
-- **Integrity is checked before the verdict is trusted.** `red-integrity WORKSPACE TASK` byte-compares the committed tests against the brief's RED-TESTS before D's verdict is acted on — a reviewer verdict on tampered tests is not actionable.
+- **Feedback arrives as structured JSON, not prose.** The revisor role (`two-model-reviewer`) returns a verdict object — `APPROVED` / `SEND_BACK` / `ESCALATE` — never a free-text review to interpret. This skill's "read the reviewer's comments and decide how to respond" step is replaced by `route-next` reading that verdict directly.
+- **Routing is deterministic, not a judgment call.** `SEND_BACK` always routes to `CORRECTIVE` (Agente diretor appends a corrective task, same operador resumes within-session via `--continue`); `ESCALATE` always routes to `ARBITRATE` (Agente diretor decides, per the project's arbitration rules). There is no ad-hoc "let me just fix it myself" branch — the operador is write-only and never receives review feedback directly; it only ever sees briefs from Script CEO.
+- **Integrity is checked before the verdict is trusted.** `red-integrity WORKSPACE TASK` hash-compares the committed tests against the RED-proof snapshot before the revisor's verdict is acted on — a verdict on weakened tests is not actionable.
 
 
 Code review requires technical evaluation, not emotional performance.

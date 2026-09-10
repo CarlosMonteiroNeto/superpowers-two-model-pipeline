@@ -10,16 +10,18 @@ WHAT THIS FORK ADDS
 
 1. two-model-sdd-pipeline (new skill)
    A script-autonomous fork of subagent-driven-development. A deterministic
-   "Script A" (modular bash) owns the per-task loop: gates, test/analyze
+   "Script CEO" (modular bash, invokable anywhere as `scripts/run-pipeline
+   PLAN_FILE`) owns the per-task loop: gates, test/analyze
    decisions, subagent dispatch (headless `opencode run --agent`), routing,
-   and commits. The interactive session (B) is the
-   strategist - it writes the plan and per-task briefs + RED tests and
-   receives feedback only through script outputs. A cheap "Operational"
-   Coder (C) writes code only; an expensive "Strategic" Reviewer (D)
-   reviews compiler-approved code and returns a structured JSON verdict.
-   Every LLM call is a stateless dispatch fed curated context - no agent
-   holds a continuous session across the branch (C/D retain within-task
-   sessions for fix/correction loops).
+   and commits. The interactive session (Agente estratégico) writes
+   the plan shell + spec, then DONE. A cheap "Operational"
+   Agente operador writes RED tests + code; an expensive "Strategic"
+   Agente revisor reviews compiler-approved code (plus test-vs-acceptance
+   fit) and returns a structured JSON verdict. A "Strategic" Agente diretor
+   expands plan tasks, appends corrective tasks, and closes the branch.
+   Every LLM call is fed curated context - no agent holds a continuous
+   session across the branch (operador/revisor retain within-task
+   sessions for fix/correction loops; diretor persists on task text only).
 
 2. brainstorming enrichment
    grill-with-docs merged into brainstorming, plus Incremental
@@ -41,19 +43,21 @@ PRINCIPLES
   resolution, test execution, lint, commit, task routing, subagent
   dispatch) are chained into deterministic scripts whose verdict is an
   exit code or a stdout action line.
-- Script-autonomous dispatch (ADR-0001): red-gate dispatches the Coder on
-  RED verified (then coder-gate retries it until green); green-gate commits and dispatches the
-  Reviewer; route-next + the orchestrator driver route every transition.
+- Script-autonomous dispatch (ADR-0001): red-gate dispatches Agente operador on
+  a scaffolded brief (then coder-gate retries it until green, RED-proof
+  before commit); green-gate commits and dispatches Agente revisor;
+  route-next + the orchestrator driver route every transition.
   The interactive session is never a link in the dispatch chain.
-- The Coder is write-only (ADR-0002): it never runs tests or analysis.
-  Script A decides task tests -> full suite -> analyze by exit code and
+- Agente operador is write-only (ADR-0002): it never runs tests or analysis.
+  Script CEO decides task tests -> full suite -> analyze by exit code and
   feeds failures back (unbounded retries until green; only TEST_DEFECT
-  escalates to B).
-- The Reviewer reviews compiler-approved code only (Item 2) and returns a
-  structured JSON verdict; minor findings are documented by B, never fix
+  escalates to Agente diretor).
+- Agente revisor reviews compiler-approved code only (Item 2) and returns a
+  structured JSON verdict; minor findings are PARKED for closing, never fix
   loops.
-- Corrective briefs go to task-N-corrective.md (never overwriting the
-  original task-N-brief.md). On resume (dispatch --continue --session),
+- Corrective tasks append to plan.json (`corrects: N`); `brief-scaffold`
+  builds the corrective brief and the SAME operador session resumes until
+  green. On resume (dispatch --continue --session),
   the corrective-round prompt tells the resumed model the brief has
   CHANGED and to re-read it fully.
 - Every command line is scripted and RTK-compressed. All LLM-invoked
@@ -66,12 +70,12 @@ PRINCIPLES
   (--continue --session) is allowed (prefix-cached); fresh dispatch when
   the task changes (ADR-0003). The ledger + git are the source of truth.
 - No knowledge graph: no stage builds, updates, or queries a code graph.
-  Briefs are written from the plan + prior diffs + gate reports; reviews
-  read the brief + diff only.
-- Observability without pollution: C/D progress is teed to workspace logs
+  Briefs are scaffolded from plan tasks; reviews read the brief + diff only.
+- Observability without pollution: operador/revisor progress shows in the
+  live dispatch digest and workspace logs
   (task-N-coder.log, task-N-reviewer.log) you can tail; headless sessions
-  never pollute the main session's history. B reads only curated script
-  outputs (OUTCOME lines, the ledger, and the parsed verdict JSON)
+  never pollute the main session's history. Script CEO reads only curated
+  script outputs (OUTCOME lines, the ledger, and the parsed verdict JSON)
   - never raw dispatch logs or full gate reports.
 - No approval after decisions: approval happens at the gate (once per
   branch) and at solution selection; from Phase 2c onward the branch runs
@@ -144,38 +148,44 @@ skills/flutter-app-pipeline/scripts/:
                        Flutter/Dart readiness, issue ratio, sustained interest,
                        license, README)
   pub-sync             download + lockfile + version-conflict report
-  red-gate             materialize RED tests, verify the failure is the
-                       EXPECTED-RED reason, and dispatch the Coder on success
-                       (then chains into coder-gate, which owns the retry
-                       loop through commit + Reviewer dispatch)
-  green-gate           chain test + analyze + format + commit, then
-                         review package + Reviewer dispatch. On commit appends
-                         the ledger `commit` entry (task from -t when given;
-                         ledger-append resolved from the two-model scripts dir)
+  red-gate             verify the scaffolded brief, dispatch Agente operador
+                       on success (then chains into coder-gate, which owns
+                       the retry loop: RED-proof + commit + revisor dispatch)
+  green-gate           chain test + analyze + format + commit (RED-proof
+                         first), then review package + revisor dispatch.
+                         On commit appends the ledger `commit` entry
+                         (task from -t when given; ledger-append resolved
+                         from the two-model scripts dir)
 
 skills/two-model-sdd-pipeline/scripts/:
-  pipeline-workspace   create the per-plan git-ignored workspace
+  run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]
+                       [--no-push]; loops route-next -> execute to closing
+                       -> push+PR. Invokable anywhere, no estrategista loop
+  pipeline-workspace   create the per-plan git-ignored workspace (+ working
+                       plan.json copy)
+  brief-scaffold       scaffold task briefs from plan tasks (statement,
+                       acceptance, EXPECTED-RED, RED order). No LLM
   resolve-toolchain    one-time-per-branch ecosystem detection: inspects the
                        project for a known marker (pubspec.yaml, Cargo.toml,
                        go.mod, package.json, pyproject.toml, requirements.txt)
                        and ledgers TEST_CMD/ANALYZE_CMD (exit 1/2 = ask once,
                        then ledger manually)
   ledger-append        append one structured JSONL ledger entry
-  red-gate             generic-engine RED confirmation: materializes the
-                       brief's RED tests and verifies the EXPECTED-RED reason
-                       using the ledger's test_cmd; dispatches C then chains
-                       into coder-gate
+  red-gate             per-task kickoff: verify the scaffolded brief,
+                       dispatch Agente operador, chain coder-gate
   coder-gate           owns every retry after the first dispatch: runs the gate
                        (green-gate for Flutter, run-gates otherwise), ledgers
-                       coder_round, builds the fix prompt + resumes C with
-                       --continue on failure; unbounded until green, stops on
-                       TEST_DEFECT -> ARBITRATE
+                       coder_round, builds the fix prompt + resumes operador with
+                       --continue on failure; unbounded until green; RED-proof
+                       before commit; stops on TEST_DEFECT -> ARBITRATE
+                       (Agente diretor resumes)
   cmd                  generic command runner: saves FULL output to a file,
                        prints the RTK-compressed view on stdout, returns the
                        command's true exit code (flutter test/analyze via
                        rtk test/err wrappers; RTK_ENABLED=0 / RTK_BIN)
   dispatch             headless subagent launcher: opencode run --agent,
-                       JSON stream teed to a workspace log, session id
+                       JSON stream teed to a workspace log + live progress
+                       digest on stdout, session id
                        recorded for resume (--continue --session). The brief
                        is passed as a positional (auto-attach; never --file);
                        on --continue (corrective round) the prompt explicitly
@@ -187,32 +197,33 @@ skills/two-model-sdd-pipeline/scripts/:
                        pollute session history; run by the orchestrator on
                        NEXT / FINAL_REVIEW
   orchestrator         thin per-task driver: executes route-next actions,
-                       prints OUTCOME for B
+                       prints OUTCOME for the runner
   token-kill           RTK minification of error logs / source / JSON
                        reports (lossless fallback)
   run-gates            generic green approval: full suite + analysis via cmd
   review-package       build a review bundle (commits + diff); with a TASK
                        arg, inlines the task brief so the
-                       Reviewer gets it in the single package file
+                       revisor gets it in the single package file
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW)
-  red-integrity        byte-compare committed tests vs brief RED-TESTS
-                       (exit 0 intact; 1 tampered; 2 usage)
+  red-integrity        hash-compare tests vs the RED-proof snapshot
+                       (exit 0 intact; 1 weakened; 2 usage)
   keep-discard         escalation pre-gate: empty diff / out-of-scope
                        files -> DISCARD; else KEEP (exit 0/1/2)
   interface-check      diff touched a file another task consumes
                        (exit 0 clean; 1 interface changed; 2 usage)
-  final-gate           pre-holistic: all tasks complete + no unresolved
+  final-gate           pre-closing: all tasks complete + no unresolved
                        verdicts + no blocking parked + tests/analyze green
-                       (exit 0 ready; 1 blockers; 2 usage)
+                       (skipped when the tree is unchanged since the last
+                       green commit; exit 0 ready; 1 blockers; 2 usage)
   doc-check            pipeline files changed -> READMEs must change too
                        (exit 0 OK; 1 violation; 2 usage)
-  parse-review         deterministic parser for the Reviewer's verdict:
+  parse-review         deterministic parser for the revisor's verdict:
                        reads JSONL event log, extracts structured verdict,
                        writes JSON file (exit 0 verdict written; 1 no
                        verdict / read error / write error; 2 usage).
-                       Run by B after D's log lands.
+                       Run by Script CEO after the log lands.
 
 skills/brainstorming/scripts/:
   orient-llm           pre-flight orientation gate: locate and print
@@ -224,16 +235,18 @@ output ever enters an LLM context window. Deterministic gates keep reading
 full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
 escalation packages, red-integrity byte-compare) is ever compressed.
 
-Dispatch is script-owned too: red-gate dispatches the Coder on RED verified
-(then coder-gate retries it until green); green-gate commits,
-builds the review package, and dispatches the Reviewer. The
-Reviewer reviews compiler-approved code only and returns a structured JSON
-verdict; minor findings are documented by the strategist, never fix loops.
-The Coder is write-only: it never runs commands; Script A runs task tests ->
+Dispatch is script-owned too: red-gate dispatches Agente operador on a
+scaffolded brief (then coder-gate retries it until green, RED-proof first);
+green-gate commits,
+builds the review package, and dispatches Agente revisor. The
+revisor reviews compiler-approved code only (plus test-vs-acceptance fit)
+and returns a structured JSON
+verdict; minor findings are PARKED for closing, never fix loops.
+Agente operador is write-only: it never runs commands; Script CEO runs task tests ->
 full suite -> analyze and feeds failures back (unbounded retries until
-green; only TEST_DEFECT escalates to the strategist).
+green; only TEST_DEFECT escalates to Agente diretor).
 
-Routing is scripted too: after every ledgered outcome Script A runs
+Routing is scripted too: after every ledgered outcome Script CEO runs
 `route-next` and executes the action it emits - the LLM never decides
 "review passed -> next task" or "failed -> corrective" by reasoning.
 
@@ -250,10 +263,11 @@ or take it as the first argument):
   scripts/install-superpowers  full clone when not installed (refuses to clobber)
 
 The agent runs check-superpowers at session start and, if behind or not
-installed, syncs/installs and asks you to restart OpenCode. Tier models:
-Strategic (Reviewer / controller fallback) = deepseek-v4-flash;
-Operational (Coder) = mimo-v2.5. Both agent definitions are `mode: all`
-so they can be dispatched headlessly; the repo mirrors them under `agent/`.
+installed, syncs/installs and asks you to restart OpenCode. Tier models
+(mirrored under `agent/`, both `mode: all` so they can be dispatched
+headlessly): Strategic (Agente diretor / Agente revisor) =
+opencode-go/muse-spark-1.3-contributor; Operational (Agente operador) =
+opencode-go/deepseek-v4-flash.
 
 TESTS
 -----

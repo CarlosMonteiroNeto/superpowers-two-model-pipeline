@@ -1,22 +1,13 @@
 #!/usr/bin/env bash
-# Deterministic RED confirmation: materialize the brief's RED test files into
-# the working tree and verify they FAIL for the expected reason. A RED test
-# that passes before implementation means the brief is defective (exit 1) ->
-# back to the Controller. A RED failure whose output does not contain the
-# brief's EXPECTED-RED text also means the brief is defective: the test
-# failed for the wrong reason (e.g. a compile error in test setup instead of
-# the missing production symbol).
-#
-# Brief convention (task-N-brief.md):
-#   RED-TESTS:
-#   <workspace>/task-N-test.dart -> test/task_N_test.dart
-#
-#   EXPECTED-RED:
-#   <text that must appear verbatim in the failure report>
+# Per-task kickoff: the brief is scaffolded from the plan (brief-scaffold),
+# never hand-written. This gate verifies the scaffold exists, ledgers the
+# red_check entry, dispatches Agente operador headlessly (Item 4), and chains
+# straight into coder-gate — which owns retries, the RED-proof (operador's
+# tests must fail pre-implementation), commit, and Revisor dispatch.
+# Agente operador authors the RED tests; no test is materialized here.
 #
 # Usage: red-gate WORKSPACE TASK
-# Exit codes: 0 = RED verified (expected failure, expected reason),
-#             1 = defective brief, 2 = usage / missing brief / bad entry.
+# Exit codes: 0 = coder-gate's exit; 2 = usage / missing brief.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -29,75 +20,27 @@ fi
 ws=$1
 task=$2
 brief="$ws/task-$task-brief.md"
-FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 
-[ -f "$brief" ] || { echo "RED-GATE: no brief: $brief" >&2; exit 2; }
-
-targets=()
-# RED-TESTS block ends at the first blank line (or EXPECTED-RED marker).
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  case "$line" in
-    EXPECTED-RED:*) break ;;
-  esac
-  src=${line%% -> *}
-  dst=${line#* -> }
-  if [ -z "$src" ] || [ -z "$dst" ]; then
-    echo "RED-GATE: bad RED-TESTS entry: $line" >&2
-    exit 2
-  fi
-  mkdir -p "$(dirname "$dst")"
-  cp "$src" "$dst" || { echo "RED-GATE: cannot materialize $src -> $dst" >&2; exit 2; }
-  echo "RED-GATE: materialized $src -> $dst"
-  targets+=("$dst")
-done < <(sed -n '/^RED-TESTS:/,/^$/p' "$brief" | sed -n '2,$p' | grep -v '^```')
-
-if [ "${#targets[@]}" -eq 0 ]; then
-  echo "RED-GATE: no RED-TESTS entries in brief" >&2
-  exit 2
-fi
-
-# Expected failure reason: first non-empty line after the EXPECTED-RED marker.
-expected=$(sed -n '/^EXPECTED-RED:/,$p' "$brief" | sed -n '2,$p' | grep -v '^```' | grep -v '^[[:space:]]*$' | head -1)
-
-if "$FLUTTER_BIN" test "${targets[@]}" > "$ws/red-gate-report.txt" 2>&1; then
-  echo "RED-GATE: RED tests PASSED before implementation - brief defective (see $ws/red-gate-report.txt)" >&2
-  exit 1
-fi
-
-if [ -z "$expected" ]; then
-  echo "RED-GATE: brief has no EXPECTED-RED text - cannot verify the failure reason (see $ws/red-gate-report.txt)" >&2
-  exit 1
-fi
-
-if ! grep -Fq "$expected" "$ws/red-gate-report.txt"; then
-  echo "RED-GATE: RED failure does not match the expected reason - brief defective (see $ws/red-gate-report.txt)" >&2
-  exit 1
-fi
-
-echo "RED-GATE: RED verified (expected failure, expected reason)"
+[ -f "$brief" ] || { echo "RED-GATE: no brief: $brief - run brief-scaffold first" >&2; exit 2; }
 
 TWO_MODEL_SCRIPTS="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts"
 
 if [ -x "$TWO_MODEL_SCRIPTS/ledger-append" ]; then
   "$TWO_MODEL_SCRIPTS/ledger-append" "$ws/ledger.jsonl" red_check "$task" \
-    "RED verified (expected failure, expected reason)" || true
+    "brief scaffolded, dispatching operador" || true
 fi
 
-# The Coder reads only curated artifacts (the brief and the materialized
-# tests) - no knowledge-graph rebuilds, no per-task gate side effects.
-# Keeping the gate fast and deterministic.
-
-# Dispatch the Coder headlessly (Item 4, ADR-0001): RED verified means the
-# brief is sound; Script A launches C directly, no main-agent intermediation.
-# C writes code only; Script A runs the gates (write-only Coder, ADR-0002).
+# Dispatch Agente operador headlessly (Item 4, ADR-0001): the scaffolded
+# brief is sound by construction; Script CEO launches the operador directly,
+# no main-agent intermediation. The operador writes code only; Script CEO
+# runs the gates (write-only operador, ADR-0002).
 DISPATCH_BIN="${DISPATCH_BIN:-$TWO_MODEL_SCRIPTS/dispatch}"
 "$DISPATCH_BIN" --agent two-model-coder --task "$task" \
   --prompt-file "$brief" --log "$ws/task-$task-coder.log"
 
-# Close the loop here instead of stopping at "C was dispatched": run the
-# gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
-# commit and dispatch the Reviewer on green - all without waiting on B.
+# Close the loop here instead of stopping at "operador was dispatched": run
+# the gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
+# RED-proof, commit and dispatch the revisor on green - all without waiting.
 # See coder-gate's header for the full state machine.
 CODER_GATE="${CODER_GATE:-$TWO_MODEL_SCRIPTS/coder-gate}"
 "$CODER_GATE" "$ws" "$task"

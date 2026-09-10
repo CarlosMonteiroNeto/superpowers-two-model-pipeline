@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+# Top-level Script CEO driver: invokable anywhere with a tracked plan file.
+# Loops route-next -> execute until FINAL_REVIEW -> closing -> push+PR.
+# No Agente estratégico in the loop: briefs are scaffolded, tasks come from
+# Agente diretor, gates decide, revisor judges. Resumable: re-running on the
+# same plan continues from the ledger (route-next reads state, never memory).
+#
+# Usage: run-pipeline PLAN_FILE [TOTAL] [--no-push]
+#   PLAN_FILE  tracked plan (docs/superpowers/plans/<name>-plan.json)
+#   TOTAL      optional total task count (default: plan task count, live -
+#              corrective tasks appended mid-run are counted automatically)
+#   --no-push  stop after the closing assessment (no push/PR) - also for tests
+#
+# Exit codes: 0 = branch closed (pushed unless --no-push);
+#             1 = blocked (blocker printed; fix + re-run continues);
+#             2 = usage.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+PLAN=""
+TOTAL_ARG=""
+NO_PUSH=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-push) NO_PUSH=1 ;;
+    *)
+      if [ -z "$PLAN" ]; then PLAN=$arg; else TOTAL_ARG=$arg; fi
+      ;;
+  esac
+done
+[ -n "$PLAN" ] || { echo "usage: run-pipeline PLAN_FILE [TOTAL] [--no-push]" >&2; exit 2; }
+[ -f "$PLAN" ] || { echo "RUN-PIPELINE: no plan file: $PLAN" >&2; exit 2; }
+case "$TOTAL_ARG" in
+  ""|*[!0-9]*) [ -z "$TOTAL_ARG" ] || { echo "RUN-PIPELINE: TOTAL must be numeric" >&2; exit 2; } ;;
+esac
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "RUN-PIPELINE: not in a git repo" >&2; exit 2; }
+# Absolutize the plan BEFORE cd-ing: gates run git in the repo root, and a
+# relative PLAN would dangle afterwards.
+PLAN=$(python3 -c "import os,sys; print(os.path.abspath(sys.argv[1]))" "$PLAN")
+cd "$ROOT" || { echo "RUN-PIPELINE: cannot cd to $ROOT" >&2; exit 2; }
+WS=$("$SCRIPT_DIR/pipeline-workspace" "$PLAN") || exit 2
+# pipeline-workspace prints pwd in POSIX form (/c/...) on Git Bash, which
+# native Windows Python cannot open - normalize once, here, for every
+# python3 call below (bash itself accepts either form).
+if command -v cygpath >/dev/null 2>&1; then
+  WS=$(cygpath -w "$WS")
+fi
+LEDGER="$WS/ledger.jsonl"
+DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+CODER_GATE_BIN="${CODER_GATE_BIN:-$SCRIPT_DIR/coder-gate}"
+FINAL_GATE_BIN="${FINAL_GATE_BIN:-$SCRIPT_DIR/final-gate}"
+# RED_GATE_BIN intentionally has no default here: red_gate_for() resolves it
+# (env override wins, else lang-based). Never initialize it empty.
+
+say() { echo "RUN-PIPELINE: $1"; }
+block() { echo "RUN-PIPELINE: BLOCKED - $1" >&2; exit 1; }
+
+ledger() { "$SCRIPT_DIR/ledger-append" "$LEDGER" "$@" || true; }
+
+plan_json() {
+  python3 - "$WS/plan.json" <<'PY'
+import json, sys
+print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))))
+PY
+}
+
+task_ids() {
+  plan_json | python3 -c "import json,sys; [print(t.get('id')) for t in json.load(sys.stdin).get('tasks', [])]"
+}
+
+total_now() {
+  if [ -n "$TOTAL_ARG" ]; then printf '%s' "$TOTAL_ARG"; return; fi
+  task_ids | grep -c . || true
+}
+
+first_incomplete() {
+  # NOTE: -c (not heredoc): inside a pipe, a heredoc would steal stdin and
+  # this reader would parse its own program instead of plan_json's output.
+  plan_json | python3 -c "
+import json, sys
+ledger = sys.argv[1]
+plan = json.load(sys.stdin)
+done = set()
+try:
+    fh = open(ledger, encoding='utf-8')
+except OSError:
+    fh = None
+if fh is not None:
+    with fh:
+        for line in fh:
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            if e.get('type') == 'task_complete':
+                done.add(str(e.get('task')))
+ids = [t.get('id') for t in plan.get('tasks', [])]
+for i in ids:
+    if str(i) not in done:
+        print(i)
+        break
+else:
+    print(ids[-1] if ids else 1)
+" "$LEDGER"
+}
+
+gate_lang() {
+  grep -E '"type": *"gate"' "$LEDGER" 2>/dev/null | tail -1 \
+    | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p'
+}
+
+red_gate_for() {
+  if [ -n "${RED_GATE_BIN:-}" ]; then printf '%s' "$RED_GATE_BIN"; return; fi
+  if [ "$(gate_lang)" = "flutter" ]; then
+    printf '%s' "$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate"
+  else
+    printf '%s' "$SCRIPT_DIR/red-gate"
+  fi
+}
+
+diretor_session() { cat "$WS/task-0-session.txt" 2>/dev/null || true; }
+
+dispatch_diretor() {
+  # dispatch_diretor PROMPT_FILE LOG_SUFFIX ; resumes the diretor session
+  # when recorded, else dispatches fresh.
+  local prompt=$1 log="$WS/task-generator-$2.log" session
+  session=$(diretor_session)
+  if [ -n "$session" ]; then
+    "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
+      --continue "$session" --prompt-file "$prompt" --log "$log"
+  else
+    "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
+      --prompt-file "$prompt" --log "$log"
+  fi
+}
+
+refresh_plan() { "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null || true; }
+
+tasks_usable() {
+  plan_json | python3 -c "
+import json, sys
+tasks = json.load(sys.stdin).get('tasks', [])
+ok = bool(tasks) and all(t.get('acceptance') and t.get('expected_red') for t in tasks)
+sys.exit(0 if ok else 1)
+"
+}
+
+# --- toolchain gate entry (once per branch) ---
+if ! grep -qE '"type": *"gate"' "$LEDGER" 2>/dev/null; then
+  say "no gate entry - resolving toolchain"
+  "$SCRIPT_DIR/resolve-toolchain" "$WS" "$ROOT" \
+    || block "resolve-toolchain needs a human (ambiguous/unknown toolchain)"
+fi
+
+# --- task expansion (Agente diretor, once per branch) ---
+if ! tasks_usable; then
+  say "plan has no usable tasks - dispatching Agente diretor"
+  cat > "$WS/diretor-expand.md" <<EOF
+Mode: EXPAND. Plan shell: $PLAN.
+Fill tasks[] per the Agente diretor rules (title, summary, spec_refs,
+touches, depends_on, acceptance, expected_red) - ALL tasks at once, in the
+tracked plan file. Reply: expanded task count + plan path.
+EOF
+  dispatch_diretor "$WS/diretor-expand.md" "expand" \
+    || block "diretor dispatch failed"
+  refresh_plan
+  tasks_usable || block "diretor did not expand tasks - inspect $WS/task-generator-expand.log"
+  ledger plan_ready "-" "tasks expanded by Agente diretor"
+fi
+
+# --- main loop ---
+task=$(first_incomplete)
+prev_action=""
+prev_lines=0
+stuck=0
+while true; do
+  total=$(total_now)
+  action=$("$SCRIPT_DIR/route-next" "$WS" "$task" "$total") \
+    || block "route-next failed for task $task"
+  lines=$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ' || echo 0)
+  if [ "$action" = "$prev_action" ] && [ "$lines" = "$prev_lines" ]; then
+    stuck=$((stuck + 1))
+  else
+    stuck=0
+  fi
+  prev_action=$action
+  prev_lines=$lines
+  [ "$stuck" -lt 5 ] || block "no progress for 5 iterations on '$action' - inspect logs"
+  say "$action"
+  # shellcheck disable=SC2086
+  set -- $action
+  act=$1
+  case "$act" in
+    BRIEF)
+      n=$2
+      "$SCRIPT_DIR/brief-scaffold" "$WS" "$n" \
+        || block "brief-scaffold failed for task $n (malformed task?)"
+      ledger brief_ready "$n" "brief scaffolded from plan"
+      ;;
+    RED)
+      n=$2
+      "$(red_gate_for)" "$WS" "$n"
+      rc=$?
+      case "$rc" in
+        0|2) ;; # green (loops inside) or TEST_DEFECT (ARBITRATE next)
+        *) block "red-gate exit $rc on task $n - inspect logs" ;;
+      esac
+      ;;
+    CODER)
+      "$CODER_GATE_BIN" "$WS" "$2"
+      rc=$?
+      case "$rc" in
+        0|2) ;;
+        *) block "coder-gate exit $rc - inspect logs" ;;
+      esac
+      ;;
+    REVIEW)
+      n=$2
+      "$SCRIPT_DIR/parse-review" "$WS/task-$n-reviewer.log" "$WS/task-$n-review.json" \
+        || block "no verdict in task $n reviewer log"
+      verdict=$(python3 - "$WS/task-$n-review.json" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("verdict", ""))
+PY
+)
+      [ -n "$verdict" ] || block "empty verdict for task $n"
+      findings=$(python3 - "$WS/task-$n-review.json" <<'PY'
+import json, sys
+v = json.load(open(sys.argv[1], encoding="utf-8"))
+print(len(v.get("findings", []) or []))
+PY
+)
+      ledger review_outcome "$n" "$verdict" "findings=$findings"
+      if [ "$verdict" = "APPROVED" ]; then
+        minors=$(python3 - "$WS/task-$n-review.json" <<'PY'
+import json, sys
+v = json.load(open(sys.argv[1], encoding="utf-8"))
+print("; ".join(v.get("minors", []) or []))
+PY
+)
+        if [ -n "$minors" ]; then
+          ledger task_complete "$n" "APPROVED" "PARKED=$minors"
+        else
+          ledger task_complete "$n" "APPROVED"
+        fi
+      fi
+      ;;
+    CORRECTIVE)
+      n=$2
+      findings="$WS/task-$n-review.json"
+      [ -f "$findings" ] || block "no review findings for task $n"
+      cat > "$WS/diretor-corrective-$n.md" <<EOF
+Mode: CORRECTIVE. Findings: $findings.
+Append ONE corrective task (next integer id, "corrects": $n), scoped to
+the findings only. Reply: the new task id.
+EOF
+      dispatch_diretor "$WS/diretor-corrective-$n.md" "corrective-$n" \
+        || block "diretor dispatch failed"
+      refresh_plan
+      # NOTE: -c (not heredoc) - see first_incomplete.
+      m=$(plan_json | python3 -c "
+import json, sys
+tasks = json.load(sys.stdin).get('tasks', [])
+cands = [t.get('id') for t in tasks if str(t.get('corrects')) == sys.argv[1]]
+print(max(cands) if cands else '')
+" "$n")
+      [ -n "$m" ] || block "diretor did not append a corrective task for $n"
+      "$SCRIPT_DIR/brief-scaffold" "$WS" "$m" \
+        || block "brief-scaffold failed for corrective task $m"
+      ledger brief_ready "$m" "corrective brief scaffolded" "corrects=$n"
+      ledger corrective "$m" "corrective task for $n"
+      orig_session=$(cat "$WS/task-$n-session.txt" 2>/dev/null || true)
+      if [ -n "$orig_session" ]; then
+        "$DISPATCH_BIN" --agent two-model-coder --task "$m" \
+          --continue "$orig_session" --prompt-file "$WS/task-$m-brief.md" \
+          --log "$WS/task-$m-coder.log" \
+          || block "operador dispatch failed for corrective task $m"
+      else
+        "$DISPATCH_BIN" --agent two-model-coder --task "$m" \
+          --prompt-file "$WS/task-$m-brief.md" \
+          --log "$WS/task-$m-coder.log" \
+          || block "operador dispatch failed for corrective task $m"
+      fi
+      "$CODER_GATE_BIN" "$WS" "$m"
+      rc=$?
+      case "$rc" in
+        0|2) ;;
+        *) block "coder-gate exit $rc on corrective task $m - inspect logs" ;;
+      esac
+      ;;
+    ARBITRATE)
+      n=$2
+      esc=$(grep -E '"type": *"escalated"' "$LEDGER" 2>/dev/null | tail -1 || true)
+      rev="$WS/task-$n-review.json"
+      {
+        echo "Mode: ARBITRATE for task $n."
+        echo "Escalation: ${esc:-none}"
+        [ -f "$rev" ] && echo "Review: $rev"
+        echo "Rule on task viability: fix the task in the tracked plan, or re-plan. Reply: what changed."
+      } > "$WS/diretor-arbitrate-$n.md"
+      dispatch_diretor "$WS/diretor-arbitrate-$n.md" "arbitrate-$n" \
+        || block "diretor dispatch failed"
+      refresh_plan
+      ledger arbitrate "$n" "diretor ruled"
+      ;;
+    NEXT)
+      prev=$task
+      task=$2
+      SESSION_CLEAN_BIN="${SESSION_CLEAN_BIN:-$SCRIPT_DIR/session-clean}"
+      "$SESSION_CLEAN_BIN" "$WS" "$prev" || true
+      ;;
+    FINAL_REVIEW)
+      break
+      ;;
+    *)
+      block "unknown action: $action"
+      ;;
+  esac
+done
+
+# --- closing ---
+total=$(total_now)
+"$FINAL_GATE_BIN" "$WS" "$total" || block "final-gate lists blockers above"
+cd "$ROOT" || block "cannot cd to $ROOT"
+base=$(git merge-base HEAD origin/main 2>/dev/null || git rev-list --max-parents=0 HEAD)
+"$SCRIPT_DIR/review-package" "$WS" "$base" HEAD "$WS/closing-review.diff" \
+  || block "review-package failed"
+spec_doc=$(plan_json | python3 -c "import json,sys; print(json.load(sys.stdin).get('spec_doc',''))")
+{
+  echo "Mode: CLOSING. Diff: $WS/closing-review.diff. Ledger: $LEDGER."
+  echo "Spec: ${spec_doc:-none (skip coverage, note it)}."
+  echo "Assess: open risks, parked minors triage, follow-ups. Reply with the assessment."
+} > "$WS/diretor-closing.md"
+dispatch_diretor "$WS/diretor-closing.md" "closing" \
+  || block "diretor dispatch failed"
+ledger final_review "-" "diretor closing complete"
+"$SCRIPT_DIR/doc-check" "$ROOT" || block "update README.txt and README-LLM.md, then re-run"
+
+if [ "$NO_PUSH" -eq 1 ]; then
+  say "closing complete (--no-push): package $WS/closing-review.diff, assessment $WS/task-generator-closing.log"
+  exit 0
+fi
+branch=$(git branch --show-current) || block "cannot determine branch"
+[ -n "$branch" ] || block "detached HEAD - push manually"
+git push -u origin "$branch" || block "push rejected - investigate, force-push only on explicit request"
+if command -v gh >/dev/null 2>&1; then
+  gh pr create --fill --base main 2>/dev/null \
+    || say "push done; gh pr create failed - create the PR manually"
+else
+  say "push done; gh not installed - create the PR manually"
+fi
+say "branch closed"
+exit 0

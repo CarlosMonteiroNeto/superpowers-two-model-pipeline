@@ -171,6 +171,50 @@ class TestDispatchFresh(DispatchTestBase):
         self.assertEqual(r.returncode, 9, r.stdout + r.stderr)
 
 
+class TestDispatchDigest(DispatchTestBase):
+    def test_prints_live_digest_and_keeps_full_log(self):
+        """The calling session watches progress on stdout (digest lines)
+        while the full JSON stream still lands in the log file."""
+        brief = self.brief()
+        argv_log = self.argv_log()
+        dlog = self.dispatch_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", dlog],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("[two-model-coder:3]", r.stdout)
+        logged = pathlib.Path(dlog).read_text(encoding="utf-8")
+        self.assertIn("ses_fixed123", logged)
+        self.assertIn('"type":"text"', logged.replace(" ", ""))
+
+    def test_digest_never_masks_exit_code(self):
+        """Garbage/non-JSON stream content must not break the digest or
+        mask opencode's exit code."""
+        noisy = write_stub(
+            self.stub_dir, "noisy-opencode",
+            """
+echo "not json at all" >&2
+echo '{"type":"text","part":{"type":"text","text":"half done"}}}'
+echo "sqeak\x01noise"
+exit "${STUB_OPENCODE_EXIT:-7}"
+""",
+        )
+        brief = self.brief()
+        argv_log = self.argv_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", self.dispatch_log()],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": noisy, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
+
+
 class TestDispatchResume(DispatchTestBase):
     def test_continue_resumes_session(self):
         brief = self.brief()

@@ -250,116 +250,70 @@ class TestRedGate(GateTestBase):
         super().setUp()
         self.ws = pathlib.Path(self._tmp) / "ws"
         self.ws.mkdir()
-        self.src_test = self.ws / "task-3-test.dart"
-        self.src_test.write_text("void main() { expect(true, isFalse); }\n", encoding="utf-8")
+        (self.ws / "task-3-brief.md").write_text(
+            "# Task 3 Brief (scaffolded)\n", encoding="utf-8")
 
-    def _brief(self, dest="test/red_test.dart"):
-        return self.ws / "task-3-brief.md"
+    def _red_env(self, **extra):
+        env = dict(self.env)
+        env["CODER_GATE"] = self.coder_gate
+        env.update(extra)
+        return env
 
-    def _brief_text(self, expected_red="Error: api_client.dart does not exist"):
-        return (
-            "RED-TESTS:\n"
-            f"{self.src_test} -> {self._brief().parent}/red_target.dart\n"
-            "\n"
-            "EXPECTED-RED:\n"
-            f"{expected_red}\n"
-        )
-
-    def test_materializes_and_verifies_red_when_tests_fail(self):
-        brief = self._brief()
-        brief.write_text(self._brief_text(), encoding="utf-8")
-        r = run_script(
-            "red-gate", [str(self.ws), "3"],
-            cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1",
-                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist"},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        target = self.ws / "red_target.dart"
-        self.assertTrue(target.exists())
-        self.assertEqual(target.read_text(encoding="utf-8"), self.src_test.read_text(encoding="utf-8"))
-
-    def test_defective_brief_when_red_passes(self):
-        brief = self._brief()
-        brief.write_text(self._brief_text(), encoding="utf-8")
-        r = run_script(
-            "red-gate", [str(self.ws), "3"],
-            cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "0"},
-        )
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-
-    def test_defective_brief_when_red_fails_for_wrong_reason(self):
-        """A RED failure whose report does NOT contain the brief's expected
-        failure text is a defective brief, not a verified RED: the test
-        failed for the wrong reason (e.g. a compile error in test setup
-        instead of the missing production symbol)."""
-        brief = self._brief()
-        brief.write_text(
-            self._brief_text(expected_red="Error: api_client.dart does not exist"),
-            encoding="utf-8",
-        )
-        r = run_script(
-            "red-gate", [str(self.ws), "3"],
-            cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1",
-                       "STUB_TEST_OUTPUT": "Error: type 'SessionStore' not found in test setup"},
-        )
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-
-    def test_missing_expected_red_is_defective(self):
-        """A brief without an EXPECTED-RED block cannot be verified: the
-        gate must reject it instead of rubber-stamping any failure."""
-        brief = self._brief()
-        brief.write_text(
-            f"RED-TESTS:\n{self.src_test} -> {brief.parent}/red_target.dart\n",
-            encoding="utf-8",
-        )
-        r = run_script(
-            "red-gate", [str(self.ws), "3"],
-            cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1",
-                       "STUB_TEST_OUTPUT": "Error: anything"},
-        )
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-
-    def test_missing_brief_is_an_error(self):
-        r = run_script("red-gate", [str(self.ws), "99"], cwd=self.ws, env_extra=self.env)
-        self.assertEqual(r.returncode, 2)
-
-    def test_red_verified_dispatches_coder(self):
-        """On RED verified, red-gate dispatches the Coder headlessly (Item 4):
-        no main-agent intermediation."""
-        brief = self._brief()
-        brief.write_text(self._brief_text(), encoding="utf-8")
+    def test_dispatches_coder_and_chains_coder_gate(self):
+        """On a scaffolded brief, red-gate dispatches Agente operador
+        headlessly (Item 4) and chains straight into coder-gate — no
+        materialization: the operador authors the RED tests."""
         dlog = pathlib.Path(self._tmp) / "dispatch.log"
         r = run_script(
             "red-gate", [str(self.ws), "3"],
             cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1",
-                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist",
-                       "STUB_DISPATCH_LOG": str(dlog)},
+            env_extra=self._red_env(STUB_DISPATCH_LOG=str(dlog)),
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = dlog.read_text(encoding="utf-8") if dlog.exists() else ""
         self.assertIn("--agent", calls)
         self.assertIn("two-model-coder", calls)
+        self.assertIn("coder-gate ran", r.stderr)
 
-    def test_defective_brief_does_not_dispatch(self):
-        """A defective brief (RED passes before implementation) must NOT
-        dispatch the Coder - back to B for arbitration."""
-        brief = self._brief()
-        brief.write_text(self._brief_text(), encoding="utf-8")
+    def test_ledgers_red_check(self):
+        ledger = self.ws / "ledger.jsonl"
+        ledger.write_text("", encoding="utf-8")
         dlog = pathlib.Path(self._tmp) / "dispatch.log"
         r = run_script(
             "red-gate", [str(self.ws), "3"],
             cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "0",
-                       "STUB_DISPATCH_LOG": str(dlog)},
+            env_extra=self._red_env(STUB_DISPATCH_LOG=str(dlog)),
         )
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("red_check", ledger.read_text(encoding="utf-8"))
+
+    def test_propagates_coder_gate_exit(self):
+        dlog = pathlib.Path(self._tmp) / "dispatch.log"
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra=self._red_env(
+                STUB_DISPATCH_LOG=str(dlog), STUB_CODER_GATE_EXIT="2"),
+        )
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+
+    def test_missing_brief_is_an_error(self):
+        r = run_script("red-gate", [str(self.ws), "99"], cwd=self.ws, env_extra=self.env)
+        self.assertEqual(r.returncode, 2)
+
+    def test_defective_brief_does_not_dispatch(self):
+        """Without a scaffolded brief there is nothing to dispatch —
+        back to Agente diretor, never a bare Coder run."""
+        (self.ws / "task-3-brief.md").unlink()
+        dlog = pathlib.Path(self._tmp) / "dispatch.log"
+        r = run_script(
+            "red-gate", [str(self.ws), "3"],
+            cwd=self.ws,
+            env_extra=self._red_env(STUB_DISPATCH_LOG=str(dlog)),
+        )
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         calls = dlog.read_text(encoding="utf-8") if dlog.exists() else ""
-        self.assertEqual(calls, "", f"defective brief must not dispatch, got: {calls}")
+        self.assertEqual(calls, "", f"missing brief must not dispatch, got: {calls}")
 
 
 class TestPubSync(GateTestBase):

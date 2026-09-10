@@ -72,6 +72,14 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("compiler-approved", prompt)
         self.assertIn("verdict", prompt)
 
+    def test_reviewer_checks_spec_alignment(self):
+        """A loose plan must not pass review: the revisor verifies the diff
+        covers the brief's cited spec sections, and a task with no spec
+        anchor is a SEND_BACK finding."""
+        prompt = (self.dir / "reviewer-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("Spec refs", prompt)
+        self.assertIn("SEND_BACK", prompt)
+
     def test_controller_brief_is_b_side_guidance(self):
         """Brief writing moved into the strategist session (Item 1): the
         controller-brief template is guidance for B, not a dispatch template."""
@@ -80,9 +88,9 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("Strategist Session", text)
 
     def test_red_authorship_follows_writing_good_tests(self):
-        """B authors the RED tests (C never writes or edits tests), so both
-        the skill's brief step and the brief-writing guidance must point at
-        TDD's writing-good-tests.md."""
+        """Agente operador authors the RED tests (per writing-good-tests.md),
+        specified by Agente diretor — so the skill must point at TDD's
+        writing-good-tests.md, and so must the brief-writing guidance."""
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("writing-good-tests.md", text)
         prompt = (self.dir / "controller-brief-prompt.md").read_text(encoding="utf-8")

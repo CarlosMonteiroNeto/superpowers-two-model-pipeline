@@ -22,13 +22,16 @@ end to end.
 
 ## 2. Architecture (script-autonomous, two layers)
 
-- **`two-model-sdd-pipeline`** (generic engine): a deterministic **Script A**
+- **`two-model-sdd-pipeline`** (generic engine): a deterministic **Script CEO**,
+  invokable anywhere as `scripts/run-pipeline PLAN_FILE`,
   owns the per-task loop — gates, test/analyze decisions, subagent dispatch,
-  routing, and commits. The interactive session **B** is
-  the strategist: it writes the plan and per-task briefs + RED tests and
-  receives feedback only through script outputs. **C** (Coder, Operational,
-  `two-model-coder`) is write-only — it never runs commands. **D** (Reviewer,
-  Strategic, `two-model-reviewer`) reviews compiler-approved code and returns
+  routing, and commits. The interactive session (**Agente estratégico**) writes
+  the plan shell + spec, then DONE. **Agente diretor** (`two-model-task-generator`)
+  expands plan tasks, appends corrective tasks, closes the branch.
+  **Agente operador** (`two-model-coder`) is write-only — it authors RED tests,
+  then implements; it never runs commands. **Agente revisor**
+  (`two-model-reviewer`) reviews compiler-approved code (plus
+  test-vs-acceptance fit) and returns
   a structured JSON verdict. State lives in the JSON plan, git history, and a
   script-maintained JSONL **ledger**, never in an LLM's memory.
 - **`flutter-app-pipeline`** (Flutter layer, on top): adds package research
@@ -78,14 +81,16 @@ recorded so it is never asked again for that branch.
    technically complete tasks with `writing-plans` (no code downloaded; lockfile
    only). Pure planning.
 3. **Phase 3 — TDD Implementation.** Delegated to `two-model-sdd-pipeline`
-   (script-autonomous per-task loop). Flutter additions: `pub-sync` ->
-   `red-gate` (dispatches C on RED verified, then chains straight into
-   `coder-gate`, which owns every retry after that: gate check -> PASS
-(`green-gate` commit + dispatch D) | FAIL (fix prompt + redispatch C with
-`--continue`, unbounded until green) | TEST_DEFECT (stop, `route-next`
-emits ARBITRATE) -> `route-next` (CORRECTIVE / ARBITRATE / NEXT /
-FINAL_REVIEW). `orchestrator`'s own CODER/REVIEW cases only fire on a
-resumed/interrupted session — the normal path never returns to B.
+   (script-autonomous per-task loop, preferably via `run-pipeline`).
+   Flutter additions: `pub-sync` ->
+   `red-gate` (dispatches Agente operador on a scaffolded brief, then chains
+   straight into `coder-gate`, which owns every retry after that: RED-proof
+   + gate check -> PASS (`green-gate` commit + dispatch revisor) | FAIL
+   (fix prompt + redispatch with `--continue`, unbounded until green) |
+   TEST_DEFECT (stop, `route-next` emits ARBITRATE for Agente diretor) ->
+   `route-next` (CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW).
+   `orchestrator`'s own CODER/REVIEW cases only fire on a
+   resumed/interrupted session — the normal path never waits on anyone.
    Every LLM-invoked command runs through `scripts/cmd` (RTK compression).
 4. **Phase 4 — Project-Wide Review.** Revalidate with `green-gate --no-commit`,
    full code review, corrections re-enter Phase 3.
@@ -94,11 +99,12 @@ resumed/interrupted session — the normal path never returns to B.
 
 | Role | Tier | Responsibility |
 |---|---|---|
-| Script A | none (deterministic) | gates, test/analyze decisions, dispatch C/D, routing, commits, ledger; never implements/reviews itself |
-| B (strategist session) | Strategic (human) | brainstorming, plan.json, per-task briefs + RED tests, corrective briefs, TEST_DEFECT arbitration, final review (fresh `/new` session) |
-| C (Coder) | Operational (`two-model-coder`, `mode: all`) | write-only implementation against a RED test; never runs commands; unbounded retries until green, resume within task |
-| D (Code Reviewer) | Strategic (`two-model-reviewer`, `mode: all`) | JSON verdict (APPROVED / SEND_BACK / ESCALATE) on compiler-approved code; never runs test/analyze |
-| Strategic Coder | REMOVED | escalation is B arbitration (`ARBITRATE`) |
+| Script CEO | none (deterministic) | gates, test/analyze decisions, dispatch operador/revisor/diretor, routing, commits, ledger; never implements/reviews itself |
+| Agente estratégico | Strategic (human) | brainstorming, plan shell + spec, then DONE |
+| Agente diretor | Strategic (`two-model-task-generator`, `mode: all`) | expands plan tasks (acceptance + expected_red), corrective tasks, closing; resumed only on demand |
+| Agente operador | Operational (`two-model-coder`, `mode: all`) | write-only implementation + RED tests against a scaffolded brief; never runs commands; unbounded retries until green, resume within task |
+| Agente revisor | Strategic (`two-model-reviewer`, `mode: all`) | JSON verdict (APPROVED / SEND_BACK / ESCALATE) on compiler-approved code + test-vs-acceptance fit; never runs test/analyze |
+| Strategic Coder | REMOVED | escalation is Agente diretor arbitration (`ARBITRATE`) |
 
 Always dispatch via `scripts/dispatch`, which targets the named agent
 definition explicitly; omitted model silently inherits the expensive session
@@ -110,9 +116,11 @@ cannot be targeted headlessly by `opencode run --agent`).
 | Script | Purpose | Verdict |
 |---|---|---|
 | `cmd --full-file FILE -- CMD...` (two-model) | Generic command runner: runs any LLM-invoked command, saves the FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code. `flutter test`/`flutter analyze` compress via `rtk test`/`rtk err` wrappers derived from the file (verdict from the raw run — wrappers mask child exit codes) | exit = command's exit code; 2 usage |
-| `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG (observability), records the session id for resume. The brief is passed as a positional so opencode auto-attaches it (never `--file` — this opencode version misparses the message when `--file` is present). On `--continue` (corrective round) the prompt explicitly tells the resumed model the brief has CHANGED and to re-read it fully. Refuses (exit 3) when the targeted agent is not `mode: all` (fallback to the default agent would silently break the tiers) | exit = opencode's exit; 2 usage; 3 not a primary agent |
+| `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG (observability) plus a live progress digest on stdout, records the session id for resume. The brief is passed as a positional so opencode auto-attaches it (never `--file` — this opencode version misparses the message when `--file` is present). On `--continue` (corrective round) the prompt explicitly tells the resumed model the brief has CHANGED and to re-read it fully. Refuses (exit 3) when the targeted agent is not `mode: all` (fallback to the default agent would silently break the tiers) | exit = opencode's exit; 2 usage; 3 not a primary agent |
 | `session-clean WS TASK\|all` (two-model) | Session hygiene: deletes the opencode sessions a completed task recorded (`task-N-*-session.txt`), so headless dispatches never pollute the interactive session history. Orchestrator runs it on `NEXT` (that task) and `FINAL_REVIEW` (all tasks) | exit 0 best-effort; 2 usage |
-| `orchestrator WS TASK [TOTAL]` (two-model) | Thin per-task driver: runs `route-next`, executes the emitted action, prints `OUTCOME:` for B | exit 0 handoff; 1 inconsistent; 2 usage |
+| `orchestrator WS TASK [TOTAL]` (two-model) | Thin per-task driver: runs `route-next`, executes the emitted action, prints `OUTCOME:` for the runner | exit 0 handoff; 1 inconsistent; 2 usage |
+| `run-pipeline PLAN_FILE [TOTAL] [--no-push]` (two-model) | Top-level Script CEO driver, invokable anywhere: loops route-next → execute to FINAL_REVIEW → closing (final-gate + package + diretor assessment) → push+PR | exit 0 closed; 1 blocked (fix + re-run continues); 2 usage |
+| `brief-scaffold WORKSPACE TASK` (two-model) | Scaffold the task brief mechanically from the plan (statement, acceptance, EXPECTED-RED, RED order). No LLM | exit 0 wrote; 1 plan unreadable; 2 usage/missing fields |
 | `token-kill err\|src\|json FILE` (two-model) | RTK minification of LLM-facing payloads (error logs, source, JSON reports); lossless fallback to raw | exit 0 ok; 2 usage |
 | `run-gates WS TEST ANALYZE` (two-model) | Generic green approval: full suite + analysis through `cmd` (language-agnostic mirror of green-gate) | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
 | `orient-llm [REPO]` | Brainstorming pre-flight: locate and print this repo's `README-LLM.md` so the agent is oriented on how to run the pipeline | exit 0 printed; 1 missing (gate — stop); 2 usage |
@@ -120,25 +128,25 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `template-search CATEGORY` | Search GitHub for project templates in the given category (stars descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific 50–69 group) | JSON list of candidates with scores |
 | `template-score TEMPLATE` | Score a project template candidate (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) | JSON + gate verdict (same semantics as pkg-score) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
-| `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report). **On success dispatches C, then chains into `coder-gate`** — the whole per-task loop runs to completion (or TEST_DEFECT) in one call | exit = `coder-gate`'s exit; exit 1 defective brief (no dispatch); exit 2 usage |
-| `red-gate WORKSPACE TASK [TEST_CMD]` (two-model, generic) | Language-agnostic mirror of the Flutter `red-gate` above, for non-Flutter branches: same materialize-and-verify-expected-reason logic, but the test command comes from the ledger's `gate.test_cmd` (written by `resolve-toolchain`) instead of a hardcoded `flutter test`. Same dispatch-C-then-`coder-gate` behavior | exit = `coder-gate`'s exit; exit 1 defective brief; exit 2 usage/no test_cmd |
-| `coder-gate WORKSPACE TASK` (two-model) | Closes the gap that used to require B between attempts: after **every** Coder attempt (first from `red-gate`, or a resume), runs the gate (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers `coder_round`, and decides by exit code/log content alone — PASS → commit (generic engine) or `green-gate` already committed (Flutter) + `review-package` + dispatch D; FAIL → rebuild the fix prompt (prior diff + gate report + brief, pure path interpolation) and redispatch C with `--continue`, unbounded until green; `TEST_DEFECT` seen in the latest log → ledger `escalated` and stop immediately, no more retries | exit 0 green+committed+D dispatched; 2 TEST_DEFECT escalated; 3 usage |
+| `red-gate WORKSPACE TASK` | Per-task kickoff: verify the scaffolded brief, dispatch Agente operador, chain `coder-gate` (retries, RED-proof, commit, revisor dispatch) | exit = `coder-gate`'s exit; exit 2 usage |
+| `red-gate WORKSPACE TASK [TEST_CMD]` (two-model, generic) | Language-agnostic mirror of the Flutter `red-gate` above, for non-Flutter branches: same materialize-and-verify-expected-reason logic, but the test command comes from the ledger's `gate.test_cmd` (written by `resolve-toolchain`) instead of a hardcoded `flutter test`. Same dispatch-operador-then-`coder-gate` behavior | exit = `coder-gate`'s exit; exit 2 usage/no test_cmd |
+| `coder-gate WORKSPACE TASK` (two-model) | Unbounded retries until green, no hand-back: after **every** operador attempt (first from `red-gate`, or a resume), runs the gate (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers `coder_round`, and decides by exit code/log content alone — PASS → commit (generic engine) or `green-gate` already committed (Flutter) + `review-package` + dispatch revisor; FAIL → rebuild the fix prompt (prior diff + gate report + brief, pure path interpolation) and redispatch with `--continue`, unbounded until green; `TEST_DEFECT` seen in the latest log → ledger `escalated` and stop immediately, no more retries | exit 0 green+RED-proved+committed+revisor dispatched; 2 TEST_DEFECT escalated; 3 usage |
 | `resolve-toolchain WORKSPACE [ROOT]` (two-model) | One-time-per-branch, no-LLM detection: inspects `ROOT` for a known ecosystem marker (`pubspec.yaml`, `Cargo.toml`, `go.mod`, `package.json`, `pyproject.toml`/`requirements.txt`) and resolves `TEST_CMD`/`ANALYZE_CMD`; on success chains directly into `ledger-append` (`gate` entry). This is what lets `orchestrator` pick the right `red-gate` and lets the generic `red-gate`/`run-gates` run without ever asking | exit 0 resolved + ledgered; exit 1 ambiguous (multiple markers — manual fallback); exit 2 usage/no marker (manual fallback) |
-| `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: appends the `commit` ledger entry (task number from `-t TASK` when given, else `-`; `ledger-append` resolved from the two-model scripts dir, falling back to a workspace copy), then review package + **dispatches D**. `--no-commit` never commits/never dispatches | exit 0 green (+commit +D); 1 tests; 2 analyze; 3 format |
+| `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: appends the `commit` ledger entry (task number from `-t TASK` when given, else `-`; `ledger-append` resolved from the two-model scripts dir, falling back to a workspace copy), then review package + **dispatches revisor**. `--no-commit` never commits/never dispatches | exit 0 green (+commit +revisor); 1 tests; 2 analyze; 3 format |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
-| `red-integrity WORKSPACE TASK` | Byte-compare committed tests vs brief RED-TESTS | exit 0 intact; 1 tampered; 2 usage/missing |
-| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` ahead of the commit list so the Reviewer receives the brief in the single `--prompt-file` package | exit 0 wrote; 2 usage |
+| `red-integrity WORKSPACE TASK` | Hash-compare tests vs the RED-proof snapshot (no post-green weakening) | exit 0 intact; 1 weakened; 2 usage/missing |
+| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` ahead of the commit list so the revisor receives the brief in the single `--prompt-file` package | exit 0 wrote; 2 usage |
 | `keep-discard WORKSPACE TASK` | Escalation pre-gate: empty diff / out-of-scope files → DISCARD; else KEEP | exit 0 KEEP; 1 DISCARD; 2 usage |
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
-| `final-gate WORKSPACE TOTAL_TASKS` | Pre-holistic: all complete + no unresolved verdicts + no blocking parked + tests/analyze green | exit 0 ready; 1 blockers; 2 usage |
+| `final-gate WORKSPACE TOTAL_TASKS` | Pre-closing: all complete + no unresolved verdicts + no blocking parked + tests/analyze green (skipped when the tree is unchanged since the last green commit) | exit 0 ready; 1 blockers; 2 usage |
 | `doc-check [REPO]` | Deterministic gate: pipeline files changed → READMEs must also change | exit 0 OK; 1 violation; 2 usage |
-| `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the Reviewer's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after D's log lands | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
+| `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the revisor's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after the log lands | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
 
 All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `RTK_BIN`,
 `DISPATCH_BIN`, `OPENCODE_BIN` env overrides. `cmd` also respects `RTK_ENABLED=0`
 (passthrough) and `RTK_BIN` (binary override); if RTK has no filter/wrapper for a
 command it passes the full output through — nothing is lost.
-`red-gate`/`green-gate` dispatch C/D on success. Tests live in
+`red-gate`/`green-gate` dispatch operador/revisor on success. Tests live in
 `skills/flutter-app-pipeline/tests/` (flutter scripts) and
 `skills/two-model-sdd-pipeline/tests/` (router + cmd runner + dispatch + gates),
 run with `run-tests.sh` (`python3 -m unittest discover`).
@@ -156,44 +164,47 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   the binary. `flutter test`/`flutter analyze` use the `rtk test`/`rtk err`
   wrapper derivation from the full file — the verdict always comes from the
   raw run (RTK wrappers mask child exit codes, spike-verified).
-- **Dispatch is script-owned (ADR-0001):** red-gate dispatches C on RED
-  verified; green-gate dispatches D after commit; `orchestrator` executes
-  route-next actions. The interactive session is never a link in the
-  dispatch chain.
-- **C is write-only (ADR-0002):** the Coder never runs test/analyze/git
-  commands. Script A decides task tests → full suite → analyze by exit code
-  and feeds failures back — unbounded retries until green; only TEST_DEFECT
-  escalates to B.
-- **D reviews compiler-approved code only (Item 2):** the Reviewer never
+- **Dispatch is script-owned (ADR-0001):** red-gate dispatches Agente operador on
+  a scaffolded brief; green-gate dispatches Agente revisor after commit;
+  `run-pipeline` drives the whole branch. The interactive session is never
+  a link in the dispatch chain.
+- **Operador is write-only (ADR-0002):** it authors RED tests, then implements,
+  and never runs test/analyze/git commands. Script CEO decides task tests
+  → full suite → analyze by exit code and feeds failures back — unbounded
+  retries until green, RED-proof before commit; only TEST_DEFECT escalates
+  to Agente diretor.
+- **Revisor reviews compiler-approved code only (Item 2):** never
   runs or re-runs test/analyze; scope is design, architecture, spec
-  compliance, interface discipline. Returns a structured JSON verdict.
+  compliance (incl. spec-refs alignment), interface discipline, and
+  test-vs-acceptance fit. Returns a structured JSON verdict.
 - **No knowledge graph:** no stage builds, updates, or queries a code graph.
-  B writes briefs from the plan + prior diffs + gate reports; D reviews the
-  brief + diff only.
+  Briefs are scaffolded from plan tasks; the revisor reviews brief + diff only.
 - **Gates are exit codes:** never judge "did the test fail for the expected
   reason" or "are tests green" by reading output — run the gate script and read
-  its exit code. The red-gate additionally verifies the failure reason against
-  the brief's `EXPECTED-RED:` text.
+  its exit code. The RED-proof additionally verifies the failure reason against
+  the task's `expected_red` text (fail pre-implementation, then hash-compare
+  at commit).
 - **Routing is scripted:** after every review outcome (and every earlier
   ledgered transition) run `route-next` and execute its emitted action — the
   LLM never decides "APPROVED → next task" or "SEND_BACK → corrective" by
-  reasoning. SEND_BACK → `CORRECTIVE` (B writes a corrective brief);
-  ESCALATE → `ARBITRATE` (B validates the brief/test).
-- **Cache-aware calls:** C and D retain their sessions WITHIN a task until D
-  approves (fix/correction rounds resume via `--continue --session`; the
-  provider cache-bills the stable prefix — system + plan + brief); when the task changes, dispatch fresh. B holds the session
-  for plan + briefs; the final review is a fresh `/new` session.
-- **Review pre-gates are exit codes:** `red-integrity` byte-compares committed
-  tests vs brief (no LLM judgment); `interface-check` detects cross-task
+  reasoning. SEND_BACK → `CORRECTIVE` (diretor appends a task, same operador
+  resumes); ESCALATE → `ARBITRATE` (diretor rules).
+- **Cache-aware calls:** operador and revisor retain their sessions WITHIN a task until
+  approval (fix/correction rounds resume via `--continue --session`; the
+  provider cache-bills the stable prefix — system + plan + brief); when the task changes, dispatch fresh. Agente diretor persists across the branch
+  on task text only; closing is a resumed session, not a fresh `/new` one.
+- **Review pre-gates are exit codes:** `red-integrity` hash-compares tests vs
+  the RED-proof snapshot (no LLM judgment); `interface-check` detects cross-task
   interface touch via plan.json; `keep-discard` decides the mechanical fate
   of partial work; `final-gate` verifies all tasks complete, no unresolved
-  verdicts, no blocking parked findings, and tests/analyze green before the
-  holistic review.
+  verdicts, no blocking parked findings, and tests/analyze green (skipped
+  when the tree is unchanged since the last green commit) before closing.
 - **Ledger via script:** the ledger is appended through `ledger-append`, never
   free-handed as prose.
-- **Workers never commit:** only Script A (via `green-gate` or the
+- **Workers never commit:** only Script CEO (via `green-gate` or the
   orchestrator) commits.
-- **Observability without pollution:** C/D progress is teed to workspace logs
+- **Observability without pollution:** operador/revisor progress shows in the
+  live dispatch digest plus workspace logs
   (`task-N-coder.log`, `task-N-reviewer.log`); the developer can tail them;
   headless sessions never pollute the main session's history.
 - **No approval after decisions:** approval happens at the gate (once per
@@ -314,9 +325,9 @@ skills/flutter-app-pipeline/SKILL.md
 skills/flutter-app-pipeline/scripts/     <- deterministic scripts (bash + python3)
 skills/flutter-app-pipeline/tests/       <- python unittest suite (run-tests.sh)
 skills/two-model-sdd-pipeline/SKILL.md
-skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, cmd, dispatch,
-                                            orchestrator, token-kill, run-gates, review-package,
-                                            route-next, doc-check, parse-review
+skills/two-model-sdd-pipeline/scripts/   <- run-pipeline, brief-scaffold, pipeline-workspace, ledger-append, cmd, dispatch,
+                                             orchestrator, token-kill, run-gates, review-package,
+                                             route-next, doc-check, parse-review
 ```
 
 ## 13. How to work with this harness
@@ -329,16 +340,15 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, c
    `two-model-reviewer` agents); ask only for the test/analyze commands, once per
    branch — and ask about tiers only when the local pipeline is not installed.
 3. Per task: `pkg-score` candidates -> select with the developer -> `writing-plans`
-   tasks -> `pub-sync` -> B writes the brief -> `red-gate` (expected-reason
-   check; dispatches C) -> Script A gates (task tests -> full suite -> analyze;
-   C retried until green, never hands back) -> `green-gate` (commit +
-   dispatch D) -> `red-integrity` (byte-compare) -> D JSON verdict ->
-   `route-next` -> `orchestrator` hands `OUTCOME` to B. SEND_BACK →
-   `CORRECTIVE` (B writes corrective brief to `task-N-corrective.md`,
-   never overwriting `task-N-brief.md`; resume C via `--continue --session`
-   with a corrective-round prompt that tells the model the brief has
-   CHANGED and to re-read it fully); ESCALATE → `ARBITRATE` (B
-   rules). After all tasks: `final-gate` then B's fresh `/new` holistic review.
+   tasks -> `pub-sync` -> Agente estratégico writes plan shell + spec (then DONE) ->
+   `run-pipeline PLAN_FILE`: diretor expands tasks; per task `brief-scaffold` ->
+   `red-gate` (dispatches operador) -> Script CEO gates (RED-proof, task tests,
+   full suite, analyze; operador retried until green, never hands back) ->
+   `green-gate` (commit + dispatch revisor) -> `red-integrity` (snapshot compare)
+   -> revisor JSON verdict -> `route-next`. SEND_BACK →
+   `CORRECTIVE` (diretor appends task, same operador resumes `--continue --session`);
+   ESCALATE → `ARBITRATE` (diretor rules). After all tasks: `final-gate`
+   (short-circuit when unchanged) then diretor closing. Push + PR default.
    The router, not the LLM, decides every transition. All command lines go
    through `scripts/cmd`.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter

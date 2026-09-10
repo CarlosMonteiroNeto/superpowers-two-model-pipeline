@@ -120,6 +120,61 @@ class TestFinalGate(FinalGateBase):
         r = self.run_it(total="1")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
+    def _git_repo(self):
+        repo = pathlib.Path(self._tmp) / "repo"
+        repo.mkdir(exist_ok=True)
+        subprocess.run(["git", "init", "-q"], cwd=str(repo), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(repo), check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=str(repo), check=True)
+        (repo / "file.txt").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=str(repo), check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "green"], cwd=str(repo), check=True)
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(repo),
+                             capture_output=True, text=True, check=True).stdout.strip()
+        return repo, sha
+
+    def _new_keys_gate(self):
+        return {"ts": "t", "type": "gate", "task": "-", "summary": "gate",
+                "test_cmd": self.test_stub, "analyze_cmd": self.analyze_stub}
+
+    def _run_in(self, repo, total="1"):
+        return subprocess.run(
+            [BASH, str(SCRIPTS / "final-gate"), str(self.ws), total],
+            capture_output=True, text=True, cwd=str(repo),
+            env={**os.environ, **self.env},
+        )
+
+    def test_unchanged_tree_skips_rerun(self):
+        """Clean tree + HEAD == last ledger green commit: the last task's
+        gates already proved this tree — even failing commands must not run."""
+        repo, sha = self._git_repo()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "commit", "task": "1", "summary": "green",
+             "commits": sha},
+        ])
+        self.env["STUB_TEST_EXIT"] = "1"
+        self.env["STUB_ANALYZE_EXIT"] = "1"
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("skipping", r.stdout + r.stderr)
+
+    def test_changed_tree_runs_commands(self):
+        """Dirty tree: the re-run happens (and a failing command blocks)."""
+        repo, sha = self._git_repo()
+        (repo / "file.txt").write_text("changed\n", encoding="utf-8")
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "commit", "task": "1", "summary": "green",
+             "commits": sha},
+        ])
+        self.env["STUB_TEST_EXIT"] = "1"
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertNotIn("skipping", r.stdout + r.stderr)
+
     def test_missing_ledger_is_usage(self):
         r = self.run_it()
         self.assertEqual(r.returncode, 2)

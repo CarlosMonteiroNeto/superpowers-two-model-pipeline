@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Mechanically scaffold a task brief from the plan (Script CEO, no LLM).
+
+Reads task TASK from <WORKSPACE>/plan.json and writes
+<WORKSPACE>/task-N-brief.md: statement, acceptance, EXPECTED-RED,
+out-of-scope fence, and the RED-authorship order for Agente operador.
+Overwrites an existing brief for the same task (scaffolds are derived,
+never hand-edited).
+
+Usage: brief-scaffold WORKSPACE TASK
+Exit codes: 0 = scaffold written; 1 = plan unreadable;
+            2 = usage / missing plan / task without required fields
+               (title, summary, acceptance[], expected_red).
+"""
+import json
+import sys
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("usage: brief-scaffold WORKSPACE TASK", file=sys.stderr)
+        return 2
+    ws, task = argv
+    plan_path = ws.rstrip("/\\") + "/plan.json"
+    try:
+        with open(plan_path, encoding="utf-8") as fh:
+            plan = json.load(fh)
+    except (OSError, ValueError) as exc:
+        print("BRIEF-SCAFFOLD: cannot read plan: %s" % exc, file=sys.stderr)
+        return 1
+    wanted = str(task)
+    match = None
+    for entry in plan.get("tasks", []):
+        if str(entry.get("id")) == wanted:
+            match = entry
+            break
+    if match is None:
+        print("BRIEF-SCAFFOLD: no task %s in plan" % wanted, file=sys.stderr)
+        return 2
+    missing = [
+        key for key in ("title", "summary", "acceptance", "expected_red")
+        if not match.get(key)
+    ]
+    if missing:
+        print(
+            "BRIEF-SCAFFOLD: task %s lacks required fields: %s"
+            % (wanted, ", ".join(missing)),
+            file=sys.stderr,
+        )
+        return 2
+    touches = match.get("touches", []) or []
+    depends = match.get("depends_on", []) or []
+    spec_refs = match.get("spec_refs", []) or []
+    lines = [
+        "# Task %s Brief — %s (scaffolded from plan; transient)" % (wanted, match["title"]),
+        "",
+        "## Statement",
+        "",
+        match["summary"],
+        "",
+        "## Spec refs",
+        "",
+        *(("- `%s`" % ref) for ref in spec_refs),
+        "",
+        "## Touches",
+        "",
+        *(("- `%s`" % path) for path in touches),
+        "",
+        "## Depends on",
+        "",
+        *(("- task %s" % dep) for dep in depends),
+        "",
+        "## Acceptance",
+        "",
+        *(("- %s" % item) for item in match["acceptance"]),
+        "",
+        "## Expected failure",
+        "",
+        match["expected_red"],
+        "",
+        "## Out of scope",
+        "",
+        "Anything not listed under Acceptance (YAGNI fence).",
+        "",
+        "## RED order",
+        "",
+        "Write BLACK-BOX tests encoding Acceptance first "
+        "(skills/test-driven-development/writing-good-tests.md), then "
+        "implement. Tests must fail now with the Expected failure above.",
+        "",
+    ]
+    out_path = "%s/task-%s-brief.md" % (ws.rstrip("/\\"), wanted)
+    try:
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+    except OSError as exc:
+        print("BRIEF-SCAFFOLD: cannot write brief: %s" % exc, file=sys.stderr)
+        return 1
+    print("BRIEF-SCAFFOLD: wrote %s" % out_path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

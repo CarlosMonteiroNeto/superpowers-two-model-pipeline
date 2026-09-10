@@ -20,7 +20,7 @@
 #
 # Emits one line on stdout: ACTION [TASK] [ARGS...]
 #   BRIEF N        -> B writes a JIT brief (+ RED tests)
-#   RED N          -> materialize + run red-gate (expected-reason check)
+#   RED N          -> dispatch operador + run red-gate chain
 #   CODER N        -> (re)run coder-gate for the task: it retries until green
 #   REVIEW N       -> build review package + dispatch the Reviewer
 #   CORRECTIVE N   -> review SEND_BACK: B writes a corrective brief, C re-runs
@@ -136,7 +136,7 @@ if [ "$has_commit" -ge 1 ]; then
   exit 0
 fi
 
-# The Coder loop is unbounded and uncounted: coder-gate retries until green,
+# The operador loop is unbounded and uncounted: coder-gate retries until green,
 # so any RED-verified task without a commit still routes to CODER. The only
 # exits besides green are TEST_DEFECT (escalated, handled above) and review
 # verdicts (handled above).

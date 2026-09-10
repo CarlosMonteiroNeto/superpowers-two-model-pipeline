@@ -1,5 +1,9 @@
 # Brief-Writing Guidance for the Strategist Session (B)
 
+> **RETIRED from the pipeline flow (ADR-0006).** Briefs are scaffolded by
+> script (`brief-scaffold`) from plan tasks; Agente estratégico no longer
+> writes them. Kept as history — do not follow on pipeline branches.
+
 This is NOT a dispatch template anymore. The strategist is the interactive
 session (B) itself — you write task briefs directly, no Controller subagent
 (Item 1). Script A consumes your brief verbatim: it materializes the RED tests,

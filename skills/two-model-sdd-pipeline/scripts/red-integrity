@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Deterministic RED-test integrity gate: the test files in the working tree
-# must match the brief's RED-TESTS sources byte-for-byte. Verdict is an exit
-# code, never a reviewer judgment.
+# Deterministic RED-test integrity gate: test files must be byte-identical
+# to the RED-proof fail-run snapshot. coder-gate writes
+# <ws>/task-N-test-snapshot.txt ("<sha256>  <path>", paths relative to the
+# repo root) right after the new tests fail pre-implementation; this script
+# re-hashes and compares before the commit (and again at review, where it
+# is trivially true on a clean tree). Catches post-green test weakening -
+# the only way operador-authored tests can lie. Verdict is an exit code,
+# never a reviewer judgment.
 #
 # Usage: red-integrity WORKSPACE TASK
-# Exit codes: 0 = intact, 1 = deviation(s), 2 = usage / missing brief / no entries.
+# Exit codes: 0 = intact, 1 = deviation(s), 2 = usage / missing snapshot.
 set -euo pipefail
 
 if [ $# -ne 2 ]; then
@@ -14,42 +19,39 @@ fi
 
 ws=$1
 task=$2
-brief="$ws/task-$task-brief.md"
+snapshot="$ws/task-$task-test-snapshot.txt"
 
-[ -f "$brief" ] || { echo "RED-INTEGRITY: no brief: $brief" >&2; exit 2; }
+[ -f "$snapshot" ] || { echo "RED-INTEGRITY: no snapshot: $snapshot - RED-proof has not run" >&2; exit 2; }
 
 entries=0
 violations=0
 while IFS= read -r line; do
-  if [ -z "$line" ]; then continue; fi
-  case "$line" in
-    EXPECTED-RED:*) break ;;
-  esac
-  src=${line%% -> *}
-  dst=${line#* -> }
-  if [ -z "$src" ] || [ -z "$dst" ]; then
-    echo "RED-INTEGRITY: bad RED-TESTS entry: $line" >&2
-    exit 2
-  fi
+  line=${line%$'\r'}  # tolerate CRLF snapshots (Python on Windows writes \r\n)
+  [ -n "$line" ] || continue
+  sha=${line%% *}
+  path=${line#* }
+  # strip padding spaces and sha256sum's binary-mode `*` marker
+  path=$(printf '%s' "$path" | sed 's/^ *//; s/^\*//')
+  [ -n "$sha" ] && [ -n "$path" ] || { echo "RED-INTEGRITY: bad snapshot entry: $line" >&2; exit 2; }
   entries=$((entries + 1))
-  if [ ! -f "$src" ] || [ ! -f "$dst" ]; then
-    echo "RED-INTEGRITY: missing file: $src -> $dst" >&2
+  if [ ! -f "$path" ]; then
+    echo "RED-INTEGRITY: missing file: $path" >&2
     violations=$((violations + 1))
-  elif ! cmp -s "$src" "$dst"; then
-    echo "RED-INTEGRITY: test tampered: $dst differs from the brief's $src" >&2
+  elif [ "$(sha256sum "$path" | cut -d' ' -f1)" != "$sha" ]; then
+    echo "RED-INTEGRITY: test weakened: $path differs from the RED-proof snapshot" >&2
     violations=$((violations + 1))
   fi
-done < <(sed -n '/^RED-TESTS:/,/^$/p' "$brief" | sed -n '2,$p' | grep -v '^```')
+done < "$snapshot"
 
 if [ "$entries" -eq 0 ]; then
-  echo "RED-INTEGRITY: no RED-TESTS entries in brief" >&2
+  echo "RED-INTEGRITY: snapshot is empty" >&2
   exit 2
 fi
 
 if [ "$violations" -gt 0 ]; then
-  echo "RED-INTEGRITY: FAIL - $violations test file(s) deviate from the brief" >&2
+  echo "RED-INTEGRITY: FAIL - $violations test file(s) deviate from the snapshot" >&2
   exit 1
 fi
 
-echo "RED-INTEGRITY: OK - tests match the brief verbatim"
+echo "RED-INTEGRITY: OK - tests match the RED-proof snapshot"
 exit 0

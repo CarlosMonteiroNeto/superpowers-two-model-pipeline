@@ -11,7 +11,7 @@
 #   -b BASE       base commit for the review package (default: HEAD~1)
 #
 # On all-green + commit, when -w/-t are given: builds the review package
-# (implementation-only diff) and dispatches the Reviewer headlessly (Item 3).
+# (implementation-only diff) and dispatches the revisor headlessly (Item 3).
 # --no-commit short-circuits before the commit and the reviewer dispatch.
 #
 # Exit codes: 0 = all gates passed (and committed unless --no-commit),
@@ -95,7 +95,7 @@ fi
 
 # Post-commit Script-A chain (ADR-0004, ADR-0001):
 # 1. Build the review package for D (base..head, range-named file).
-# 2. Dispatch the Reviewer headlessly (Item 3): tests + syntax are already
+# 2. Dispatch the revisor headlessly (Item 3): tests + syntax are already
 #    green, so D reviews design/architecture only (Item 2).
 if [ -n "$ws" ] && [ -n "$task" ]; then
   base=${base:-HEAD~1}
