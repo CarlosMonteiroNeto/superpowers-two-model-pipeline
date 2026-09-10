@@ -72,16 +72,12 @@ fi
 
 echo "GREEN-GATE: all gates passed"
 
-if [ "$no_commit" = "1" ]; then
-  echo "GREEN-GATE: --no-commit, not committing"
-  exit 0
-fi
-
 # Graph (opt-in, default off): per benchmark ruling, the graph is no longer
 # rebuilt per task. Pass --graph once at the holistic final review so the
-# regenerated graph artifacts enter that commit and the subgraph read feeds
-# the final review. Both are best-effort: a missing graphify binary must not
-# block the gate.
+# regenerated graph artifacts are fresh for that review. Runs before the
+# --no-commit short-circuit so `green-gate --graph --no-commit` refreshes
+# the graph without committing. Best-effort: a missing graphify binary must
+# not block the gate.
 if [ "$graph" = "1" ]; then
   if [ -x "$SCRIPT_DIR/graphify-update" ]; then
     "$SCRIPT_DIR/graphify-update" "$(pwd)" || true
@@ -89,6 +85,11 @@ if [ "$graph" = "1" ]; then
   if [ -n "$ws" ] && [ -n "$task" ] && [ -x "$SCRIPT_DIR/graphify-subgraph" ]; then
     "$SCRIPT_DIR/graphify-subgraph" "$ws" "$task" || true
   fi
+fi
+
+if [ "$no_commit" = "1" ]; then
+  echo "GREEN-GATE: --no-commit, not committing"
+  exit 0
 fi
 
 "$GIT_BIN" add -A
