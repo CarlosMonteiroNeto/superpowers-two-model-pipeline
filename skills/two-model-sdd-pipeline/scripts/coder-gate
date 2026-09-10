@@ -121,14 +121,16 @@ PY
       "Coder round $round passed" status=PASS round="$round/4"
 
     if [ "$lang" != "flutter" ]; then
-      # Flutter's green-gate already updated the graph + committed + dispatched
-      # D above. The generic engine's run-gates deliberately never commits (it
-      # is a check-only mirror) - Script A (this script) owns that step here,
-      # mirroring green-gate's chain exactly: graph update + subgraph read
-      # BEFORE the commit so the graph enters the task's own commit and is
-      # read immediately after being written.
-      [ -x "$GRAPHIFY_UPDATE" ] && "$GRAPHIFY_UPDATE" "$(pwd)" || true
-      [ -x "$GRAPHIFY_SUBGRAPH" ] && "$GRAPHIFY_SUBGRAPH" "$ws" "$task" || true
+      # Flutter's green-gate owns the commit + Reviewer dispatch above (graph
+      # runs there only under --graph). The generic engine's run-gates
+      # deliberately never commits (it is a check-only mirror) - Script A
+      # (this script) owns that step here. The per-task graph update is
+      # disabled by default (GRAPHIFY_PER_TASK=1 re-enables); the holistic
+      # final review is the only path that rebuilds the graph.
+      if [ "${GRAPHIFY_PER_TASK:-0}" = "1" ]; then
+        [ -x "$GRAPHIFY_UPDATE" ] && "$GRAPHIFY_UPDATE" "$(pwd)" || true
+        [ -x "$GRAPHIFY_SUBGRAPH" ] && "$GRAPHIFY_SUBGRAPH" "$ws" "$task" || true
+      fi
       git add -A
       if git commit -m "task $task green (round $round)" >/dev/null 2>&1; then
         sha=$(git rev-parse --short HEAD)

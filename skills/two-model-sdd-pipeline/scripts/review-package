@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Generate a review package: commit list, stat summary, and the net diff
-# with extended context, written to a file the reviewer reads in one call.
-# The package never passes through the orchestrator's context.
+# Generate a review package: commit list, stat summary, and the net
+# implementation-only diff with extended context, written to a file the
+# reviewer reads in one call. The package never passes through the
+# orchestrator's context.
+#
+# graphify-out/ is excluded from stat and diff by benchmark ruling: generated
+# graph artifacts are harness noise in review context, not review scope. The
+# holistic final review rebuilds and reads the graph separately.
 #
 # Using the recorded per-task BASE (not HEAD~1) keeps multi-commit and
 # multi-round tasks intact. Range-named output means a re-review after
@@ -64,10 +69,10 @@ interfaces="$ws/task-$task-interfaces.md"
   git log --oneline "${base}..${head}"
   echo
   echo "## Files changed"
-  git diff --stat "${base}..${head}"
+  git diff --stat "${base}..${head}" -- . ':(exclude)graphify-out'
   echo
   echo "## Diff"
-  git diff -U10 "${base}..${head}"
+  git diff -U10 "${base}..${head}" -- . ':(exclude)graphify-out'
 } > "$out"
 
 commits=$(git rev-list --count "${base}..${head}")
