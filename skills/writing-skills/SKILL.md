@@ -644,6 +644,7 @@ Deploying untested skills = deploying untested code. It's a violation of quality
 - [ ] Name uses only letters, numbers, hyphens (no parentheses/special chars)
 - [ ] YAML frontmatter with required `name` and `description` fields (max 1024 chars; see [spec](https://agentskills.io/specification))
 - [ ] Description starts with "Use when..." and includes specific triggers/symptoms
+- [ ] skill-lint passes: run `skills/writing-skills/scripts/skill-lint <skill-dir> [--tier ...]` and resolve every violation (exit 0; warnings reviewed, not ignored)
 - [ ] Description written in third person
 - [ ] Keywords throughout for search (errors, symptoms, tools)
 - [ ] Clear overview with core principle

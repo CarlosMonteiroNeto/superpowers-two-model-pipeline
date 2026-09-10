@@ -20,7 +20,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Step 1: Verify Tests
 
-Run the project's full test suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
+On a two-tier pipeline branch, verify with the gate script — not a raw suite run: `green-gate --no-commit` (Flutter) or the ledger's test/analyze commands via `run-gates` (generic). Only the gate's exit 0 counts as green. Otherwise, run the project's full test suite (`npm test` / `cargo test` / `pytest` / `go test ./...`).
 
 **If tests fail**, report the failures and stop — the menu comes after a green suite:
 
@@ -102,7 +102,8 @@ git checkout <base-branch>
 git pull
 git merge <feature-branch>
 
-# Verify tests on merged result
+# Verify tests on merged result — same rule as Step 1: the gate script on a
+# pipeline branch (`green-gate --no-commit` / `run-gates`), the raw suite otherwise
 <test command>
 ```
 

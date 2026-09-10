@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""Deterministic lint for skill directories (writing-skills, scripted half).
+
+Checks what is mechanically checkable about a SKILL.md; LLM judgment
+(pressure scenarios, wording micro-tests, deployment) stays with the agent.
+See skills/writing-skills/SKILL.md ("Skill Creation Checklist").
+
+Usage: skill-lint SKILL_DIR [--tier getting-started|frequent|other]
+  SKILL_DIR   directory holding SKILL.md
+  --tier      word-budget tier (default: other)
+                getting-started <150, frequent <200, other <500 words
+
+Exit codes: 0 = pass (warnings allowed, printed to stderr),
+            1 = violations found (including unreadable skill), 2 = usage.
+"""
+import re
+import sys
+
+NAME_RE = re.compile(r"^[a-z0-9-]+$")
+TIER_BUDGET = {"getting-started": 150, "frequent": 200, "other": 500}
+# Human-gate or script tokens that satisfy spike/bounded branch coverage.
+GATE_TOKENS = ("scripts/", "human", "user", "approv", "exit")
+# Workflow-summary smell in descriptions (warn only).
+FLOW_SMELL = re.compile(r"\b(then|after that|followed by|step \d+)\b", re.I)
+FIRST_PERSON = re.compile(r"^I | [Ii] (can|will|help|am) ")
+
+
+def parse_frontmatter(text):
+    """Return (name, description, raw_len) or an error string."""
+    if not text.startswith("---"):
+        return "missing frontmatter fence"
+    end = text.find("\n---", 3)
+    if end == -1:
+        return "unterminated frontmatter fence"
+    raw = text[3:end]
+    fields = {}
+    for line in raw.splitlines():
+        m = re.match(r"^([A-Za-z_]+):\s*(.*)$", line.strip())
+        if m:
+            fields[m.group(1)] = m.group(2).strip().strip("\"'")
+    if "name" not in fields or "description" not in fields:
+        return "frontmatter needs `name` and `description`"
+    return fields["name"], fields["description"], len(raw)
+
+
+def dot_blocks(text):
+    """Yield (open_line, body) for each ```dot fenced block."""
+    out = []
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        if lines[i].strip() == "```dot":
+            start = i
+            body = []
+            i += 1
+            while i < len(lines) and lines[i].strip() != "```":
+                body.append(lines[i])
+                i += 1
+            if i >= len(lines):
+                out.append((start + 1, None))  # unterminated
+            else:
+                out.append((start + 1, "\n".join(body)))
+        i += 1
+    return out
+
+
+def dot_edges(body):
+    """Parse digraph edges: (src, dst, label). Node labels: {node: label}.
+
+    Node definitions are read only from lines without `->`, so an edge's
+    `[label=...]` attribute never overwrites the target node's own label.
+    """
+    labels = {}
+    for line in body.splitlines():
+        if "->" in line:
+            continue
+        m = re.search(r'"([^"]+)"\s*\[([^\]]*)\]', line)
+        if m:
+            lm = re.search(r'label="([^"]*)"', m.group(2))
+            labels[m.group(1)] = lm.group(1) if lm else m.group(1)
+    edges = []
+    for m in re.finditer(
+        r'"([^"]+)"\s*->\s*"([^"]+)"(?:\s*\[label="([^"]*)"\])?', body
+    ):
+        edges.append((m.group(1), m.group(2), m.group(3) or ""))
+    return labels, edges
+
+
+def branch_coverage(body):
+    """Warn for spike/bounded edges whose downstream path names no gate.
+
+    A path satisfies coverage when any node/edge label from the classify
+    step to the sink mentions a gate script (scripts/), a human/user gate,
+    an approval, or an exit code. Returns [warning, ...].
+    """
+    warnings = []
+    labels, edges = dot_edges(body)
+    adj = {}
+    for src, dst, label in edges:
+        adj.setdefault(src, []).append((dst, label))
+    starts = [
+        src for src, dst, label in edges
+        if "spike" in label.lower() or "bounded" in label.lower()
+    ]
+    for start in starts:
+        seen = set()
+        stack = [start]
+        gated = False
+        while stack:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            text = labels.get(node, node).lower()
+            if any(tok in text for tok in GATE_TOKENS):
+                gated = True
+                break
+            for dst, label in adj.get(node, []):
+                if any(tok in label.lower() for tok in GATE_TOKENS):
+                    gated = True
+                    break
+                stack.append(dst)
+            if gated:
+                break
+        if not gated:
+            warnings.append(
+                "spike/bounded path through '%s' names no gate script, "
+                "exit code, or human-approval gate" % start
+            )
+    return warnings
+
+
+def lint(skill_dir, tier):
+    violations = []
+    warnings = []
+    skill = skill_dir.rstrip("/\\") + "/SKILL.md"
+    try:
+        with open(skill, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError as exc:
+        return ["cannot read SKILL.md: %s" % exc], warnings
+
+    front = parse_frontmatter(text)
+    if isinstance(front, str):
+        violations.append(front)
+        name, desc = "", ""
+    else:
+        name, desc, raw_len = front
+        if raw_len > 1024:
+            violations.append(
+                "frontmatter is %d chars (max 1024)" % raw_len
+            )
+        if not NAME_RE.match(name):
+            violations.append(
+                "`name` must match ^[a-z0-9-]+$ (got %r)" % name
+            )
+        if not desc.startswith("Use when"):
+            violations.append('`description` must start with "Use when"')
+        if len(desc) > 500:
+            violations.append(
+                "`description` is %d chars (keep under 500)" % len(desc)
+            )
+        if FIRST_PERSON.search(desc):
+            warnings.append("`description` looks first-person (use third)")
+        if FLOW_SMELL.search(desc):
+            warnings.append(
+                "`description` may summarize workflow (triggers only)"
+            )
+
+    words = len(text.split())
+    budget = TIER_BUDGET[tier]
+    if words >= budget:
+        violations.append(
+            "SKILL.md is %d words (tier %s budget: <%d)"
+            % (words, tier, budget)
+        )
+
+    for lineno, body in dot_blocks(text):
+        if body is None:
+            violations.append("unterminated ```dot block at line %d" % lineno)
+            continue
+        if body.count("{") != body.count("}"):
+            violations.append(
+                "unbalanced braces in ```dot block at line %d" % lineno
+            )
+        warnings.extend(branch_coverage(body))
+
+    return violations, warnings
+
+
+def main(argv):
+    tier = "other"
+    positional = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--tier" and i + 1 < len(argv):
+            tier = argv[i + 1]
+            i += 2
+        else:
+            positional.append(argv[i])
+            i += 1
+    if len(positional) != 1 or tier not in TIER_BUDGET:
+        print(
+            "usage: skill-lint SKILL_DIR [--tier getting-started|frequent|other]",
+            file=sys.stderr,
+        )
+        return 2
+    violations, warnings = lint(positional[0], tier)
+    for warning in warnings:
+        print("SKILL-LINT warning: %s" % warning, file=sys.stderr)
+    if violations:
+        for violation in violations:
+            print("SKILL-LINT: %s" % violation, file=sys.stderr)
+        return 1
+    print("SKILL-LINT: %s OK" % positional[0])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

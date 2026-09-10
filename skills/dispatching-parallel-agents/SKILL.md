@@ -9,6 +9,11 @@ description: Use when facing 2+ independent tasks that can be worked on without 
 
 ## Pipeline Integration (two-model-sdd-pipeline)
 
+> **SUPERSEDED in this fork's pipeline.** Ad-hoc parallel fan-out via the
+> Task tool never runs on a pipeline branch — every dispatch goes through
+> `scripts/dispatch` (headless, logged, resumable). This skill remains valid
+> off-pipeline (harnesses without the two-tier engine).
+
 - **Dispatch is a script, not a convention.** On this fork, every subagent launch goes through `scripts/dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` — never an ad-hoc Task-tool call with an inline prompt. `dispatch` runs `opencode run --agent <def> --format json` headlessly, tees the full JSON event stream to LOG for observability, and records the session id.
 - **Always name the agent explicitly.** An omitted model silently inherits the (expensive) session model — always target the fixed tier definition (`two-model-coder` for Operational, `two-model-reviewer`/`two-model-controller` for Strategic).
 - **Cache-aware, not fire-and-forget.** Pass `--continue SESSION` to resume a subagent's context when the task hasn't changed (fix-up rounds within the same task); dispatch fresh only when the task itself changes. This replaces this skill's generic "spin up N parallel agents" pattern with a resumable, logged, deterministically-routed one.

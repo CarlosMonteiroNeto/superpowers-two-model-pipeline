@@ -10,6 +10,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 ## Pipeline Integration (two-model-sdd-pipeline)
 
 - **Compress before you read.** Route any log, stack trace, or diagnostic dump through `token-kill err|src|json FILE` (RTK minification) before it enters context — the 60-90% token savings matters most exactly here, where debugging tends to pull in the largest raw artifacts. It falls back losslessly to raw output if RTK has no filter for the format.
+- **Verify through scripts, not eyeballing.** On a pipeline branch, every command you invoke runs through `scripts/cmd` (full output to a file, compressed stdout — the file is the evidence), and any "fixed / green" claim is proven by a gate script's exit code: `green-gate --no-commit` (Flutter) or the ledger's test/analyze commands via `run-gates` (generic). Reproduce the bug the same way — a reproduction nobody can re-run by script is anecdote, not evidence. See `superpowers:verification-before-completion` for the claims rule.
 - **Trace dependents through the diff, not memory.** When root-causing a regression that crosses files, prefer the task diffs + `git log` (via `scripts/cmd`) over manually tracing call sites from memory.
 - **Findings stay in English**, per this fork's artifact language policy, even when the bug report or reproduction steps came from a Portuguese-speaking client.
 

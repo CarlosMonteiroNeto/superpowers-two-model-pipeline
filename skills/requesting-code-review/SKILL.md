@@ -11,6 +11,7 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 
 - **Review dispatch is automatic, not requested.** `green-gate` dispatches D itself, immediately after a commit (full suite + analyze + format all green): there is no separate "now ask for review" step for the coder or B to remember. `--no-commit` runs never dispatch a reviewer — they're for revalidation only (e.g., Phase 4's `green-gate --no-commit`).
 - **The reviewer's inputs are fixed and minimal.** D receives compiler-approved code plus the task brief and the implementation diff (the review package) — never the full repo, and D never re-runs test/analyze itself (that's Script A's job, already done by the time D sees the diff).
+- **Prove GREEN by script before any review.** On a pipeline branch, no review is requested or dispatched until a gate script exits 0 on the exact tree under review — `green-gate --no-commit` (Flutter) or the ledger's test/analyze commands via `run-gates` (generic). A review of unverified code is not a review; eyeballing a raw suite run does not count.
 - **The reviewer's output is a contract, not a comment.** D must return the fixed JSON verdict shape (APPROVED / SEND_BACK / ESCALATE) — see `receiving-code-review`'s integration note for how that verdict is routed.
 
 

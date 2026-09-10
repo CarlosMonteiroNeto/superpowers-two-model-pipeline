@@ -38,6 +38,10 @@ the approval gate never does.
 - **The human-approval gate is untouched by automation.** Nothing above
   changes the HARD-GATE: no script substitutes for the human's explicit "yes"
   on scope or design.
+- **Skill authorship exits through `writing-skills`.** Creating or editing a
+  skill is a brainstorming outcome, not a separate entry point: the terminal
+  routes to `writing-skills` (RED baseline first), and the scripted half is
+  gated by `skills/writing-skills/scripts/skill-lint` (exit 0).
 
 ## Pre-flight: orient on the pipeline (deterministic)
 
@@ -141,6 +145,12 @@ your path and complete them in order.
 9. **User reviews written spec** — ask user to review the spec file before proceeding
 10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
+**After any path — reusable technique?** If the session surfaced a technique
+others would reuse across projects (`writing-skills` "When to Create"
+criteria), propose it as a separate follow-up: invoke `writing-skills`,
+RED baseline before writing a word. Never bundle untested skill-writing
+into this task (`writing-skills` STOP rule).
+
 ## Process Flow
 
 ```dot
@@ -190,7 +200,10 @@ invoke after brainstorming is writing-plans — never frontend-design,
 mcp-builder, or any other implementation skill. Bounded: after
 approval, implementation proceeds directly through the normal
 development workflow; no plan document. Spike: the terminal state is a
-reported recommendation.
+reported recommendation. Skill: when the request IS creating/editing a
+skill, or any path surfaces a broadly-reusable technique (the
+`writing-skills` "When to Create" criteria), the terminal is
+`writing-skills` — RED baseline first, never implementation.
 
 ## The Process
 

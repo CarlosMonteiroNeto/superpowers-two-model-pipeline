@@ -13,13 +13,14 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 | This skill's concept | Fork equivalent |
 |---|---|
-| Orchestrating session | **Script A** (deterministic; gates, routing, dispatch, commits, graph, ledger — never implements or reviews) |
+| Orchestrating session | **Script A** (deterministic; gates, routing, dispatch, commits, ledger — never implements or reviews) |
 | Planning / task breakdown | **B**, the strategist session (`writing-plans` output → per-task briefs + RED tests, corrective briefs, arbitration, final review) |
-| Implementer subagent | **C**, `two-model-coder` (Operational tier, write-only, never runs commands, max 4 attempts — 1 round + 3 fixes — resumable within a task via `--continue`) |
+| Implementer subagent | **C**, `two-model-coder` (Operational tier, write-only, never runs commands, unbounded retries until green, resumable within a task via `--continue`) |
 | Reviewer subagent | **D**, `two-model-reviewer` (Strategic tier, structured JSON verdict only: APPROVED / SEND_BACK / ESCALATE; never runs test/analyze itself) |
 | Ad-hoc "strategic coder" escalation | **Removed.** Escalation is B's `ARBITRATE` step — there is no third coder tier. |
 
 - **State is external, not conversational.** Everything this skill would have tracked in the orchestrating session's memory instead lives in the JSON plan, git history, and a script-maintained JSONL ledger. This is what makes the loop compaction-safe: any stage can resume purely from `route-next` reading the ledger.
+- **Verification is script-owned, never self-reported.** GREEN is a gate exit code (`run-gates` generic, `green-gate` Flutter) — never the implementer's "it passes" message; every route transition (`CORRECTIVE` / `ARBITRATE` / `NEXT`) is emitted by `route-next` reading the ledger, not decided by reasoning.
 - **Dispatch always goes through `scripts/dispatch`**, targeting the named agent definition explicitly (never letting the model inherit).
 - **RED tests move to the brief.** The single biggest behavioral change from the generic skill above: B (or, on the non-two-tier fork, the controller session) writes the task's RED tests itself, at the same moment it writes the brief — not the implementer/C. `red-gate` (Flutter fork) or the controller's own pre-dispatch check (generic fork) materializes and verifies those tests fail for the expected reason *before* the coder is ever dispatched. C/the implementer only ever sees already-verified-RED tests as read-only input and is forbidden from writing or editing any test file — see the updated `implementer-prompt.md` and `two-model-sdd-pipeline/coder-prompt.md`'s "NEVER write or edit test files" rule.
 
