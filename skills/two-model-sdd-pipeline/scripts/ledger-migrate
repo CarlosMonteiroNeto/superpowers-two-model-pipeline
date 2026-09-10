@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# One-time migration: split an existing global ledger.jsonl into per-task
+# partitions ledger-task-<N>.jsonl, keyed by each entry's "task" field.
+#
+# Backward compatibility for mid-project upgrades (workspaces with a global
+# ledger.jsonl but no per-task files yet). Idempotent: per-task files are
+# rebuilt from the global file on every run, so re-running after new appends
+# is safe. Entries with no numeric task ("-", missing, non-numeric) stay
+# global-only.
+#
+# Usage: ledger-migrate WORKSPACE
+# Exit codes: 0 = migrated (or nothing to do), 2 = usage / no global ledger.
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: ledger-migrate WORKSPACE" >&2
+  exit 2
+fi
+
+# Work from inside the workspace with relative names so Windows-style WS
+# paths (backslashes) never pass through awk -v string escaping.
+ws=$1
+cd "$ws"
+[ -f "ledger.jsonl" ] || { echo "LEDGER-MIGRATE: no ledger: $ws/ledger.jsonl" >&2; exit 2; }
+
+# Rebuild semantics: the global file is the source of truth (ledger-append
+# always writes both), so clear stale partitions first - re-running stays
+# idempotent instead of duplicating lines via awk append redirection.
+rm -f ledger-task-*.jsonl
+# Single-pass split: one awk run routes every line to its per-task file.
+# (The naive per-task grep loop is O(tasks x lines) with a process spawn per
+# task - seconds turn into tens of seconds on Windows git-bash for 200-task
+# ledgers. This stays one process, one read of the global file.)
+count=$(awk '
+  {
+    if (match($0, /"task": *"[^"]*"/)) {
+      kv = substr($0, RSTART, RLENGTH)
+      sub(/.*"task": *"/, "", kv); sub(/".*/, "", kv)
+      if (kv ~ /^[0-9]+$/) {
+        print > ("ledger-task-" kv ".jsonl")
+        seen[kv] = 1
+      }
+    }
+  }
+  END { print length(seen) + 0 }
+' ledger.jsonl)
+
+[ "${count:-0}" -eq 0 ] && { echo "LEDGER-MIGRATE: no task entries to split"; exit 0; }
+
+echo "LEDGER-MIGRATE: split into $count per-task file(s)"
+exit 0

@@ -9,13 +9,29 @@
 # must be bare identifiers. TASK is a task number, or '-' for branch-level
 # entries (gate, final_review, merge).
 #
-# Usage: ledger-append LEDGER_FILE TYPE TASK "SUMMARY" [KEY=VALUE ...]
+# Usage: ledger-append [--task N] LEDGER_FILE TYPE TASK "SUMMARY" [KEY=VALUE ...]
 # Example:
 #   ledger-append ledger.jsonl review_outcome 3 "SEND_BACK" findings=2 severity=Critical
+#   ledger-append --task 3 ledger.jsonl review_outcome 3 "SEND_BACK" findings=2
+#
+# Partitioning (route-next perf fix): when the entry belongs to a numeric
+# task, the same JSON line is appended to BOTH the global LEDGER_FILE (kept
+# for cross-task consumers: final-gate, holistic review) AND the per-task
+# partition <ws>/ledger-task-<N>.jsonl (bounded hot path for route-next).
+# Entries with TASK '-' (branch-level: gate, final_review, merge) go only to
+# the global file. The --task flag overrides the partition key explicitly;
+# otherwise the positional TASK is used when numeric. No schema change.
 set -euo pipefail
 
+partition_task=""
+if [ "${1:-}" = "--task" ]; then
+  [ $# -ge 6 ] || { echo "usage: ledger-append [--task N] LEDGER_FILE TYPE TASK \"SUMMARY\" [KEY=VALUE ...]" >&2; exit 2; }
+  partition_task=$2
+  shift 2
+fi
+
 if [ $# -lt 4 ]; then
-  echo "usage: ledger-append LEDGER_FILE TYPE TASK \"SUMMARY\" [KEY=VALUE ...]" >&2
+  echo "usage: ledger-append [--task N] LEDGER_FILE TYPE TASK \"SUMMARY\" [KEY=VALUE ...]" >&2
   exit 2
 fi
 
@@ -48,11 +64,30 @@ if [ $# -gt 4 ]; then
 fi
 
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-printf '{"ts":"%s","type":"%s","task":"%s","summary":"%s"%s}\n' \
+line=$(printf '{"ts":"%s","type":"%s","task":"%s","summary":"%s"%s}' \
   "$ts" \
   "$(json_escape "$type")" \
   "$(json_escape "$task")" \
   "$(json_escape "$summary")" \
-  "$extras" >> "$file"
+  "$extras")
+printf '%s\n' "$line" >> "$file"
+
+# Per-task partition mirror. Explicit --task wins; otherwise mirror when the
+# positional TASK is numeric. All existing call sites (red-gate, coder-gate,
+# green-gate, orchestrator, resolve-toolchain) already pass the task number
+# positionally, so they get the partition with no call-site change.
+if [ -z "$partition_task" ]; then
+  case "$task" in
+    ''|*[!0-9]*) ;;
+    *) partition_task=$task ;;
+  esac
+fi
+case "$partition_task" in
+  ''|*[!0-9]*|-) ;;
+  *)
+    task_file="$(dirname "$file")/ledger-task-${partition_task}.jsonl"
+    printf '%s\n' "$line" >> "$task_file"
+    ;;
+esac
 
 echo "ledgered: $type task=$task $summary"

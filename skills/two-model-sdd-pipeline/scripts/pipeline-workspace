@@ -35,4 +35,14 @@ base="$root/.superpowers/two-model"
 dir="$base/$slug"
 mkdir -p "$dir"
 printf '*\n' > "$base/.gitignore"
+# One-time backward-compat split: mid-project upgrades may have a global
+# ledger.jsonl with no per-task partitions yet. Rebuild them best-effort so
+# route-next's hot path stays O(this task). Fresh workspaces have no ledger
+# yet, so this is a no-op there. route-next also self-migrates on first call.
+if [ -f "$dir/ledger.jsonl" ]; then
+  SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+  if [ -x "$SCRIPT_DIR/ledger-migrate" ]; then
+    "$SCRIPT_DIR/ledger-migrate" "$dir" >/dev/null 2>&1 || true
+  fi
+fi
 cd "$dir" && pwd

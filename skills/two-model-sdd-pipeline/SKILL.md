@@ -246,6 +246,12 @@ written only through the script:
 scripts/ledger-append <workspace>/ledger.jsonl <TYPE> <TASK> "<SUMMARY>" [KEY=VALUE ...]
 ```
 
+Numeric-task entries are also mirrored to the per-task partition
+`<workspace>/ledger-task-<N>.jsonl` (same line, same schema). `route-next`
+reads only the partition (bounded hot path); `final-gate` and holistic
+review keep reading the global file. Branch-level entries (`TASK -`) stay
+global-only.
+
 Entry types and when to append them:
 
 | Type | When |

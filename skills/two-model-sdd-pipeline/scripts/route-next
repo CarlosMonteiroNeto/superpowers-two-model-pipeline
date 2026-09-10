@@ -7,9 +7,16 @@
 # "APPROVED -> next task" or "SEND_BACK -> fix round" by reasoning.
 #
 # Usage: route-next WORKSPACE TASK [TOTAL_TASKS]
-#   WORKSPACE   - the pipeline workspace (holds ledger.jsonl, plan.json)
+#   WORKSPACE   - the pipeline workspace (holds ledger.jsonl,
+#                 ledger-task-<N>.jsonl partitions, plan.json)
 #   TASK        - the task number to route
 #   TOTAL_TASKS - optional; defaults to the task count in WORKSPACE/plan.json
+#
+# Reads only the per-task partition ledger-task-<TASK>.jsonl (O(this task)),
+# falling back to the global ledger.jsonl with a one-time ledger-migrate
+# split for pre-partition workspaces. FINAL_REVIEW stays a local
+# task>=total check; project-wide aggregation stays on final-gate's global
+# ledger read.
 #
 # Emits one line on stdout: ACTION [TASK] [ARGS...]
 #   BRIEF N        -> B writes a JIT brief (+ RED tests)
@@ -32,8 +39,29 @@ fi
 ws=$1
 task=$2
 ledger="$ws/ledger.jsonl"
+task_ledger="$ws/ledger-task-$task.jsonl"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
-[ -f "$ledger" ] || { echo "ROUTE-NEXT: no ledger: $ledger" >&2; exit 2; }
+# Per-task partition hot path (O(this task), not O(project history)).
+# Backward compat: on first call after upgrade the per-task file may not
+# exist yet while the global ledger does - run the one-time split keyed by
+# each entry's "task" field, best-effort. If migration is unavailable or
+# yields nothing, fall back to grepping the global file so old workspaces
+# keep routing identically.
+if [ ! -f "$task_ledger" ] && [ -f "$ledger" ]; then
+  if [ -x "$SCRIPT_DIR/ledger-migrate" ]; then
+    "$SCRIPT_DIR/ledger-migrate" "$ws" >/dev/null 2>&1 || true
+  fi
+fi
+
+if [ -f "$task_ledger" ]; then
+  ledger_source="$task_ledger"
+elif [ -f "$ledger" ]; then
+  ledger_source="$ledger"
+else
+  echo "ROUTE-NEXT: no ledger: $ledger" >&2
+  exit 2
+fi
 
 # TOTAL_TASKS: explicit arg, else plan.json task count.
 total=${3:-}
@@ -44,9 +72,15 @@ if [ -z "$total" ]; then
   fi
 fi
 
-# Gather this task's ledger entries, oldest first. Patterns tolerate the
-# optional spaces of any JSON pretty-printer ("task": "3" vs "task":"3").
-task_entries=$(grep -E '"task": *"'$task'"' "$ledger" || true)
+# Gather this task's ledger entries, oldest first. From the per-task
+# partition the file already holds only this task, so a straight read is
+# O(this task). From the global fallback, filter by task id (tolerates the
+# optional spaces of any JSON pretty-printer).
+if [ "$ledger_source" = "$task_ledger" ]; then
+  task_entries=$(cat "$task_ledger" || true)
+else
+  task_entries=$(grep -E '"task": *"'$task'"' "$ledger_source" || true)
+fi
 
 has_brief=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"brief_ready"' || true)
 has_red=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"red_check"' || true)
