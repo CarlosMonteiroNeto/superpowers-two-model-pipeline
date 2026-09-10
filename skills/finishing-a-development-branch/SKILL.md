@@ -14,7 +14,7 @@ description: Use when implementation is complete, all tests pass, and you need t
 - **Docs are gated too.** If this branch changed the pipeline itself (scripts, skills, invariants, phases), `scripts/doc-check` deterministically fails the branch unless `README.txt` and `README-LLM.md` were updated in the same push. Don't churn docs when behavior didn't change — `doc-check` only cares when it did.
 
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.
+**Core principle:** Verify tests → Detect environment → Push + PR by default → Clean up.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -46,8 +46,8 @@ This determines which menu to show and how cleanup works:
 
 | State | Menu | Cleanup |
 |-------|------|---------|
-| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 3 options | No worktree to clean up |
-| `GIT_DIR != GIT_COMMON`, named branch | Standard 3 options | Provenance-based (see Step 6) |
+| `GIT_DIR == GIT_COMMON` (normal repo) | None (default push + PR) | No worktree to clean up |
+| `GIT_DIR != GIT_COMMON`, named branch | None (default push + PR) | Provenance-based (see Step 6) |
 | `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 2 options (no merge) | Externally managed — leave in place |
 
 ## Step 3: Determine Base Branch
@@ -57,19 +57,13 @@ plan, the conversation, or the branch's upstream. If it is not already
 known, ask: "This branch split from <your best guess> - is that correct?"
 Confirm before merging: merging into the wrong base is expensive to undo.
 
-## Step 4: Present Options
+## Step 4: Integrate (default) or present options (detached only)
 
-**Normal repo and named-branch worktree — present exactly these 3 options:**
-
-```
-Implementation complete. What would you like to do?
-
-1. Merge back to <base-branch> locally
-2. Push and create a Pull Request
-3. Keep the branch as-is (I'll handle it later)
-
-Which option?
-```
+**Normal repo and named-branch worktree — no menu.** Default is push +
+create a Pull Request: execute it directly and report the
+URL. Your human partner asked for the work to land; the menu was pure
+friction. Only stop and ask if the push is rejected (investigate —
+force-push only on explicit request).
 
 **Detached HEAD — present exactly these 2 options:**
 
@@ -82,43 +76,11 @@ Implementation complete. You're on a detached HEAD (externally managed workspace
 Which option?
 ```
 
-Present the menu exactly as written — concise, with every option coming
-from the list above. Discarding the work happens only in response to your
-human partner explicitly asking for it (see "If your human partner asks to
-discard the work" below). Wait for their answer; the integration decision
-is theirs.
+Discarding the work happens only in response to your human partner explicitly asking for it (see "If your human partner asks to discard the work" below).
 
 ## Step 5: Execute Choice
 
-### Option 1: Merge Locally
-
-```bash
-# Get main repo root for CWD safety
-MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
-cd "$MAIN_ROOT"
-
-# Merge first — verify success before removing anything
-git checkout <base-branch>
-git pull
-git merge <feature-branch>
-
-# Verify tests on merged result — same rule as Step 1: the gate script on a
-# pipeline branch (`green-gate --no-commit` / `run-gates`), the raw suite otherwise
-<test command>
-```
-
-If tests fail on the merged result: stop, leave the worktree and branch in
-place, and investigate — nothing has been pushed, so the merge is local
-and recoverable.
-
-Once the merged result is green: clean up the worktree (Step 6), then
-delete the branch:
-
-```bash
-git branch -d <feature-branch>
-```
-
-### Option 2: Push and Create PR
+### Push and Create PR (default)
 
 ```bash
 git push -u origin <feature-branch>
@@ -133,7 +95,7 @@ present, and report the URL to your human partner.
 
 Keep the worktree — your human partner iterates on PR feedback there.
 
-### Option 3: Keep As-Is
+### Keep As-Is (detached menu option 2)
 
 Report: "Keeping branch <name>. Worktree preserved at <path>."
 
@@ -166,7 +128,7 @@ git branch -D <feature-branch>
 
 ## Step 6: Cleanup Workspace
 
-**Runs for Option 1 and confirmed discards.** Options 2 and 3 always
+**Runs for confirmed discards only.** Push+PR and keep-as-is always
 preserve the worktree. Both callers have already changed directory to the
 main repo root — worktree removal must run from outside the worktree —
 and use the `GIT_DIR`/`GIT_COMMON`/`WORKTREE_PATH` values captured in
@@ -212,9 +174,8 @@ place. If your platform provides a workspace-exit tool, use it.
 
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |
 |--------|-------|------|---------------|----------------|
-| 1. Merge locally | yes | - | - | yes |
-| 2. Create PR | - | yes | yes | - |
-| 3. Keep as-is | - | - | yes | - |
+| Push + PR (default) | - | yes | yes | - |
+| Keep as-is (detached only) | - | - | yes | - |
 | Discard (explicit request only) | - | - | - | yes (force) |
 
 ## Common Rationalizations
@@ -222,7 +183,7 @@ place. If your platform provides a workspace-exit tool, use it.
 | Excuse | Reality |
 |--------|---------|
 | "Tests passed earlier this session" | Run the suite on the tree you are about to integrate. A green run only proves the tree it ran on. |
-| "They obviously want it merged" | Integration is your human partner's decision. Present the menu and wait. |
+| "They obviously want it merged" | Default is push + PR — just do it and report the URL. The menu exists only for detached HEAD. |
 | "They seem done with this feature — I'll offer to discard it" | The menu is complete as written. Discard happens only when your human partner asks for it in so many words. |
 | "'Yeah, get rid of it' counts as confirmation" | Only the typed word `discard` authorizes deletion. |
 | "The PR is up, so the worktree is clutter now" | PR feedback gets fixed in that worktree. It stays until the work lands. |

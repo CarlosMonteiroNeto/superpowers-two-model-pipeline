@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Resolve and ensure the working-tree directory the two-model pipeline uses
-# for one plan's short-lived artifacts: the JSON plan copy, task briefs,
-# RED test staging, review packages, reports, and the JSONL ledger.
-# Print the plan directory's absolute path.
+# for one plan's short-lived artifacts: a working copy of the JSON plan,
+# task briefs, RED test staging, review packages, reports, and the JSONL
+# ledger. Print the plan directory's absolute path.
+#
+# The plan's permanent record lives in the tracked docs tree
+# (docs/superpowers/plans/<name>-plan.json) — B writes it there. This script
+# copies it into the workspace as plan.json so gates keep reading a stable
+# local copy; the workspace itself stays git-ignored and disposable.
 #
 # One directory per plan (.superpowers/two-model/<plan-basename>/) so a
 # follow-up plan in the same working tree can never read or overwrite
@@ -35,6 +40,9 @@ base="$root/.superpowers/two-model"
 dir="$base/$slug"
 mkdir -p "$dir"
 printf '*\n' > "$base/.gitignore"
+# Working copy for the gates (route-next reads $dir/plan.json); the
+# tracked original at $plan is the permanent record.
+cp -f "$plan" "$dir/plan.json"
 # One-time backward-compat split: mid-project upgrades may have a global
 # ledger.jsonl with no per-task partitions yet. Rebuild them best-effort so
 # route-next's hot path stays O(this task). Fresh workspaces have no ledger

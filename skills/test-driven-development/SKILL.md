@@ -29,7 +29,7 @@ Write the test first. Watch it fail. Write minimal code to pass.
 - Refactoring
 - Behavior changes
 
-**Exceptions (ask your human partner):**
+**Exceptions (no need to ask — just proceed without TDD):**
 - Throwaway prototypes
 - Generated code
 - Configuration files

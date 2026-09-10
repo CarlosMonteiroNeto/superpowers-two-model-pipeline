@@ -299,10 +299,11 @@ digraph pipeline {
 
 1. Worktree via superpowers:using-git-worktrees. Never implement on
    main/master without explicit consent.
-2. Resolve the workspace, create the ledger, append the `gate` entry.
+2. B writes the JSON plan to the tracked path ("The JSON Plan" below),
+   then resolve the workspace (`scripts/pipeline-workspace PLAN_FILE`,
+   which stages a working copy), create the ledger, append the `gate` entry.
 3. Brainstorm and design with the human partner (native brainstorming,
-   enriched per its Incremental Persistence section), then B writes the JSON
-   plan.
+   enriched per its Incremental Persistence section).
 
 ### The JSON Plan
 
@@ -326,7 +327,10 @@ B writes the plan directly. Keep it compact — metadata, not prose. Schema:
 }
 ```
 
-Save it as `<workspace>/plan.json`. Read it once yourself; note global
+Save it as `docs/superpowers/plans/YYYY-MM-DD-<topic>-plan.json` — a tracked,
+permanent project record (unlike the workspace copy, it survives the
+workspace). Then run `scripts/pipeline-workspace <that path>`, which copies
+it to `<workspace>/plan.json` for the gates. Read it once yourself; note global
 constraints and dependencies. Create one todo per task.
 
 ### Per-Task Loop
