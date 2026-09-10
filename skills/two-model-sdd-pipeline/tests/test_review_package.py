@@ -66,10 +66,9 @@ class TestReviewPackage(ReviewPackageTestBase):
         self.assertIn("## Diff", text)
         self.assertNotIn("## Task Brief", text)
 
-    def test_task_arg_inlines_brief_and_interfaces(self):
+    def test_task_arg_inlines_brief(self):
         head = self._change_and_commit()
         (self.ws / "task-3-brief.md").write_text("# Task 3\n\nBuild the feature.\n", encoding="utf-8")
-        (self.ws / "task-3-interfaces.md").write_text("## lib/app.dart\n\ninterface notes\n", encoding="utf-8")
         out = self._tmp / "pkg.diff"
         r = run_script("review-package", [str(self.ws), self.base, head, str(out), "3"],
                        cwd=str(self.repo), env_extra={})
@@ -77,24 +76,19 @@ class TestReviewPackage(ReviewPackageTestBase):
         text = out.read_text(encoding="utf-8")
         self.assertIn("## Task Brief", text)
         self.assertIn("Build the feature.", text)
-        self.assertIn("## Interfaces", text)
-        self.assertIn("interface notes", text)
         self.assertIn("## Commits", text)
         self.assertIn("## Diff", text)
-        # order: brief before interfaces before commits
-        self.assertLess(text.index("## Task Brief"), text.index("## Interfaces"))
-        self.assertLess(text.index("## Interfaces"), text.index("## Commits"))
+        # order: brief before commits
+        self.assertLess(text.index("## Task Brief"), text.index("## Commits"))
 
-    def test_task_arg_tolerates_missing_brief_or_interfaces(self):
+    def test_task_arg_tolerates_missing_brief(self):
         head = self._change_and_commit()
-        (self.ws / "task-3-brief.md").write_text("# Task 3\n\nBuild.\n", encoding="utf-8")
         out = self._tmp / "pkg.diff"
         r = run_script("review-package", [str(self.ws), self.base, head, str(out), "3"],
                        cwd=str(self.repo), env_extra={})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         text = out.read_text(encoding="utf-8")
-        self.assertIn("## Task Brief", text)
-        self.assertNotIn("## Interfaces", text)
+        self.assertNotIn("## Task Brief", text)
         self.assertIn("## Commits", text)
 
     def test_usage_with_too_many_args(self):

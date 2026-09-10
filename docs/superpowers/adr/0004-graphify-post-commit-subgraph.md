@@ -1,7 +1,11 @@
 # ADR-0004: Graphify — update before commit, subgraph read immediately after, for B and D
 
-- **Status:** Amended (supersedes the original "post-commit update only" decision)
-- **Date:** 2026-09-02 (amended 2026-09-05)
+> **SUPERSEDED (2026-09-10):** the knowledge graph is fully out of the
+> pipeline. No stage builds, updates, or queries a code graph; the
+> graphify integration scripts were removed. This record is kept as history.
+
+- **Status:** SUPERSEDED (was: Amended — superseded the original "post-commit update only" decision)
+- **Date:** 2026-09-02 (amended 2026-09-05, superseded 2026-09-10)
 
 ## Context
 

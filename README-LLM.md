@@ -24,7 +24,7 @@ end to end.
 
 - **`two-model-sdd-pipeline`** (generic engine): a deterministic **Script A**
   owns the per-task loop — gates, test/analyze decisions, subagent dispatch,
-  routing, commits, and graph maintenance. The interactive session **B** is
+  routing, and commits. The interactive session **B** is
   the strategist: it writes the plan and per-task briefs + RED tests and
   receives feedback only through script outputs. **C** (Coder, Operational,
   `two-model-coder`) is write-only — it never runs commands. **D** (Reviewer,
@@ -33,7 +33,7 @@ end to end.
   script-maintained JSONL **ledger**, never in an LLM's memory.
 - **`flutter-app-pipeline`** (Flutter layer, on top): adds package research
   with a corrected Quality Score, the deterministic Flutter scripts, and the
-  **RTK-compression + Graphify-before-LLM** ordering rules. It delegates the
+  **RTK-compression** ordering rule. It delegates the
   per-task implementation loop back to `two-model-sdd-pipeline`.
 
 **Corollary — script-decided routing.** If a check can be performed by a
@@ -54,7 +54,6 @@ recorded so it is never asked again for that branch.
 | OpenCode | Harness (CLI + agent runtime); `opencode run --agent` is the headless dispatch mechanism |
 | Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline |
 | RTK (`rtk`) | CLI proxy that compresses command output before it reaches an LLM context window (60-90% token savings); also the "Token Killer" (`token-kill` script) |
-| Graphify (`graphifyy`) | On-device code knowledge graph; Script A updates it just before each task commit and reads it immediately after (subgraph extraction) for B/D |
 | Tavily | Programmatic web search for solution research |
 | pub.dev API | Package metadata, score, popularity, SDK constraints |
 | GitHub REST | Commit recency, issue counts, dependents fallbacks |
@@ -75,19 +74,18 @@ recorded so it is never asked again for that branch.
    descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific
    50–69 group). Score results with `template-score`. `2b` select with the
    developer (as-is / modified / from-scratch); `2c` clone the selected template
-   + run `graphify-package` → gap analysis against the plan, then write
+   → gap analysis against the plan, then write
    technically complete tasks with `writing-plans` (no code downloaded; lockfile
    only). Pure planning.
 3. **Phase 3 — TDD Implementation.** Delegated to `two-model-sdd-pipeline`
    (script-autonomous per-task loop). Flutter additions: `pub-sync` ->
    `red-gate` (dispatches C on RED verified, then chains straight into
-   `coder-gate`, which owns every round after that: gate check -> PASS
-(`green-gate` graph update + subgraph read + commit + dispatch D) |  FAIL-with-budget
-   (fix prompt + redispatch C with `--continue`) | FAIL-at-4 or TEST_DEFECT
-   (stop, `route-next` emits ARBITRATE) -> `route-next` (CORRECTIVE /
-   ARBITRATE / NEXT / FINAL_REVIEW). `orchestrator`'s own CODER/REVIEW cases
-   only fire on a resumed/interrupted session — the normal path never
-   returns to B between rounds.
+   `coder-gate`, which owns every retry after that: gate check -> PASS
+(`green-gate` commit + dispatch D) | FAIL (fix prompt + redispatch C with
+`--continue`, unbounded until green) | TEST_DEFECT (stop, `route-next`
+emits ARBITRATE) -> `route-next` (CORRECTIVE / ARBITRATE / NEXT /
+FINAL_REVIEW). `orchestrator`'s own CODER/REVIEW cases only fire on a
+resumed/interrupted session — the normal path never returns to B.
    Every LLM-invoked command runs through `scripts/cmd` (RTK compression).
 4. **Phase 4 — Project-Wide Review.** Revalidate with `green-gate --no-commit`,
    full code review, corrections re-enter Phase 3.
@@ -96,9 +94,9 @@ recorded so it is never asked again for that branch.
 
 | Role | Tier | Responsibility |
 |---|---|---|
-| Script A | none (deterministic) | gates, test/analyze decisions, dispatch C/D, routing, commits, graph, ledger; never implements/reviews itself |
+| Script A | none (deterministic) | gates, test/analyze decisions, dispatch C/D, routing, commits, ledger; never implements/reviews itself |
 | B (strategist session) | Strategic (human) | brainstorming, plan.json, per-task briefs + RED tests, corrective briefs, TEST_DEFECT arbitration, final review (fresh `/new` session) |
-| C (Coder) | Operational (`two-model-coder`, `mode: all`) | write-only implementation against a RED test; never runs commands; max 4 attempts (round 1 + 3 fixes), resume within task |
+| C (Coder) | Operational (`two-model-coder`, `mode: all`) | write-only implementation against a RED test; never runs commands; unbounded retries until green, resume within task |
 | D (Code Reviewer) | Strategic (`two-model-reviewer`, `mode: all`) | JSON verdict (APPROVED / SEND_BACK / ESCALATE) on compiler-approved code; never runs test/analyze |
 | Strategic Coder | REMOVED | escalation is B arbitration (`ARBITRATE`) |
 
@@ -122,31 +120,25 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `template-search CATEGORY` | Search GitHub for project templates in the given category (stars descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific 50–69 group) | JSON list of candidates with scores |
 | `template-score TEMPLATE` | Score a project template candidate (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) | JSON + gate verdict (same semantics as pkg-score) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
-| `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report). **On success dispatches C, then chains into `coder-gate`** — the whole per-task loop runs to completion (or budget-exhausted/TEST_DEFECT) in one call | exit = `coder-gate`'s exit; exit 1 defective brief (no dispatch); exit 2 usage |
+| `red-gate WORKSPACE TASK` | Materialize brief RED tests; verify the failure is the **expected reason** (brief's `EXPECTED-RED:` text must appear in the report). **On success dispatches C, then chains into `coder-gate`** — the whole per-task loop runs to completion (or TEST_DEFECT) in one call | exit = `coder-gate`'s exit; exit 1 defective brief (no dispatch); exit 2 usage |
 | `red-gate WORKSPACE TASK [TEST_CMD]` (two-model, generic) | Language-agnostic mirror of the Flutter `red-gate` above, for non-Flutter branches: same materialize-and-verify-expected-reason logic, but the test command comes from the ledger's `gate.test_cmd` (written by `resolve-toolchain`) instead of a hardcoded `flutter test`. Same dispatch-C-then-`coder-gate` behavior | exit = `coder-gate`'s exit; exit 1 defective brief; exit 2 usage/no test_cmd |
-| `coder-gate WORKSPACE TASK` (two-model) | Closes the gap that used to require B between rounds: after **every** Coder round (round 1 from `red-gate`, or a resume), runs the gate (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers `coder_round`, and decides by exit code/log content alone — PASS → commit (generic engine) or `green-gate` already committed (Flutter) + `review-package` + dispatch D; FAIL and budget left → build the fix prompt (prior diff + gate report + brief, pure path interpolation) and redispatch C with `--continue`; FAIL at round 4 → stop, `route-next` will ARBITRATE; `TEST_DEFECT` seen in the round's log → ledger `escalated` and stop immediately, no more retries | exit 0 green+committed+D dispatched; 1 budget exhausted; 2 TEST_DEFECT escalated; 3 usage |
+| `coder-gate WORKSPACE TASK` (two-model) | Closes the gap that used to require B between attempts: after **every** Coder attempt (first from `red-gate`, or a resume), runs the gate (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers `coder_round`, and decides by exit code/log content alone — PASS → commit (generic engine) or `green-gate` already committed (Flutter) + `review-package` + dispatch D; FAIL → rebuild the fix prompt (prior diff + gate report + brief, pure path interpolation) and redispatch C with `--continue`, unbounded until green; `TEST_DEFECT` seen in the latest log → ledger `escalated` and stop immediately, no more retries | exit 0 green+committed+D dispatched; 2 TEST_DEFECT escalated; 3 usage |
 | `resolve-toolchain WORKSPACE [ROOT]` (two-model) | One-time-per-branch, no-LLM detection: inspects `ROOT` for a known ecosystem marker (`pubspec.yaml`, `Cargo.toml`, `go.mod`, `package.json`, `pyproject.toml`/`requirements.txt`) and resolves `TEST_CMD`/`ANALYZE_CMD`; on success chains directly into `ledger-append` (`gate` entry). This is what lets `orchestrator` pick the right `red-gate` and lets the generic `red-gate`/`run-gates` run without ever asking | exit 0 resolved + ledgered; exit 1 ambiguous (multiple markers — manual fallback); exit 2 usage/no marker (manual fallback) |
-| `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: graph update + subgraph read BEFORE the commit (so the graph enters the task's own commit and the interfaces are read immediately after the write), appends the `commit` ledger entry (task number from `-t TASK` when given, else `-`; `ledger-append` resolved from the two-model scripts dir, falling back to a workspace copy), then review package + **dispatches D**. `--no-commit` never commits/never dispatches | exit 0 green (+graph +subgraph +commit +D); 1 tests; 2 analyze; 3 format |
-| `graphify-update [ROOT]` | Rebuild project graph via `graphify update <root>` — before the task's commit, immediately before the subgraph read (ADR-0004) | exit code of graphify; 0 when disabled |
-| `graphify-subgraph WS TASK` | Query the graph (`explain`) for the task's `touches` nodes; write `<ws>/task-N-interfaces.md` (capped) for B/D. Runs immediately after `graphify-update` in the green-gate/coder-gate chain — the read that justifies the write | exit 0 wrote; 2 usage/unknown task |
-| `graphify-regen [ROOT]` | Rebuild project graph via `graphify update <root>` (real CLI form); Script-A-side, before commit | exit code of graphify |
-| `graphify-package PACKAGE` | Build graph for a downloaded dependency via `graphify update <pkg_dir>` (B feed from `pub-sync`) | resolves dir from `.dart_tool/package_config.json` |
-| `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER N ROUND / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
+| `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` + format + commit. On commit: appends the `commit` ledger entry (task number from `-t TASK` when given, else `-`; `ledger-append` resolved from the two-model scripts dir, falling back to a workspace copy), then review package + **dispatches D**. `--no-commit` never commits/never dispatches | exit 0 green (+commit +D); 1 tests; 2 analyze; 3 format |
+| `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW) | exit 0 routed; 1 inconsistent; 2 usage |
 | `red-integrity WORKSPACE TASK` | Byte-compare committed tests vs brief RED-TESTS | exit 0 intact; 1 tampered; 2 usage/missing |
-| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` and `task-TASK-interfaces.md` (if present) ahead of the commit list so the Reviewer receives the brief + interfaces in the single `--prompt-file` package | exit 0 wrote; 2 usage |
+| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` ahead of the commit list so the Reviewer receives the brief in the single `--prompt-file` package | exit 0 wrote; 2 usage |
 | `keep-discard WORKSPACE TASK` | Escalation pre-gate: empty diff / out-of-scope files → DISCARD; else KEEP | exit 0 KEEP; 1 DISCARD; 2 usage |
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-holistic: all complete + no unresolved verdicts + no blocking parked + tests/analyze green | exit 0 ready; 1 blockers; 2 usage |
 | `doc-check [REPO]` | Deterministic gate: pipeline files changed → READMEs must also change | exit 0 OK; 1 violation; 2 usage |
 | `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the Reviewer's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after D's log lands | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
 
-All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`,
+All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `RTK_BIN`,
 `DISPATCH_BIN`, `OPENCODE_BIN` env overrides. `cmd` also respects `RTK_ENABLED=0`
 (passthrough) and `RTK_BIN` (binary override); if RTK has no filter/wrapper for a
-command it passes the full output through — nothing is lost. `pub-sync` keeps the
-graphify-package chain (B feed, non-fatal; disable with `GRAPHIFY_ENABLED=0`);
-`graphify-update` runs before commit (immediately before the `graphify-subgraph` read); `red-gate`/`green-gate` dispatch C/D on
-success but never read the graph. Tests live in
+command it passes the full output through — nothing is lost.
+`red-gate`/`green-gate` dispatch C/D on success. Tests live in
 `skills/flutter-app-pipeline/tests/` (flutter scripts) and
 `skills/two-model-sdd-pipeline/tests/` (router + cmd runner + dispatch + gates),
 run with `run-tests.sh` (`python3 -m unittest discover`).
@@ -154,7 +146,7 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
 ## 7. Ordering invariants (do not violate)
 
 - **Commands are scripted and RTK-compressed:** every LLM-invoked command
-  line (test runs, analysis, git ops, graphify queries) runs through
+  line (test runs, analysis, git ops) runs through
   `scripts/cmd` — the generic runner saves the FULL output to a workspace
   file and prints the RTK-compressed view on stdout. Raw command output
   never enters an LLM context window. Deterministic gates keep reading full
@@ -170,19 +162,14 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   dispatch chain.
 - **C is write-only (ADR-0002):** the Coder never runs test/analyze/git
   commands. Script A decides task tests → full suite → analyze by exit code
-  and feeds failures back. Budget: round 1 + 3 fixes (4 attempts), then
-  `ARBITRATE` to B.
+  and feeds failures back — unbounded retries until green; only TEST_DEFECT
+  escalates to B.
 - **D reviews compiler-approved code only (Item 2):** the Reviewer never
   runs or re-runs test/analyze; scope is design, architecture, spec
   compliance, interface discipline. Returns a structured JSON verdict.
-- **Graphify is update-before-commit + read-immediately-after (ADR-0004):**
-  `graphify-update`
-  rebuilds the graph just before the task's commit (so it enters the commit) —
-  never per Coder
-  iteration. `graphify-subgraph` runs immediately after the update and extracts
-  the affected-dependency slice
-  (`graphify explain`) into `<ws>/task-N-interfaces.md` for B's next brief
-  and D's review. The graph exposes structure, not method bodies.
+- **No knowledge graph:** no stage builds, updates, or queries a code graph.
+  B writes briefs from the plan + prior diffs + gate reports; D reviews the
+  brief + diff only.
 - **Gates are exit codes:** never judge "did the test fail for the expected
   reason" or "are tests green" by reading output — run the gate script and read
   its exit code. The red-gate additionally verifies the failure reason against
@@ -191,11 +178,10 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   ledgered transition) run `route-next` and execute its emitted action — the
   LLM never decides "APPROVED → next task" or "SEND_BACK → corrective" by
   reasoning. SEND_BACK → `CORRECTIVE` (B writes a corrective brief);
-  ESCALATE / coder overflow → `ARBITRATE` (B validates the brief/test).
+  ESCALATE → `ARBITRATE` (B validates the brief/test).
 - **Cache-aware calls:** C and D retain their sessions WITHIN a task until D
   approves (fix/correction rounds resume via `--continue --session`; the
-  provider cache-bills the stable prefix — system + plan + brief +
-  interfaces); when the task changes, dispatch fresh. B holds the session
+  provider cache-bills the stable prefix — system + plan + brief); when the task changes, dispatch fresh. B holds the session
   for plan + briefs; the final review is a fresh `/new` session.
 - **Review pre-gates are exit codes:** `red-integrity` byte-compares committed
   tests vs brief (no LLM judgment); `interface-check` detects cross-task
@@ -345,15 +331,15 @@ skills/two-model-sdd-pipeline/scripts/   <- pipeline-workspace, ledger-append, c
 3. Per task: `pkg-score` candidates -> select with the developer -> `writing-plans`
    tasks -> `pub-sync` -> B writes the brief -> `red-gate` (expected-reason
    check; dispatches C) -> Script A gates (task tests -> full suite -> analyze;
-   resume C up to 4 attempts) -> `green-gate` (graph update + subgraph read + commit +
+   C retried until green, never hands back) -> `green-gate` (commit +
    dispatch D) -> `red-integrity` (byte-compare) -> D JSON verdict ->
    `route-next` -> `orchestrator` hands `OUTCOME` to B. SEND_BACK →
    `CORRECTIVE` (B writes corrective brief to `task-N-corrective.md`,
    never overwriting `task-N-brief.md`; resume C via `--continue --session`
    with a corrective-round prompt that tells the model the brief has
-   CHANGED and to re-read it fully); ESCALATE / overflow → `ARBITRATE` (B
+   CHANGED and to re-read it fully); ESCALATE → `ARBITRATE` (B
    rules). After all tasks: `final-gate` then B's fresh `/new` holistic review.
    The router, not the LLM, decides every transition. All command lines go
-   through `scripts/cmd`; Graphify is update-before-commit + read-immediately-after.
+   through `scripts/cmd`.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.

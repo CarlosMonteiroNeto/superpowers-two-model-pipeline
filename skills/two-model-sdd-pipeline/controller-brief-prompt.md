@@ -9,9 +9,8 @@ verifies the expected failure, and dispatches the Coder.
 
 B writes one brief per task, just-in-time (never batched upfront — tests must
 not go stale against interface changes made by earlier tasks). Script A feeds
-you the affected-dependency subgraph (`graphify-subgraph` output,
-`<ws>/task-N-interfaces.md`) and the review side-effects before you write the
-next brief.
+you the review side-effects (ledger, gate reports, prior diffs) before you
+write the next brief.
 
 ## Brief structure (in order)
 
@@ -27,7 +26,10 @@ the context that defines it. Order:
    test must encode.
 3. **RED test** — complete, runnable, BLACK-BOX behavioral test code (per the
    pipeline's TDD rule: integration/behavior, never internal implementation
-   details — do not constrain the Coder's internals). Derived from items 1-2:
+   details — do not constrain the Coder's internals). Author it per
+   `skills/test-driven-development/writing-good-tests.md`: name the break it
+   catches, assert real behavior (no mocks of the thing under test), derive
+   expectations by hand as literals. Derived from items 1-2:
    it fails today for the expected reason and passes when the task is done
    correctly. Write it only after the context is fixed — a RED test written
    before the brief risks encoding wrong values. Follow the project's existing
@@ -55,10 +57,8 @@ EXPECTED-RED:
   Make the tests final and the brief self-contained.
 - If an interface you need does not exist yet, define it in Exact Values as a
   binding contract.
-- Query the graph subgraph first (via `scripts/cmd --full-file
-  <ws>/task-N-graphify.txt -- graphify explain "Node"`) for the interfaces
-  earlier tasks established; write from the subgraph + the plan entry, never
-  whole files.
+- Write from the plan entry + prior task diffs + review side-effects; read
+  only the files the task touches, never whole directories.
 - TEST_DEFECT care: if the Coder reports TEST_DEFECT (or red-gate flags a
   defective brief), re-examine the RED test you wrote — a compile error in
   test setup instead of the missing symbol means the brief is defective.

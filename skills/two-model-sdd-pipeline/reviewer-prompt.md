@@ -18,11 +18,11 @@ Task brief: [BRIEF_FILE]
 Global constraints binding this task:
 [GLOBAL_CONSTRAINTS]
 
-## Affected Interfaces
+## Contracts In Scope
 
-Signatures and contracts this task declares or consumes (from the committed
-graph subgraph): [INTERFACES_FILE]
-Judge the diff's compatibility against these specifically.
+Signatures and contracts this task declares or consumes (from the brief's
+Exact Values + prior tasks' diffs). Judge the diff's compatibility against
+these specifically.
 
 ## Diff Under Review
 
@@ -45,7 +45,7 @@ spec compliance, interface discipline.
 2. Architecture & design: clean separation, real error handling, no verbatim
    duplication, edge cases handled, follows existing patterns.
 3. Interface discipline: does the diff break or silently widen any contract in
-   [INTERFACES_FILE]? Flag every mismatch - later tasks build on these.
+   the brief? Flag every mismatch - later tasks build on these.
 
 ## Verdict
 
@@ -69,6 +69,5 @@ Coverage-could-be-broader and polish are Minor. Verdict first, then findings.
 **Placeholders (filled deterministically by Script A):**
 - `[BRIEF_FILE]` — `<ws>/task-N-brief.md`
 - `[GLOBAL_CONSTRAINTS]` — verbatim from `plan.json`
-- `[INTERFACES_FILE]` — `<ws>/task-N-interfaces.md` (from `graphify-subgraph`)
 - `[BASE_SHA]` / `[HEAD_SHA]` / `[DIFF_FILE]` — from `review-package` output
   (green-gate writes `<ws>/task-N-review-package.diff`)

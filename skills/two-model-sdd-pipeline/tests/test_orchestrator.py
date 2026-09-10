@@ -171,7 +171,7 @@ class TestOrchestratorExecutes(OrchestratorTestBase):
             cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("OUTCOME: CODER 3 1", r.stdout)
+        self.assertIn("OUTCOME: CODER 3", r.stdout)
 
 
 class TestOrchestratorUsage(OrchestratorTestBase):

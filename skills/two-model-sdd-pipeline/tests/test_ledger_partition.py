@@ -129,7 +129,7 @@ class RouteNextPartitionRegressionTest(unittest.TestCase):
         return [
             entry("brief_ready", task, "task"),
             entry("red_check", task, "RED"),
-            entry("coder_round", task, "Coder", round="1/4"),
+            entry("coder_round", task, "Coder"),
             entry("commit", task, "Task", commits="a1b2c3"),
         ]
 
@@ -207,19 +207,19 @@ class RouteNextLargeLedgerPerfTest(unittest.TestCase):
         sized_start = time.perf_counter()
         r_small2 = run_route(ws_small, target)
         small_dt = time.perf_counter() - sized_start
-        self.assertEqual(r_small2.stdout.strip(), "CODER 201 2")
+        self.assertEqual(r_small2.stdout.strip(), "CODER 201")
 
         # First large call performs the one-time migration (amortized); the
         # perf invariant is the STEADY-STATE hot path after the split.
         r_warm = run_route(ws_large, target)
         self.assertEqual(r_warm.returncode, 0, r_warm.stdout + r_warm.stderr)
-        self.assertEqual(r_warm.stdout.strip(), "CODER 201 2")
+        self.assertEqual(r_warm.stdout.strip(), "CODER 201")
 
         large_start = time.perf_counter()
         r_large = run_route(ws_large, target)
         large_dt = time.perf_counter() - large_start
         self.assertEqual(r_large.returncode, 0, r_large.stdout + r_large.stderr)
-        self.assertEqual(r_large.stdout.strip(), "CODER 201 2")
+        self.assertEqual(r_large.stdout.strip(), "CODER 201")
 
         # Hot-path input is bounded: per-task file holds only this task's
         # entries even though the global file holds 200 prior tasks.

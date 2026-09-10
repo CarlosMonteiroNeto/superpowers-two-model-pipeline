@@ -114,11 +114,21 @@ class TestResolveToolchain(CoderGateTestBase):
 
 class TestCoderGate(CoderGateTestBase):
     def _stubs(self, gate_log, dispatch_log):
-        # run-gates stub: controllable exit via STUB_GATE_EXIT
+        # run-gates stub: controllable exit via STUB_GATE_EXIT - or, when
+        # STUB_COUNT_FILE is set, fail until the Nth invocation
+        # (STUB_GATE_PASS_AFTER) then pass, so unbounded-loop tests
+        # terminate deterministically.
         self.gate = write_stub(
             self.stub_dir, "run-gates",
             """
 echo "gate args: $*" >> "${STUB_GATE_LOG:?}"
+if [ -n "${STUB_COUNT_FILE:-}" ]; then
+  n=$(cat "$STUB_COUNT_FILE" 2>/dev/null || echo 0)
+  n=$((n + 1))
+  echo "$n" > "$STUB_COUNT_FILE"
+  if [ "$n" -lt "${STUB_GATE_PASS_AFTER:-1}" ]; then exit 1; fi
+  exit 0
+fi
 exit "${STUB_GATE_EXIT:-0}"
 """,
         )
@@ -148,7 +158,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         with open(self.ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
             f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
-                                "summary": "round 1", "status": "FAIL", "round": "1/4"}) + "\n")
+                                "summary": "attempt failed", "status": "FAIL"}) + "\n")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -161,29 +171,40 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         ledger_text = self.ledger_path.read_text(encoding="utf-8")
-        self.assertIn("round 2 passed", ledger_text)
+        self.assertIn("Coder passed the gate", ledger_text)
         # a commit was made by the generic engine path (base + green commit)
         log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
                              capture_output=True, text=True).stdout
         self.assertEqual(log.count("\n"), 2, log)
 
-    def test_gate_failure_with_budget_resumes_coder(self):
+    def test_gate_failure_retries_until_green(self):
+        """The Coder loop is unbounded: repeated gate failures keep
+        redispatching the Coder with fresh fix prompts (no hand-back to the
+        main agent) until the gate passes - then commit + Reviewer dispatch
+        and exit 0."""
         self.brief()
         with open(self.ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
+        count_file = self._tmp / "gate.count"
+        count_file.write_text("0", encoding="utf-8")
+        # simulate the Coder's work: a change in the repo working tree
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
         r = run_script(
             "coder-gate", [str(self.ws), "1"],
             cwd=str(self.repo),
-            env_extra=self._env(STUB_GATE_EXIT="1"),
+            env_extra=self._env(STUB_COUNT_FILE=str(count_file), STUB_GATE_PASS_AFTER="3"),
         )
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        fix_prompts = list(self.ws.glob("task-1-fix-round-*.md"))
-        self.assertGreaterEqual(len(fix_prompts), 1, "fix prompt not built")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # two failures rebuilt the (fixed-path) fix prompt before green
+        self.assertTrue((self.ws / "task-1-fix.md").exists(), "fix prompt not built")
         dcalls = dispatch_log.read_text(encoding="utf-8") if dispatch_log.exists() else ""
-        self.assertIn("two-model-coder", dcalls)
+        self.assertGreaterEqual(dcalls.count("two-model-coder"), 2, dcalls)
+        self.assertIn("two-model-reviewer", dcalls)
+        ledger_text = self.ledger_path.read_text(encoding="utf-8")
+        self.assertIn("Coder passed the gate", ledger_text)
 
     def test_test_defect_short_circuits_to_escalated(self):
         self.brief()
@@ -210,14 +231,17 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         """Regression for the whole-log-grep false-positive: the fix prompt
         coder-gate itself writes into the round-N log contains the word
         TEST_DEFECT as instruction text. A round-2 log with that text but a
-        final Status: DONE must NOT escalate (budget-exhausted exit 1)."""
+        final Status: DONE must NOT escalate - the loop continues until the
+        gate passes (exit 0, no `escalated` entry)."""
         self.brief()
         with open(self.ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
             f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
-                                "summary": "round 1", "status": "FAIL", "round": "1/4"}) + "\n")
-        # round-2 log: fix-prompt-style text + final Status: DONE
-        (self.ws / "task-1-coder-round-2.log").write_text(
+                                "summary": "attempt failed", "status": "FAIL"}) + "\n")
+        # latest coder log: fix-prompt-style text + final Status: DONE
+        # (dispatch overwrites the fixed log path every retry, so this file
+        # is always the latest round)
+        (self.ws / "task-1-coder.log").write_text(
             '{"type":"text","part":{"type":"text","text":"Report TEST_DEFECT if the test is wrong."}}\n'
             '{"type":"text","part":{"type":"text","text":"Fixed. Status: DONE"}}\n',
             encoding="utf-8",
@@ -225,12 +249,14 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
+        count_file = self._tmp / "gate.count"
+        count_file.write_text("0", encoding="utf-8")
         r = run_script(
             "coder-gate", [str(self.ws), "1"],
             cwd=str(self.repo),
-            env_extra=self._env(STUB_GATE_EXIT="1"),
+            env_extra=self._env(STUB_COUNT_FILE=str(count_file), STUB_GATE_PASS_AFTER="2"),
         )
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         ledger_text = self.ledger_path.read_text(encoding="utf-8")
         self.assertNotIn("escalated", ledger_text)
 

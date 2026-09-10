@@ -65,34 +65,37 @@ class TestRouteNextStart(RouteNextTestBase):
         r = run_route(self.ws, 3)
         self.assert_action(r, "RED 3")
 
-    def test_red_check_emits_coder_round_one(self):
+    def test_red_check_emits_coder(self):
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "CODER 3 1")
+        self.assert_action(r, "CODER 3")
 
 
 class TestRouteNextRounds(RouteNextTestBase):
-    def test_one_coder_round_emits_coder_round_two(self):
+    def test_coder_rounds_keep_emitting_coder(self):
+        """Failed rounds never change the route: RED-verified without a
+        commit always routes back to CODER - no counting, no budget."""
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
-            entry("coder_round", 3, "Coder", round="1/2"),
+            entry("coder_round", 3, "Coder"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "CODER 3 2")
+        self.assert_action(r, "CODER 3")
 
-    def test_two_coder_rounds_emits_coder_round_three(self):
+    def test_many_coder_rounds_still_emit_coder(self):
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
-            entry("coder_round", 3, "Coder", round="1/4"),
-            entry("coder_round", 3, "Coder", round="2/4"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "CODER 3 3")
+        self.assert_action(r, "CODER 3")
 
 
 class TestRouteNextWrapUp(RouteNextTestBase):
@@ -165,28 +168,23 @@ class TestRouteNextFixAndEscalation(RouteNextTestBase):
         r = run_route(self.ws, 3)
         self.assert_action(r, "ARBITRATE 3")
 
-    def test_three_coder_rounds_emits_coder_round_four(self):
+    def test_many_failed_rounds_never_arbitrate_on_count(self):
+        """The Coder loop is unbounded and uncounted: even after many failed
+        rounds the router keeps emitting CODER - never ARBITRATE on round
+        count. Only TEST_DEFECT (escalated) or a review verdict leaves the
+        loop."""
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
-            entry("coder_round", 3, "Coder", round="1/4"),
-            entry("coder_round", 3, "Coder", round="2/4"),
-            entry("coder_round", 3, "Coder", round="3/4"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
+            entry("coder_round", 3, "Coder"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "CODER 3 4")
-
-    def test_four_coder_rounds_emits_arbitrate(self):
-        self.ledger([
-            entry("brief_ready", 3, "task"),
-            entry("red_check", 3, "RED"),
-            entry("coder_round", 3, "Coder", round="1/4"),
-            entry("coder_round", 3, "Coder", round="2/4"),
-            entry("coder_round", 3, "Coder", round="3/4"),
-            entry("coder_round", 3, "Coder", round="4/4"),
-        ])
-        r = run_route(self.ws, 3)
-        self.assert_action(r, "ARBITRATE 3")
+        self.assert_action(r, "CODER 3")
 
 
 class TestRouteNextUsage(RouteNextTestBase):

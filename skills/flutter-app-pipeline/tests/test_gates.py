@@ -3,7 +3,6 @@ import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -71,14 +70,6 @@ echo "stub: dart $*"
 exit "${STUB_FORMAT_EXIT:-0}"
 """,
         )
-        self.graphify = write_stub(
-            self.stub_dir,
-            "graphify",
-            """
-echo "$*" >> "${STUB_LOG:?}"
-exit "${STUB_GRAPHIFY_EXIT:-0}"
-""",
-        )
         # Dispatch stub: records argv to STUB_DISPATCH_LOG (defaults to
         # /dev/null so unrelated tests don't fail on an unset var); exits per
         # STUB_DISPATCH_EXIT (default 0). Used to verify red-gate/green-gate
@@ -91,16 +82,6 @@ echo "$*" >> "${STUB_DISPATCH_LOG:-/dev/null}"
 exit "${STUB_DISPATCH_EXIT:-0}"
 """,
         )
-        # Native Windows stub for python-invoked scripts (subprocess.run with
-        # a bash-shebang file fails on CreateProcess; a .cmd is executable).
-        if os.name == "nt":
-            self.graphify_cmd = pathlib.Path(self.stub_dir) / "graphify.cmd"
-            self.graphify_cmd.write_text(
-                '@echo off\necho %* >> "%STUB_LOG%"\nexit /b %STUB_GRAPHIFY_EXIT%\n',
-                encoding="ascii",
-            )
-        else:
-            self.graphify_cmd = self.graphify
         # coder-gate stub: red-gate now chains into coder-gate after dispatch.
         # The chain is stubbed out so red-gate tests assert RED verification +
         # dispatch without exercising the full retry loop (covered separately
@@ -116,7 +97,6 @@ exit "${STUB_CODER_GATE_EXIT:-0}"
         self.env = {
             "FLUTTER_BIN": self.flutter,
             "DART_BIN": self.dart,
-            "GRAPHIFY_BIN": self.graphify,
             "GIT_BIN": shutil.which("git") or "git",
             "RTK_ENABLED": "0",
             "DISPATCH_BIN": self.dispatch,
@@ -213,43 +193,6 @@ class TestGreenGate(GateTestBase):
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self._log(repo), before)
 
-    def test_chains_graphify_update_and_subgraph_before_commit(self):
-        """green-gate runs the graph update + subgraph read BEFORE the commit
-        (ADR-0004): the regenerated graph enters the task's own commit and the
-        interfaces read (graphify-subgraph) happens immediately after the
-        write - never orphaned, never per Coder iteration."""
-        repo = self._git_repo()
-        (repo / "lib" / "app.dart").write_text("void main() { print('chained'); }\n", encoding="utf-8")
-        ws = self._ws_with_plan()
-        log = pathlib.Path(self._tmp) / "g.log"
-        r = run_script(
-            "green-gate", ["-m", "Task 1: chained", "-w", str(ws), "-t", "3"],
-            cwd=repo,
-            env_extra={**self.env, "STUB_LOG": str(log)},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8") if log.exists() else ""
-        self.assertTrue(any("update" in c for c in calls.splitlines()),
-                        f"green-gate must run graphify update, got: {calls}")
-        self.assertTrue(any("explain" in c for c in calls.splitlines()),
-                        f"green-gate must run graphify-subgraph (the read), got: {calls}")
-        # the interfaces file was produced for D's review / B's next brief
-        self.assertTrue((ws / "task-3-interfaces.md").exists())
-
-    def test_no_commit_does_not_chain_graphify(self):
-        """--no-commit (Phase 4 revalidation) changes nothing, so it must not
-        rebuild the graph."""
-        repo = self._git_repo()
-        log = pathlib.Path(self._tmp) / "g.log"
-        r = run_script(
-            "green-gate", ["--no-commit"],
-            cwd=repo,
-            env_extra={**self.env, "STUB_LOG": str(log)},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8") if log.exists() else ""
-        self.assertEqual(calls, "")
-
     def _ws_with_plan(self):
         ws = pathlib.Path(self._tmp) / "ws"
         ws.mkdir(exist_ok=True)
@@ -261,51 +204,43 @@ class TestGreenGate(GateTestBase):
         )
         return ws
 
-    def test_green_commits_updates_graph_and_dispatches_reviewer(self):
+    def test_green_commits_and_dispatches_reviewer(self):
         """On all-green + commit with a workspace/task/base, green-gate must:
-        commit the task, run the graph update + subgraph read before the
-        commit (ADR-0004), build the review package, and dispatch the
-        Reviewer headlessly (Item 3)."""
+        commit the task, build the implementation-only review package, and
+        dispatch the Reviewer headlessly (Item 3). No knowledge-graph step
+        exists in the pipeline anymore."""
         repo = self._git_repo()
         (repo / "lib" / "app.dart").write_text("void main() { print('done'); }\n", encoding="utf-8")
         ws = self._ws_with_plan()
-        g_log = pathlib.Path(self._tmp) / "g.log"
         d_log = pathlib.Path(self._tmp) / "d.log"
         base = "HEAD"
         r = run_script(
             "green-gate",
             ["-m", "Task 3: done", "-w", str(ws), "-t", "3", "-b", base],
             cwd=repo,
-            env_extra={**self.env, "STUB_LOG": str(g_log), "STUB_DISPATCH_LOG": str(d_log)},
+            env_extra={**self.env, "STUB_DISPATCH_LOG": str(d_log)},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("Task 3: done", self._log(repo))
-        # graph update + subgraph read happened
-        calls = g_log.read_text(encoding="utf-8") if g_log.exists() else ""
-        self.assertTrue(any("update" in c for c in calls.splitlines()), calls)
-        self.assertTrue(any("explain" in c for c in calls.splitlines()), calls)
         # reviewer dispatched headlessly
         dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
         self.assertIn("two-model-reviewer", dcalls)
         # review package built into the workspace
         self.assertTrue((ws / "task-3-review-package.diff").exists())
 
-    def test_no_commit_skips_graphify_and_reviewer(self):
-        """--no-commit validation must not update the graph nor dispatch the
-        reviewer (nothing changed)."""
+    def test_no_commit_skips_reviewer_dispatch(self):
+        """--no-commit validation changes nothing, so it must not dispatch
+        the reviewer."""
         repo = self._git_repo()
         ws = self._ws_with_plan()
-        g_log = pathlib.Path(self._tmp) / "g.log"
         d_log = pathlib.Path(self._tmp) / "d.log"
         r = run_script(
             "green-gate",
             ["--no-commit", "-w", str(ws), "-t", "3", "-b", "HEAD"],
             cwd=repo,
-            env_extra={**self.env, "STUB_LOG": str(g_log), "STUB_DISPATCH_LOG": str(d_log)},
+            env_extra={**self.env, "STUB_DISPATCH_LOG": str(d_log)},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = g_log.read_text(encoding="utf-8") if g_log.exists() else ""
-        self.assertEqual(calls, "")
         dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
         self.assertEqual(dcalls, "")
 
@@ -392,24 +327,6 @@ class TestRedGate(GateTestBase):
         r = run_script("red-gate", [str(self.ws), "99"], cwd=self.ws, env_extra=self.env)
         self.assertEqual(r.returncode, 2)
 
-    def test_does_not_chain_graphify_after_red_verified(self):
-        """red-gate no longer rebuilds the project graph: the Coder reads the
-        brief and the materialized tests, not the graph; graphify is a
-        Controller-side lazy optimization at brief time."""
-        brief = self._brief()
-        brief.write_text(self._brief_text(), encoding="utf-8")
-        log = pathlib.Path(self._tmp) / "g.log"
-        r = run_script(
-            "red-gate", [str(self.ws), "3"],
-            cwd=self.ws,
-            env_extra={**self.env, "STUB_TEST_EXIT": "1",
-                       "STUB_TEST_OUTPUT": "Error: api_client.dart does not exist",
-                       "STUB_LOG": str(log)},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8") if log.exists() else ""
-        self.assertEqual(calls, "", f"red-gate must not invoke graphify, got: {calls}")
-
     def test_red_verified_dispatches_coder(self):
         """On RED verified, red-gate dispatches the Coder headlessly (Item 4):
         no main-agent intermediation."""
@@ -455,105 +372,19 @@ class TestPubSync(GateTestBase):
         self.assertNotEqual(r.returncode, 0)
         self.assertTrue(pathlib.Path(self._tmp, "pub-sync-report.txt").exists())
 
-    def test_chains_graphify_package_for_added_packages(self):
-        """pub-sync knows which packages were added; it must index each one
-        before returning. The chain is best-effort: graphify-package fails
-        without a package_config.json, and pub-sync must still succeed."""
-        log = pathlib.Path(self._tmp) / "g.log"
+    def test_added_packages_resolve_without_graph(self):
+        """pub-sync resolves added packages with no knowledge-graph step: the
+        pipeline no longer indexes downloads, so adding packages must succeed
+        silently (no warnings, no side effects)."""
         r = run_script(
             "pub-sync", ["pkg_a", "pkg_b"],
             cwd=self._tmp,
-            env_extra={**self.env, "STUB_LOG": str(log), "STUB_DRYRUN_EXIT": "0"},
+            env_extra={**self.env, "STUB_DRYRUN_EXIT": "0"},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         out = r.stdout + r.stderr
-        self.assertIn("PUB-SYNC: warning", out)
-        self.assertIn("pkg_a", out)
-        self.assertIn("pkg_b", out)
-
-    def test_pub_sync_respects_graphify_enabled(self):
-        log = pathlib.Path(self._tmp) / "g.log"
-        r = run_script(
-            "pub-sync", ["pkg_a"],
-            cwd=self._tmp,
-            env_extra={**self.env, "STUB_LOG": str(log), "STUB_DRYRUN_EXIT": "0", "GRAPHIFY_ENABLED": "0"},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertNotIn("PUB-SYNC: warning", r.stdout + r.stderr)
-
-
-class TestGraphifyRegen(GateTestBase):
-    def test_invokes_graphify_update_subcommand_on_root(self):
-        """graphify-regen must invoke `graphify update <root>` - the real
-        CLI form - not the old `graphify <root> --update` (which the real
-        CLI rejects; a wrapper was needed to translate it)."""
-        log = pathlib.Path(self._tmp) / "graphify.log"
-        r = run_script(
-            "graphify-regen", [],
-            cwd=self._tmp,
-            env_extra={**self.env, "STUB_LOG": str(log)},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
-        # the root argument must resolve to the working directory (any path form)
-        self.assertTrue(any(os.path.basename(self._tmp) in c for c in calls), calls)
-
-    def test_never_uses_the_old_flag_form(self):
-        log = pathlib.Path(self._tmp) / "graphify.log"
-        r = run_script(
-            "graphify-regen", [],
-            cwd=self._tmp,
-            env_extra={**self.env, "STUB_LOG": str(log)},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertFalse(any("--update" in c for c in calls), calls)
-
-
-class TestGraphifyPackage(GateTestBase):
-    def _run_pkg(self, args, env_extra):
-        env = dict(os.environ)
-        env.update(self.env)
-        env.update(env_extra)
-        env["GRAPHIFY_BIN"] = str(self.graphify_cmd)
-        # graphify-package has no .py extension (bash shebang for Unix);
-        # invoke the real python module directly so Windows can run it.
-        return subprocess.run(
-            [sys.executable, str(SCRIPTS / "graphify_package.py"), *args],
-            cwd=str(self._tmp),
-            env=env,
-            capture_output=True,
-            text=True,
-        )
-
-    def test_invokes_graphify_update_subcommand_on_package_dir(self):
-        """graphify-package must invoke `graphify update <pkg_dir>` - the
-        real CLI form - not `graphify <pkg_dir> --out <dir>`."""
-        config = {
-            "configVersion": 2,
-            "packages": [
-                {"name": "pkg_a", "rootUri": "file:///C:/cache/pkg_a/", "packageUri": "lib/"},
-            ],
-        }
-        config_path = pathlib.Path(self._tmp) / "package_config.json"
-        config_path.write_text(json.dumps(config), encoding="utf-8")
-        log = pathlib.Path(self._tmp) / "g.log"
-        r = self._run_pkg(
-            ["pkg_a", "--config", str(config_path)],
-            {"STUB_LOG": str(log)},
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        calls = log.read_text(encoding="utf-8").splitlines()
-        self.assertTrue(any(c.strip().startswith("update ") for c in calls), calls)
-        self.assertTrue(any("pkg_a" in c for c in calls), calls)
-        self.assertFalse(any("--out" in c for c in calls), calls)
-
-    def test_missing_package_is_an_error(self):
-        config_path = pathlib.Path(self._tmp) / "package_config.json"
-        config_path.write_text(json.dumps({"configVersion": 2, "packages": []}), encoding="utf-8")
-        r = self._run_pkg(["nope", "--config", str(config_path)], {})
-        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("PUB-SYNC: warning", out)
+        self.assertIn("lockfile consistent", out)
 
 
 if __name__ == "__main__":

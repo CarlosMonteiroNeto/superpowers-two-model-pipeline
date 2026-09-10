@@ -15,7 +15,7 @@ chain.
 **Layering:** this is the generic orchestration engine. Flutter/Dart projects
 use `flutter-app-pipeline` on top of it — that skill adds the package research
 and Quality Score phase, the deterministic Flutter scripts, and the
-RTK-compression + Graphify-before-LLM ordering rules, and delegates the
+RTK-compression ordering rule, and delegates the
 per-task loop back to this skill.
 
 **Why this exists:** native SDD keeps one controller conversation alive for
@@ -61,7 +61,7 @@ depends on them, and they must survive compaction.
   are continuous. "Should I continue?" prompts waste the human partner's
   time; the ledger and `route-next` carry the state.
 - Deterministic routing: `scripts/route-next WORKSPACE TASK [TOTAL_TASKS]`
-  emits the next action (`BRIEF` / `RED` / `CODER N ROUND` / `REVIEW` /
+  emits the next action (`BRIEF` / `RED` / `CODER` / `REVIEW` /
   `CORRECTIVE` / `ARBITRATE` / `NEXT` / `FINAL_REVIEW`). Script A executes the
   emitted action; it never decides "APPROVED → next task" by reasoning.
 
@@ -137,23 +137,21 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   runs (Flutter's hardcoded one, or this skill's generic one reading
   `TEST_CMD` from `resolve-toolchain`'s ledger entry) from `gate.lang` —
   never asked, never guessed by an LLM.
-- **`coder-gate WS TASK`** — owns every round after the first: runs the gate
+- **`coder-gate WS TASK`** — owns every retry after the first dispatch: runs the gate
   (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers
   `coder_round`, and on failure builds the fix prompt (prior diff + gate
   report + brief — file-path interpolation only, no LLM call) and resumes C
-  with `--continue`. Stops (no more retries) on a 4th failure or on
-  `TEST_DEFECT` found in the round's log, ledgering `escalated` in the
-  latter case so `route-next` goes straight to ARBITRATE. On PASS: commits
+  with `--continue`. The loop is unbounded and uncounted: it retries until
+  the gate passes and never hands back to B for help. It stops only on
+  `TEST_DEFECT` found in the latest log, ledgering `escalated` so
+  `route-next` goes straight to ARBITRATE. On PASS: commits
   (generic engine) or leaves the commit to `green-gate` (Flutter, which
   already did it as part of the passing check), then builds the review
-  package and dispatches D. This is the piece that used to require B
-  between every round — see `orchestrator`'s `CODER*` comment for the one
-  case it still hands back (a resumed/interrupted session).
+  package and dispatches D. See `orchestrator`'s `CODER*` comment for the one
+  case that still routes through CODER (a resumed/interrupted session).
 - **`green-gate`** — chains full suite + `flutter analyze` + format + commit.
-  On success: graph update + subgraph read BEFORE the commit (so the graph
-  enters the task's own commit and is read immediately after being written),
-  then builds the review package and dispatches D headlessly (Item 3).
-  `--no-commit` validates only.
+  On success: commits, then builds the review package and dispatches D
+  headlessly (Item 3). `--no-commit` validates only.
 - **`dispatch`** — headless launcher: `opencode run --agent <def> --format
   json <prompt-file> <prompt> [--continue --session <id>]`, tees the JSON event
   stream to `<ws>/task-N-coder.log` / `task-N-reviewer.log` (observability —
@@ -174,12 +172,6 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   raw run).
 - **`token-kill`** — RTK minification: error logs, source payloads to C/D,
   JSON reports.
-- **`graphify-update`** — graph rebuild before commit only (the subgraph read
-  immediately follows; ADR-0004).
-- **`graphify-subgraph WS TASK`** — affected-dependency subgraph extraction →
-  `<ws>/task-N-interfaces.md` for B's next brief and D's review. Runs
-  immediately after `graphify-update` in the green-gate/coder-gate chain —
-  the read that justifies the write.
 - **`review-package` / `ledger-append` / `red-integrity` / `final-gate` /
   `doc-check`** — as before.
 - **`parse-review`** — deterministic parser: reads the Reviewer's JSONL event
@@ -199,15 +191,14 @@ Script A never implements, reviews, or fixes anything itself.
 - Owns brainstorming, the JSON plan, task breakdown, and per-task briefs +
   RED tests — written directly, no Controller subagent (Item 1).
 - Receives feedback only through Script A's outputs (stdout, ledger, gate
-  reports, the subgraph feed).
+  reports).
 - **B reads only what the scripts hand it** — `OUTCOME:` lines from the
-  orchestrator, the JSONL ledger, the parsed Reviewer verdict
-  (`parse-review` → `task-N-review.json`), and the interfaces file
-  (`graphify-subgraph` → `task-N-interfaces.md`) for the next brief. B never
+  orchestrator, the JSONL ledger, and the parsed Reviewer verdict
+  (`parse-review` → `task-N-review.json`). B never
   reads raw coder/reviewer dispatch logs or full gate reports into context;
   those are observability files for the developer, not LLM inputs.
 - Writes corrective briefs on `CORRECTIVE` (SEND_BACK), arbitrates
-  TEST_DEFECT / defective briefs / coder overflow on `ARBITRATE`, and
+  TEST_DEFECT / defective briefs / review ESCALATE on `ARBITRATE`, and
   documents minor findings (PARKED — never fix loops).
 - Final holistic review runs in a **fresh `/new` session** fed only the
   original plan + consolidated diff + ledger (Item 5).
@@ -219,9 +210,10 @@ Script A never implements, reviews, or fixes anything itself.
 - Never writes or edits tests — "fixing" a failing test is tampering. If a
   test looks wrong: report `TEST_DEFECT`; B arbitrates (Item 6 — EXPECTED-RED
   already catches compile-error reds at the gate).
-- Context zeroed per task; fix rounds resume the same session
-  (`--continue --session`). Budget: round 1 + 3 fixes (4 attempts) → then
-  `ARBITRATE` to B.
+- Context zeroed per task; retries resume the same session
+  (`--continue --session`). No round budget, no failure counting: the loop
+  runs until the gate passes. Only `TEST_DEFECT` leaves the loop (→ B
+  arbitration).
 
 ### D (Code Reviewer — Strategic, `two-model-reviewer`)
 
@@ -259,12 +251,12 @@ Entry types and when to append them:
 | `gate` | tier agents, test command, analyze command recorded |
 | `brief_ready` | B wrote a task brief (+ RED test path) |
 | `red_check` | RED tests materialized; expected FAIL confirmed |
-| `coder_round` | after each Coder round (STATUS=..., ROUND=n/4) |
+| `coder_round` | after each Coder attempt (STATUS=PASS/FAIL) |
 | `commit` | Script A committed the task (COMMITS=a7b..c9d) |
 | `review_outcome` | D's JSON verdict (APPROVED / SEND_BACK / ESCALATE + finding count) |
 | `review_json` | path to D's parsed JSON verdict file |
 | `corrective` | B wrote a corrective brief (SEND_BACK) |
-| `arbitrate` | B ruling on TEST_DEFECT / defective brief / coder overflow |
+| `arbitrate` | B ruling on TEST_DEFECT / defective brief / review ESCALATE |
 | `task_complete` | task closed (verdict, parked minors if any) |
 | `interface_change` | an interface other tasks consume changed (interface-check exit 1) |
 | `final_review` | verdict of the whole-branch review |
@@ -285,16 +277,16 @@ digraph pipeline {
     "red-gate: materialize + verify RED" -> "defective? ARBITRATE to B" [label="no (exit 1)"];
     "red-gate: materialize + verify RED" -> "dispatch C (headless, fresh)" [label="yes"];
     "dispatch C (headless, fresh)" -> "coder-gate: run gate, ledger coder_round";
-    "coder-gate: run gate, ledger coder_round" -> "resume C (--continue), re-check" [label="fail, budget left"];
+    "coder-gate: run gate, ledger coder_round" -> "resume C (--continue), re-check" [label="fail: retry until green"];
     "resume C (--continue), re-check" -> "coder-gate: run gate, ledger coder_round";
-    "coder-gate: run gate, ledger coder_round" -> "ARBITRATE to B" [label="fail at 4/4 or TEST_DEFECT"];
-    "coder-gate: run gate, ledger coder_round" -> "green-gate: graph update + subgraph read, then commit" [label="green"];
-    "green-gate: graph update + subgraph read, then commit" -> "dispatch D (headless, fresh) + review package";
+    "coder-gate: run gate, ledger coder_round" -> "ARBITRATE to B" [label="TEST_DEFECT only"];
+    "coder-gate: run gate, ledger coder_round" -> "green-gate: commit" [label="green"];
+    "green-gate: commit" -> "dispatch D (headless, fresh) + review package";
     "dispatch D (headless, fresh) + review package" -> "D JSON verdict: APPROVED / SEND_BACK / ESCALATE";
     "D JSON verdict: APPROVED / SEND_BACK / ESCALATE" -> "route-next";
     "route-next" -> "APPROVED -> NEXT (minors PARKED)" [label="APPROVED"];
     "route-next" -> "SEND_BACK -> CORRECTIVE: B brief -> resume C" [label="SEND_BACK"];
-    "route-next" -> "ESCALATE / overflow -> ARBITRATE: B rules" [label="ESCALATE"];
+    "route-next" -> "ESCALATE -> ARBITRATE: B rules" [label="ESCALATE"];
     "APPROVED -> NEXT (minors PARKED)" -> "more tasks? -> B: next brief" [label="yes"];
     "more tasks? -> B: next brief" -> "red-gate: materialize + verify RED";
     "more tasks? -> B: next brief" -> "FINAL_REVIEW" [label="no"];
@@ -345,10 +337,13 @@ For each task in order:
    execute its emitted action via `scripts/orchestrator` (or inline). The
    router, not the LLM, decides every transition.
 
-1. **JIT brief (B).** B writes `<workspace>/task-N-brief.md` per the
+ 1. **JIT brief (B).** B writes `<workspace>/task-N-brief.md` per the
    [controller-brief-prompt.md](controller-brief-prompt.md) guidance — task
    statement, exact values, BLACK-BOX RED tests, `EXPECTED-RED:`, out of
-   scope. Ledger: `brief_ready`.
+   scope. Author the RED tests per
+   [writing-good-tests.md](../../test-driven-development/writing-good-tests.md)
+   (name the break, real behavior, hand-derived expectations). Ledger:
+   `brief_ready`.
 
 2. **RED check.** Run `scripts/red-gate <workspace> TASK`. It materializes
    the brief's test files verbatim, runs the test command, and verifies the
@@ -357,23 +352,20 @@ For each task in order:
    missing symbol), is a defective brief: exit 1, no dispatch, back to B
    (`arbitrate`). On success red-gate dispatches C, then chains straight
    into `coder-gate` (step 3) — this call does not return to B until the
-   task is green-and-reviewed or genuinely stuck. Ledger: `red_check`.
+   task is green-and-reviewed, or TEST_DEFECT stops it. Ledger: `red_check`.
 
-3. **Coder rounds — fully script-driven.** C (Operational, `two-model-coder`)
+3. **Coder retries — fully script-driven, unbounded.** C (Operational, `two-model-coder`)
    writes code only — it never runs commands (ADR-0002). `coder-gate` runs
    the gate (task's full suite + `flutter analyze`, or `run-gates` for the
    generic engine) by exit code alone, ledgers `coder_round`, and on failure
-   builds the fix prompt (prior diff + gate report + brief) and resumes the
-   same C session (`dispatch --continue --session`) for the next fix round.
-   Budget: round 1 + 3 fixes (4 attempts); a 4th failure or `TEST_DEFECT`
-   stops the loop and `route-next` emits ARBITRATE. Ledger: `coder_round`
-   each round, `escalated` on TEST_DEFECT.
+   rebuilds the fix prompt (prior diff + gate report + brief) and resumes the
+   same C session (`dispatch --continue --session`). No budget, no counting:
+   the loop retries until green and never asks B for help. Only `TEST_DEFECT`
+   stops the loop (`route-next` emits ARBITRATE). Ledger: `coder_round`
+   each attempt, `escalated` on TEST_DEFECT.
 
-4. **Wrap-up on success.** All gates green → `green-gate` runs the graph
-   update + subgraph read BEFORE the commit (so the graph enters the task's
-   own commit and the interfaces are read immediately after the write),
-   commits, appends the `commit` ledger entry, builds the review package, and
-   dispatches D. Run
+4. **Wrap-up on success.** All gates green → commit, append the `commit`
+   ledger entry, build the review package, and dispatch D. Run
    `scripts/interface-check <workspace> TASK BASE`; on exit 1 ledger
    `interface_change` (the semantic "did it break the contract" stays with
    D).
@@ -381,8 +373,8 @@ For each task in order:
 5. **Review.** `scripts/red-integrity <workspace> TASK` first — committed
    tests must match the brief's RED-TESTS byte-for-byte; exit 1 is test
    tampering, an automatic Critical finding. D (`two-model-reviewer`,
-   Strategic, headless via green-gate) reviews the review package + the
-   interfaces file (`graphify-subgraph` output) and returns a JSON verdict.
+   Strategic, headless via green-gate) reviews the review package (brief +
+   diff) and returns a JSON verdict.
    B runs `parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`
    after D's log lands to extract the structured verdict to a JSON file.
    D never runs test/analyze (Item 2).
@@ -398,7 +390,7 @@ For each task in order:
      it fully. Then wrap-up + D re-review.
    - `ESCALATE` → `ARBITRATE`: B validates the brief/test's viability and
      reissues or re-plans.
-   No budget left and findings persist → treat as escalation.
+   If findings persist across correction rounds, treat as escalation.
 
 7. **Arbitration.** B's ruling is binding; if the ruling is structural,
    reopen the plan (revise `plan.json` and remaining todos), never improvise.
@@ -461,14 +453,8 @@ deterministic, no dispatch.
   commands through `scripts/cmd` — full output to a file, RTK-compressed
   stdout. `flutter test`/`flutter analyze` are compressed via the `rtk test` /
   `rtk err` wrappers derived from the full file (the verdict always comes
-  from the raw run — RTK wrappers mask child exit codes, verified).
-  `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
-- **Graphify is update-before-commit + read-immediately-after (ADR-0004):**
-  `graphify-update` runs just before the task's commit so the graph enters the
-  commit; `graphify-subgraph` runs right after the update and extracts the
-  affected-dependency slice for B's next brief and D's review. The graph is
-  only updated at the moment it is about to be read — it is never orphaned
-  (updated but unread) and never rebuilt per Coder iteration.
+   from the raw run — RTK wrappers mask child exit codes, verified).
+   `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
 
 ## Language Policy
 
@@ -485,8 +471,8 @@ deterministic, no dispatch.
 | "I'll dispatch the Coder myself via the task tool" | Script A owns dispatch (`red-gate`/`green-gate`/`orchestrator`). You dispatching re-inserts the session into the hot path and pollutes your context — the thing the design removes. |
 | "C should run the tests to iterate faster" | Write-only Coder (ADR-0002) keeps C's context minimal and gates deterministic. Script A decides test/analyze passes; C gets failures fed back. |
 | "A fresh Reviewer per correction is safer" | Within-task D resume (ADR-0003) reuses prior findings; the final verdict is still a fresh judgment recorded in the ledger. |
-| "I'll rebuild the graph after each Coder round" | Update-before-commit, read-immediately-after (ADR-0004). Per-iteration rebuilds are wasted overhead — the graph is consumed at brief/review time, not mid-edit. |
-| "One more Coder round will converge" | Four attempts is the budget. Round 5 is arbitration denial — dispatch `ARBITRATE` to B. |
+| "The Coder is stuck, I'll take over the fix loop" | The loop is unbounded and never asks for help — taking over re-inserts your session into the hot path and pollutes your context. Only TEST_DEFECT comes back to you. |
+| "One more Coder retry needs my approval" | No approval gate exists on retries. coder-gate retries until green on its own. |
 | "The RED test is slightly wrong, I'll adjust it" | Test files change only through B arbitration. You adjusting tests destroys the pipeline's ground truth. |
 | "I'll note the minor finding and fix it in this task" | Minor findings are documented by B (PARKED) — never a fix loop. The final review triages them. |
 | "The ledger can wait until the task finishes" | The ledger is what survives compaction. An unwritten escalation is a repeated one. |
@@ -508,11 +494,11 @@ Task 1: Invoice model and serialization
 You: [write task-1-brief.md with BLACK-BOX RED test + EXPECTED-RED]
 [scripts/orchestrator ws 1 5]  -> red-gate verifies RED, dispatches C (headless)
   C writes code (write-only)  -> Script A: task tests -> full suite -> analyze
-  green-gate updates graph + reads subgraph + commits + dispatches D (headless)
+  (retries until green, never hands back) -> green-gate commits + dispatches D (headless)
   D returns JSON -> route-next -> OUTCOME: NEXT 2
 You: [read OUTCOME; minors PARKED; write task-2 brief]
 
-Task 2: CSV formatter ... C rounds 1-4 red ...
+Task 2: CSV formatter ... C reports TEST_DEFECT ...
 [route-next -> ARBITRATE 2]  You: [validate brief/test; reissue corrective brief]
 
 All tasks complete:

@@ -12,7 +12,7 @@ WHAT THIS FORK ADDS
    A script-autonomous fork of subagent-driven-development. A deterministic
    "Script A" (modular bash) owns the per-task loop: gates, test/analyze
    decisions, subagent dispatch (headless `opencode run --agent`), routing,
-   commits, and graph maintenance. The interactive session (B) is the
+   and commits. The interactive session (B) is the
    strategist - it writes the plan and per-task briefs + RED tests and
    receives feedback only through script outputs. A cheap "Operational"
    Coder (C) writes code only; an expensive "Strategic" Reviewer (D)
@@ -31,7 +31,7 @@ WHAT THIS FORK ADDS
 3. flutter-app-pipeline (new skill, layered on top)
    A Flutter/Dart specialization that adds package research with a
    corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts,
-   and the RTK-compression + Graphify-before-LLM ordering rules. It
+   and the RTK-compression ordering rule. It
    delegates the per-task implementation loop back to two-model-sdd-pipeline.
 
 PRINCIPLES
@@ -42,12 +42,13 @@ PRINCIPLES
   dispatch) are chained into deterministic scripts whose verdict is an
   exit code or a stdout action line.
 - Script-autonomous dispatch (ADR-0001): red-gate dispatches the Coder on
-  RED verified; green-gate updates the graph, reads it (subgraph), then commits and dispatches the
+  RED verified (then coder-gate retries it until green); green-gate commits and dispatches the
   Reviewer; route-next + the orchestrator driver route every transition.
   The interactive session is never a link in the dispatch chain.
 - The Coder is write-only (ADR-0002): it never runs tests or analysis.
   Script A decides task tests -> full suite -> analyze by exit code and
-  feeds failures back (budget: round 1 + 3 fixes, then arbitration to B).
+  feeds failures back (unbounded retries until green; only TEST_DEFECT
+  escalates to B).
 - The Reviewer reviews compiler-approved code only (Item 2) and returns a
   structured JSON verdict; minor findings are documented by B, never fix
   loops.
@@ -64,16 +65,14 @@ PRINCIPLES
 - Cache-aware LLM calls with curated context; within-task resume
   (--continue --session) is allowed (prefix-cached); fresh dispatch when
   the task changes (ADR-0003). The ledger + git are the source of truth.
-- Graphify-before-LLM (update-before-commit + read-immediately-after, ADR-0004): the graph is
-  updated just before each task's commit (so it enters the commit);
-  graphify-subgraph extracts the affected-dependency slice for B's next brief
-  and D's review immediately after the write.
+- No knowledge graph: no stage builds, updates, or queries a code graph.
+  Briefs are written from the plan + prior diffs + gate reports; reviews
+  read the brief + diff only.
 - Observability without pollution: C/D progress is teed to workspace logs
   (task-N-coder.log, task-N-reviewer.log) you can tail; headless sessions
   never pollute the main session's history. B reads only curated script
-  outputs (OUTCOME lines, the ledger, the parsed verdict JSON, and the
-  task-N-interfaces.md subgraph feed) - never raw dispatch logs or full gate
-  reports.
+  outputs (OUTCOME lines, the ledger, and the parsed verdict JSON)
+  - never raw dispatch logs or full gate reports.
 - No approval after decisions: approval happens at the gate (once per
   branch) and at solution selection; from Phase 2c onward the branch runs
   to completion without check-ins. The ledger is the compaction-safe state
@@ -91,15 +90,7 @@ TOOLS (one-time setup)
       rtk init -g --opencode     # installs ~/.config/opencode/plugins/rtk.ts
       # restart OpenCode; verify: rtk --version && rtk gain
 
-- Graphify (graphifyy): on-device code knowledge graph for structure
-  queries. Python 3.10+ required:
-
-      python -m pip install graphifyy
-      graphify --version
-
-  Graphify is optional (best-effort); RTK_ENABLED=0 disables compression
-  and GRAPHIFY_ENABLED=0 disables graphify. RTK_BIN / GRAPHIFY_BIN
-  override the binaries.
+  RTK_ENABLED=0 disables compression; RTK_BIN overrides the binary.
 
 INSTALL (OpenCode)
 ------------------
@@ -131,7 +122,7 @@ Start a session and describe the work. For a Flutter/Dart app, the
 flutter-app-pipeline runs end to end: requirements (brainstorming +
 grill-with-docs + Category Skeleton), research + pkg-score for every
 candidate package, then a project-level template stage (template search for
-the specific category, template scoring, clone + graphify → gap analysis),
+  the specific category, template scoring, clone → gap analysis),
 selection with you, writing-plans tasks, then the script-autonomous
 two-model TDD loop, then a project-wide review. On the two-tier gate,
 default to YES: the tiers are pre-configured locally (two-model-coder /
@@ -157,19 +148,10 @@ skills/flutter-app-pipeline/scripts/:
                        EXPECTED-RED reason, and dispatch the Coder on success
                        (then chains into coder-gate, which owns the retry
                        loop through commit + Reviewer dispatch)
-green-gate           chain test + analyze + format + commit; before the
-                        commit: graphify-update + graphify-subgraph read, then
-                        review package + Reviewer dispatch. On commit appends
-                        the ledger `commit` entry (task from -t when given;
-                        ledger-append resolved from the two-model scripts dir)
-  graphify-update      rebuild the graph before commit (immediately before the
-                       subgraph read; ADR-0004)
-  graphify-subgraph    extract the affected-dependency subgraph
-                       (task-N-interfaces.md) for B's next brief and D
-  graphify-regen       rebuild the project knowledge graph
-                       (invokes `graphify update <root>` - the real CLI form)
-  graphify-package     build the graph for a downloaded dependency
-                       (invokes `graphify update <pkg_dir>`)
+  green-gate           chain test + analyze + format + commit, then
+                         review package + Reviewer dispatch. On commit appends
+                         the ledger `commit` entry (task from -t when given;
+                         ledger-append resolved from the two-model scripts dir)
 
 skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace
@@ -183,11 +165,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        brief's RED tests and verifies the EXPECTED-RED reason
                        using the ledger's test_cmd; dispatches C then chains
                        into coder-gate
-  coder-gate           owns every Coder round after round 1: runs the gate
+  coder-gate           owns every retry after the first dispatch: runs the gate
                        (green-gate for Flutter, run-gates otherwise), ledgers
                        coder_round, builds the fix prompt + resumes C with
-                       --continue on failure; on green commits (generic) and
-                       dispatches D; stops at 4/4 or TEST_DEFECT -> ARBITRATE
+                       --continue on failure; unbounded until green, stops on
+                       TEST_DEFECT -> ARBITRATE
   cmd                  generic command runner: saves FULL output to a file,
                        prints the RTK-compressed view on stdout, returns the
                        command's true exit code (flutter test/analyze via
@@ -210,8 +192,8 @@ skills/two-model-sdd-pipeline/scripts/:
                        reports (lossless fallback)
   run-gates            generic green approval: full suite + analysis via cmd
   review-package       build a review bundle (commits + diff); with a TASK
-                       arg, inlines the task brief + interfaces so the
-                       Reviewer gets them in the single package file
+                       arg, inlines the task brief so the
+                       Reviewer gets it in the single package file
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW)
@@ -242,14 +224,14 @@ output ever enters an LLM context window. Deterministic gates keep reading
 full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
 escalation packages, red-integrity byte-compare) is ever compressed.
 
-Dispatch is script-owned too: red-gate dispatches the Coder on RED verified;
-green-gate commits, runs graphify-update (before commit - never per Coder
-iteration), builds the review package, and dispatches the Reviewer. The
+Dispatch is script-owned too: red-gate dispatches the Coder on RED verified
+(then coder-gate retries it until green); green-gate commits,
+builds the review package, and dispatches the Reviewer. The
 Reviewer reviews compiler-approved code only and returns a structured JSON
 verdict; minor findings are documented by the strategist, never fix loops.
 The Coder is write-only: it never runs commands; Script A runs task tests ->
-full suite -> analyze and feeds failures back (round 1 + 3 fixes, then
-arbitration to the strategist).
+full suite -> analyze and feeds failures back (unbounded retries until
+green; only TEST_DEFECT escalates to the strategist).
 
 Routing is scripted too: after every ledgered outcome Script A runs
 `route-next` and executes the action it emits - the LLM never decides

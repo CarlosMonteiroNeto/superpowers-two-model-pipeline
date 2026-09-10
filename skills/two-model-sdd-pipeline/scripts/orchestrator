@@ -91,10 +91,11 @@ case "$action" in
     ;;
   CODER*)
     # Normal flow never lands here: red-gate now chains straight into
-    # coder-gate after round 1, which owns every retry until PASS/
-    # TEST_DEFECT/budget-exhausted. Reaching CODER here means a resume
-    # after an interrupted session (round N's dispatch happened, its gate
-    # check did not) - drive it the same way red-gate would have.
+    # coder-gate after round 1, which owns every retry until PASS or
+    # TEST_DEFECT (the loop is unbounded - it never gives up for lack of
+    # budget). Reaching CODER here means a resume after an interrupted
+    # session (round N's dispatch happened, its gate check did not) - drive
+    # it the same way red-gate would have.
     CODER_GATE="${CODER_GATE:-$SCRIPT_DIR/coder-gate}"
     "$CODER_GATE" "$ws" "$task" || true
     action=$(route)

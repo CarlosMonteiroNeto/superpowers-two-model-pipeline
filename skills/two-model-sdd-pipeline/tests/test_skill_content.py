@@ -79,14 +79,29 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("NOT a dispatch template", text)
         self.assertIn("Strategist Session", text)
 
-    def test_graphify_is_update_before_commit_subgraph(self):
-        """Graphify (ADR-0004): the skill must say the graph updates BEFORE
-        the task's commit (so it enters the commit), that graphify-subgraph
-        reads immediately after the update, and that extraction feeds B/D -
-        never per-Coder-iteration, never whole source."""
+    def test_red_authorship_follows_writing_good_tests(self):
+        """B authors the RED tests (C never writes or edits tests), so both
+        the skill's brief step and the brief-writing guidance must point at
+        TDD's writing-good-tests.md."""
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("graphify-subgraph", text)
-        self.assertIn("before", text)
+        self.assertIn("writing-good-tests.md", text)
+        prompt = (self.dir / "controller-brief-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("writing-good-tests.md", prompt)
+
+    def test_no_graphify_in_process(self):
+        """The knowledge graph is fully out of the pipeline: no stage
+        invokes it, so the skill must not mention graphify anywhere."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertNotIn("graphify", text.lower())
+
+    def test_coder_runs_unbounded_until_green(self):
+        """The Coder loop has no round budget: coder-gate retries until the
+        gate passes, so the skill must document the unbounded loop and must
+        not promise arbitration on round exhaustion."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("unbounded", text.lower())
+        self.assertNotIn("4 attempts", text)
+        self.assertNotIn("4/4", text)
 
 
 if __name__ == "__main__":

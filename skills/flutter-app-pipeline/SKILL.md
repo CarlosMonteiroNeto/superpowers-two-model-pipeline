@@ -1,6 +1,6 @@
 ---
 name: flutter-app-pipeline
-description: Flutter/Dart specialization layered on top of two-model-sdd-pipeline. Adds package research with the corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts (pub-sync, red-gate, green-gate, graphify-regen/package), the RTK-compression invariant (every command runs through scripts/cmd), and the Graphify-before-LLM ordering rule (update-before-commit + read-immediately-after). Use when building a Flutter/Dart app with the two-tier pipeline opted in.
+description: Flutter/Dart specialization layered on top of two-model-sdd-pipeline. Adds package research with the corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts (pub-sync, red-gate, green-gate), and the RTK-compression invariant (every command runs through scripts/cmd). No knowledge-graph stage: briefs and reviews work from the plan, diffs, and gate reports only. Use when building a Flutter/Dart app with the two-tier pipeline opted in.
 ---
 
 # Flutter App Pipeline (layered on two-model-sdd-pipeline)
@@ -43,7 +43,7 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 ### 2c. Task documentation
 - Produced with `writing-plans` (the standard superpowers pattern): each task is technically complete — touched files, interfaces, acceptance criteria, dependencies, and verification.
 - No code is downloaded or implemented here. Only a version-conflict check + lockfile update (`scripts/pub-sync`) for what was decided.
-- If the developer adopted a template in 2b: **clone** the template and run `graphify` to produce a **template gap analysis** (what the template provides / what to strip / what is missing → dependency search or from-scratch). This gap analysis seeds the plan tasks. The "no code downloaded" invariant is relaxed **only** for the adopted template (clone + graphify); package downloads stay lockfile-only in 2c.
+- If the developer adopted a template in 2b: **clone** the template and produce a **template gap analysis** by reading its structure directly (pubspec, layout, what the template provides / what to strip / what is missing → dependency search or from-scratch). This gap analysis seeds the plan tasks. The "no code downloaded" invariant is relaxed **only** for the adopted template (clone); package downloads stay lockfile-only in 2c.
 - Output feeds the Controller's `plan.json` for the two-model loop.
 
 Phase 2 is pure planning and documentation. Nothing is implemented yet.
@@ -94,11 +94,11 @@ script outputs; Script A owns dispatch):
 
 1. **Download & resolve — `scripts/pub-sync`** (deterministic, no LLM). Download what Phase 2 decided, update the lockfile, report version conflicts from `pub upgrade --dry-run` to a file.
 2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment). Materializes the brief's RED tests and verifies the expected failure **for the expected reason**: the brief's `EXPECTED-RED:` block holds a verbatim substring the failing output must contain. Exit code is the verdict; a RED test that passes before implementation, or that fails for the wrong reason (e.g. a compile error in test setup instead of the missing symbol), means the brief is defective → back to B for arbitration. **On success, red-gate dispatches the Coder headlessly** (Item 4 — `scripts/dispatch --agent two-model-coder`).
-3. **Coder rounds** — Operational tier (`two-model-coder`, write-only). C never runs tests/analysis (ADR-0002): Script A decides task tests → full suite → `flutter analyze` by exit code and feeds failures back. Round 1 + 3 fixes (4 attempts); resume via `--continue --session`; overflow → `ARBITRATE` to B.
-4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green → runs the graph update + subgraph read BEFORE the commit (so the graph enters the task's own commit and is read immediately after being written), commits, ledger-appends, builds the review package, and **dispatches the Reviewer headlessly** (Item 3 — `scripts/dispatch --agent two-model-reviewer`). Not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix. `--no-commit` validates only (no graphify, no commit, no dispatch).
+3. **Coder retries** — Operational tier (`two-model-coder`, write-only). C never runs tests/analysis (ADR-0002): Script A decides task tests → full suite → `flutter analyze` by exit code and feeds failures back. Unbounded retries until green via `--continue --session`; the loop never hands back to B for help — only `TEST_DEFECT` (the test itself is wrong) escalates to `ARBITRATE`.
+4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green → commits, ledger-appends, builds the review package, and **dispatches the Reviewer headlessly** (Item 3 — `scripts/dispatch --agent two-model-reviewer`). Not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix. `--no-commit` validates only (no commit, no dispatch).
 5. **Reviewer (D)** — `two-model-reviewer`, Strategic, reviews compiler-approved code only (Item 2 — never runs test/analyze). Returns a structured JSON verdict (APPROVED / SEND_BACK / ESCALATE + findings + minors). Context kept within the task's correction loops (ADR-0003); minors documented by B only.
-6. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops, graphify queries): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. `flutter test` → `rtk test` and `flutter analyze` → `rtk err` wrapper derivation (verdict always from the raw run — RTK wrappers mask child exit codes). Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
-7. **Graphify invariant — update before commit, read immediately after (ADR-0004).** `graphify-update` rebuilds the graph BEFORE the task's commit (green-gate chain) so the regenerated graph enters the task's own commit — never per Coder iteration. `graphify-subgraph WS TASK` runs immediately after the update — the read that justifies the write — and extracts the affected-dependency slice (`explain`/`path` on the task's `touches`) into `<ws>/task-N-interfaces.md` for B's next brief and D's review — never whole source. The graph is only updated at the moment it is about to be read; it is never orphaned (updated but unread). `pub-sync` still indexes newly added packages (a B feed). The graph exposes structure, not method bodies.
+6. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. `flutter test` → `rtk test` and `flutter analyze` → `rtk err` wrapper derivation (verdict always from the raw run — RTK wrappers mask child exit codes). Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
+7. **No knowledge graph.** The pipeline runs with no graph stage: no script builds, updates, or queries a code graph. B writes briefs from the plan + prior diffs + gate reports; D reviews the brief + diff only.
 8. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
 
 ## 4. Phase 4 — Project-Wide Review
@@ -117,24 +117,18 @@ script outputs; Script A owns dispatch):
 | `template-score OWNER/REPO [--github-token TOKEN]` | AI subjectively judging template quality (stars, recency, Flutter/Dart readiness, issue ratio, sustained interest, license, README) |
 | `pub-sync [PACKAGE]` | AI-driven download + AI reasoning about version conflicts + AI reconciling the lockfile |
 | `red-gate WORKSPACE TASK` | AI judging whether the RED test failed for the expected reason (verifies the brief's `EXPECTED-RED:` text against the report; on success dispatches the Coder) |
-| `green-gate [--no-commit] [-m MSG] [-w WS -t TASK -b BASE]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries (on commit: graphify-update + subgraph read BEFORE commit + reviewer dispatch) |
-| `graphify-update [ROOT]` | AI deciding when the graph is stale (update before commit, immediately before the subgraph read — ADR-0004) |
-| `graphify-subgraph WS TASK` | AI gathering interface signatures for B/D from raw files (extracts the affected-dependency subgraph into `<ws>/task-N-interfaces.md`) |
+| `green-gate [--no-commit] [-m MSG] [-w WS -t TASK -b BASE]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries (on commit: reviewer dispatch) |
 | `cmd --full-file FILE -- CMD` (two-model) | AI seeing raw command output in context (saves FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code; flutter test/analyze via rtk test/err wrappers) |
 | `dispatch --agent NAME --task N [--continue SESSION] ...` (two-model) | AI launching subagents from the session (headless `opencode run`; JSON stream teed to a workspace log; session id recorded for resume) |
 | `orchestrator WS TASK [TOTAL]` (two-model) | AI deciding the per-task transition (executes route-next actions, hands `OUTCOME:` back to B) |
 | `token-kill err\|src\|json FILE` (two-model) | AI reading raw logs/source/reports into context (RTK minification, lossless) |
 | `run-gates WS TEST ANALYZE` (two-model) | AI running/reading the gate-recorded test + analyze commands in the generic engine |
-| `graphify-regen [ROOT]` | AI parsing raw file diffs for context (invokes `graphify update <root>`); Script-A-side, before commit |
-| `graphify-package PACKAGE` | AI reading downloaded package source before the graph exists (invokes `graphify update <pkg_dir>`); feeds B |
 | `route-next WORKSPACE TASK [TOTAL]` (two-model) | AI deciding "review passed → next task / failed → corrective / escalate → arbitrate" — the router emits the next action deterministically |
 
-All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `GRAPHIFY_BIN`, `RTK_BIN`,
+All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `RTK_BIN`,
 `DISPATCH_BIN`, `OPENCODE_BIN` env overrides (used by tests and unusual setups).
-`cmd` respects `RTK_ENABLED=0` (passthrough) and `RTK_BIN` (override). `pub-sync`
-keeps the graphify-package chain (B feed, non-fatal; disable with
-`GRAPHIFY_ENABLED=0`); `graphify-update` runs before commit (immediately before the `graphify-subgraph` read); `red-gate` and
-`green-gate` dispatch C/D on success but never read the graph. AI is reserved
+`cmd` respects `RTK_ENABLED=0` (passthrough) and `RTK_BIN` (override).
+`red-gate` and `green-gate` dispatch C/D on success. AI is reserved
 for semantic decisions only: which solution fits a task, what to build from
 scratch, RED-test authoring from a natural-language spec, and code review.
 

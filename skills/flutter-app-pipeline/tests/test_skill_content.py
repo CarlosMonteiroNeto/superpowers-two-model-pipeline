@@ -31,15 +31,11 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("writing-plans", text)
 
-    def test_graphify_before_llm_invariant(self):
+    def test_no_graphify_in_process(self):
+        """The knowledge graph is fully out of the pipeline: no stage
+        invokes it, so the skill must not mention graphify anywhere."""
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("graphify-regen", text)
-        self.assertIn("graphify-package", text)
-
-    def test_graphify_is_update_before_commit_and_subgraph(self):
-        text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("graphify-subgraph", text)
-        self.assertIn("never per Coder iteration", text)
+        self.assertNotIn("graphify", text.lower())
 
     def test_rtk_compression_invariant(self):
         text = self.skill.read_text(encoding="utf-8")
@@ -67,15 +63,15 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         self.assertIn("3", text)
 
     def test_template_adoption_flow_documented(self):
-        """Phase 2c change: the adopted template is cloned + graphified into a
-        template gap analysis that seeds the plan tasks (Section 7)."""
+        """Phase 2c change: the adopted template is cloned into a template
+        gap analysis that seeds the plan tasks (Section 7)."""
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("gap analysis", text)
         self.assertIn("clone", text)
 
     def test_no_code_downloaded_invariant_relaxed_for_template(self):
         """The 'no code downloaded' invariant is relaxed ONLY for the adopted
-        template (clone + graphify); package downloads stay lockfile-only in
+        template (clone); package downloads stay lockfile-only in
         Phase 2c."""
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("template", text)
@@ -88,10 +84,6 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
     def test_expected_red_reason_documented(self):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("EXPECTED-RED", text)
-
-    def test_graphify_update_subcommand_documented(self):
-        text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("update", text)
 
 
 class TestTwoModelLayering(unittest.TestCase):

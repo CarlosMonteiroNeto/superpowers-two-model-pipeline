@@ -21,10 +21,11 @@
 # Emits one line on stdout: ACTION [TASK] [ARGS...]
 #   BRIEF N        -> B writes a JIT brief (+ RED tests)
 #   RED N          -> materialize + run red-gate (expected-reason check)
-#   CODER N ROUND  -> dispatch the Coder, round 1..4 (round 1 + 3 fixes)
+#   CODER N        -> (re)run coder-gate for the task: it retries until green
 #   REVIEW N       -> build review package + dispatch the Reviewer
 #   CORRECTIVE N   -> review SEND_BACK: B writes a corrective brief, C re-runs
-#   ARBITRATE N    -> coder overflow or review ESCALATE: B validates brief/test
+#   ARBITRATE N    -> review ESCALATE or TEST_DEFECT escalation: B validates
+#                     brief/test viability
 #   NEXT N         -> task N-1 complete (APPROVED / task_complete)
 #   FINAL_REVIEW   -> all tasks complete; whole-branch review (fresh /new session)
 #
@@ -84,7 +85,6 @@ fi
 
 has_brief=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"brief_ready"' || true)
 has_red=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"red_check"' || true)
-rounds=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"coder_round"' || true)
 has_commit=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"commit"' || true)
 has_escalated=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"escalated"' || true)
 has_complete=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"task_complete"' || true)
@@ -136,19 +136,12 @@ if [ "$has_commit" -ge 1 ]; then
   exit 0
 fi
 
-# Coder budget: round 1 + 3 fixes = 4 attempts. After 4, arbitrate to B.
-if [ "$rounds" -ge 4 ]; then
-  echo "ARBITRATE $task"
-  exit 0
-fi
-
-if [ "$rounds" -ge 1 ]; then
-  echo "CODER $task $((rounds + 1))"
-  exit 0
-fi
-
+# The Coder loop is unbounded and uncounted: coder-gate retries until green,
+# so any RED-verified task without a commit still routes to CODER. The only
+# exits besides green are TEST_DEFECT (escalated, handled above) and review
+# verdicts (handled above).
 if [ "$has_red" -ge 1 ]; then
-  echo "CODER $task 1"
+  echo "CODER $task"
   exit 0
 fi
 

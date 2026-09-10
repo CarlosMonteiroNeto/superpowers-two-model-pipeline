@@ -2,11 +2,8 @@
 # Deterministic green approval: full suite + analyze + format check, then commit.
 # The gate's verdict is an exit code, never an LLM judgment.
 #
-# Usage: green-gate [--no-commit] [--graph] [-m MESSAGE] [-l LEDGER] [-w WS] [-t TASK] [-b BASE]
+# Usage: green-gate [--no-commit] [-m MESSAGE] [-l LEDGER] [-w WS] [-t TASK] [-b BASE]
 #   --no-commit   validate only (Phase 4 / final review); never commits
-#   --graph       run the graph update + subgraph read ONCE, before the commit.
-#                 Off by default: the graph is no longer rebuilt per task. The
-#                 holistic final review invokes this flag once for the branch.
 #   -m MESSAGE    commit message (default "green")
 #   -l LEDGER     optional JSONL ledger; appends a `commit` entry when committing
 #   -w WS         pipeline workspace (for review package + reviewer dispatch)
@@ -14,9 +11,8 @@
 #   -b BASE       base commit for the review package (default: HEAD~1)
 #
 # On all-green + commit, when -w/-t are given: builds the review package
-# (implementation-only diff; graphify-out/ excluded) and dispatches the
-# Reviewer headlessly (Item 3). --no-commit short-circuits before the commit
-# and the reviewer dispatch; --graph is the only path that touches the graph.
+# (implementation-only diff) and dispatches the Reviewer headlessly (Item 3).
+# --no-commit short-circuits before the commit and the reviewer dispatch.
 #
 # Exit codes: 0 = all gates passed (and committed unless --no-commit),
 #             1 = tests failed, 2 = analyze found issues, 3 = format drift.
@@ -31,7 +27,6 @@ GIT_BIN="${GIT_BIN:-git}"
 REPORT="${GREEN_GATE_REPORT:-green-gate-report.txt}"
 
 no_commit=0
-graph=0
 message="green"
 ledger=""
 ws=""
@@ -41,7 +36,6 @@ base=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-commit) no_commit=1 ;;
-    --graph) graph=1 ;;
     -m|--message) message=${2:-}; shift ;;
     -l|--ledger) ledger=${2:-}; shift ;;
     -w|--workspace) ws=${2:-}; shift ;;
@@ -71,21 +65,6 @@ if ! "$DART_BIN" format --output=none --set-exit-if-changed . > "$REPORT.format"
 fi
 
 echo "GREEN-GATE: all gates passed"
-
-# Graph (opt-in, default off): per benchmark ruling, the graph is no longer
-# rebuilt per task. Pass --graph once at the holistic final review so the
-# regenerated graph artifacts are fresh for that review. Runs before the
-# --no-commit short-circuit so `green-gate --graph --no-commit` refreshes
-# the graph without committing. Best-effort: a missing graphify binary must
-# not block the gate.
-if [ "$graph" = "1" ]; then
-  if [ -x "$SCRIPT_DIR/graphify-update" ]; then
-    "$SCRIPT_DIR/graphify-update" "$(pwd)" || true
-  fi
-  if [ -n "$ws" ] && [ -n "$task" ] && [ -x "$SCRIPT_DIR/graphify-subgraph" ]; then
-    "$SCRIPT_DIR/graphify-subgraph" "$ws" "$task" || true
-  fi
-fi
 
 if [ "$no_commit" = "1" ]; then
   echo "GREEN-GATE: --no-commit, not committing"

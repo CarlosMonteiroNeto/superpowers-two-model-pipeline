@@ -10,7 +10,8 @@ description: Use when implementing any feature or bugfix, before writing impleme
 ## Pipeline Integration (two-model-sdd-pipeline)
 
 - **RED is written by the strategist, verified by a script, then handed to the coder.** B writes each task's RED tests as part of the per-task brief. `red-gate WORKSPACE TASK` materializes them and verifies the failure matches the brief's stated `EXPECTED-RED:` reason — not just "it failed," but "it failed for the right reason." Only on that verified match does `red-gate` dispatch C.
-- **The coder never chooses when GREEN is real.** C (write-only, never runs commands) implements against the RED test; Script A alone decides GREEN via `run-gates`/`green-gate` — task tests, then full suite, then analyze — up to 4 attempts (1 + 3 fixes) before the loop escalates.
+- **The coder never chooses when GREEN is real — and is never cut off.** C (write-only, never runs commands) implements against the RED test; Script A alone decides GREEN via `run-gates`/`green-gate` — task tests, then full suite, then analyze — retrying unbounded until green. No round budget, no failure counting, no hand-back to B for help; only TEST_DEFECT (the test itself is wrong) escalates.
+- **RED authorship follows writing-good-tests.md.** B is the test author in this pipeline (C never writes or edits tests), so the brief's RED tests must satisfy [writing-good-tests.md](writing-good-tests.md): name the break each test catches, BLACK-BOX real behavior (never mocks of the thing under test), hand-derived literal expectations. A RED test that passes before implementation, or fails for the wrong reason, is a defective brief — back to B, never "fixed" by C.
 - **Tampering is checked, not assumed.** `red-integrity WORKSPACE TASK` byte-compares the committed tests against the brief before any reviewer verdict on them is trusted.
 
 
