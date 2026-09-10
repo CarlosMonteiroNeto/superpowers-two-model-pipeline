@@ -30,6 +30,9 @@
 #             1 = inconsistent state / unknown action; 2 = usage.
 set -euo pipefail
 
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then
   echo "usage: orchestrator WS TASK [TOTAL_TASKS]" >&2
   exit 2

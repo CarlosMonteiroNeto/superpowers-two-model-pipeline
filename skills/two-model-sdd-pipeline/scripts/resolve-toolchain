@@ -25,6 +25,9 @@
 #       with detected=manual and no candidates to disambiguate).
 set -euo pipefail
 
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
@@ -73,10 +76,9 @@ echo "TEST_CMD=$test_cmd"
 echo "ANALYZE_CMD=$analyze_cmd"
 echo "LANG=$label"
 
-if [ -f "$ledger" ]; then
-  "$SCRIPT_DIR/ledger-append" "$ledger" gate - "auto-detected: $label ($marker)" \
-    test_cmd="$test_cmd" analyze_cmd="$analyze_cmd" detected=auto lang="$label"
-fi
+mkdir -p "$ws"
+"$SCRIPT_DIR/ledger-append" "$ledger" gate - "auto-detected: $label ($marker)" \
+  test_cmd="$test_cmd" analyze_cmd="$analyze_cmd" detected=auto lang="$label"
 
 echo "RESOLVE-TOOLCHAIN: resolved $label via $marker" >&2
 exit 0

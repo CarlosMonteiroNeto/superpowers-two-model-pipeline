@@ -34,6 +34,9 @@
 #                 ARBITRATE); 3 = usage / missing gate or brief.
 set -euo pipefail
 
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 FLUTTER_GATE="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/green-gate"
 
@@ -81,7 +84,7 @@ redproof() {
   meta=$(python3 - "$ws/plan.json" "$task" <<'PY'
 import json, sys
 try:
-    plan = json.load(open(sys.argv[1], encoding="utf-8"))
+    plan = json.load(open(sys.argv[1], encoding="utf-8", errors="replace"))
 except Exception as exc:
     print("ERROR: %s" % exc)
     raise SystemExit(1)
@@ -120,6 +123,25 @@ PY
     done
     [ "$skip" -eq 0 ] && test_arr+=("$f")
   done
+  # RED runs Dart tests only: drop non-test noise from the target list
+  # (build artifacts like *.dill.track.dill, docs, plans). Passing junk to
+  # `flutter test` crashes the fail-run ("No tests ran") so RED can never
+  # be proved for the right reason. Benchmark-found.
+  filtered=()
+  for f in ${test_arr[@]+"${test_arr[@]}"}; do
+    case "$f" in
+      test/*.dart|integration_test/*.dart) filtered+=("$f") ;;
+    esac
+  done
+  test_arr=()
+  for f in ${filtered[@]+"${filtered[@]}"}; do
+    test_arr+=("$f")
+  done
+  if [ "${#test_arr[@]}" -eq 0 ]; then
+    echo "CODER-GATE: RED-proof test files: <none>" >&2
+  else
+    echo "CODER-GATE: RED-proof test files: ${test_arr[*]}" >&2
+  fi
   if [ "${#test_arr[@]}" -eq 0 ]; then
     {
       echo "RED-proof FAILED: no test files detected (every changed file is a touch)."
@@ -232,7 +254,7 @@ import json, re, sys
 statuses = ("DONE", "DONE_WITH_CONCERNS", "BLOCKED", "TEST_DEFECT")
 last = None
 try:
-    with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    with open(sys.argv[1], "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
             if not line:
@@ -265,7 +287,19 @@ PY
 
   passed=0
   if [ "$lang" = "flutter" ]; then
-    if GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" \
+    # Check-only here: green-gate WITHOUT --no-commit would commit the dirty
+    # tree first, and the RED-proof below would then run on a clean tree
+    # (git status empty -> "no test files detected" -> unbreakable fix loop
+    # with a commit + reviewer dispatch per round). So: validate now, prove
+    # RED on the still-dirty tree, and commit + dispatch the revisor only
+    # in the success block below.
+    # B7: formatting drift is mechanical, not LLM work. The write-only
+    # operador cannot run `dart format`, so Script CEO applies the resolved
+    # toolchain's formatter best-effort before the check - drift never
+    # costs an LLM round-trip.
+    DART_BIN="${DART_BIN:-dart}"
+    "$DART_BIN" format . >/dev/null 2>&1 || true
+    if GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" --no-commit \
         -w "$ws" -t "$task" -b "$base" -l "$ledger" \
         -m "task $task green"; then
       passed=1
@@ -305,9 +339,21 @@ PY
     "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
       "Coder passed the gate" status=PASS
 
-    if [ "$lang" != "flutter" ]; then
-      # Flutter's green-gate owns the commit + revisor dispatch above. The
-      # generic engine's run-gates deliberately never commits (it is a
+    if [ "$lang" = "flutter" ]; then
+      # RED is proved on the dirty tree. NOW commit + dispatch the revisor
+      # (the check-phase call above used --no-commit precisely to keep the
+      # tree dirty until here). A second green run also guards against a
+      # redproof restore glitch: if it fails now, loop and re-gate.
+      if GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" \
+          -w "$ws" -t "$task" -b "$base" -l "$ledger" \
+          -m "task $task green"; then
+        :
+      else
+        passed=0
+        echo "CODER-GATE: post-RED-proof gate failed - looping to re-gate" >&2
+      fi
+    else
+      # The generic engine's run-gates deliberately never commits (it is a
       # check-only mirror) - Script CEO (this script) owns that step here.
       git add -A
       if git commit -m "task $task green" >/dev/null 2>&1; then
@@ -322,6 +368,7 @@ PY
         echo "CODER-GATE: gate green but nothing to commit" >&2
       fi
     fi
+    [ "$passed" -eq 1 ] || continue
     exit 0
   fi
 
@@ -333,14 +380,22 @@ PY
 
   # Build the fix prompt: purely mechanical (file paths + the static
   # coder-prompt.md retry framing) - no LLM needed to construct it.
+  # B7: the gate writes annex reports ($report.analyze / $report.format)
+  # alongside the main report - point the coder at every annex that exists,
+  # otherwise drift/analyze failures are invisible to a write-only operador.
   git diff > "$diff_file"
+  annex_lines="- Gate failure output: $report"
+  [ -f "$report.analyze" ] && annex_lines="$annex_lines
+- Analyze output: $report.analyze"
+  [ -f "$report.format" ] && annex_lines="$annex_lines
+- Format output: $report.format"
   cat > "$fix_prompt" << FIXEOF
 # Fix — Task $task
 
 A previous coder attempt did not satisfy the gate. Read these first:
 
 - Prior diff (your uncommitted changes so far): $diff_file
-- Gate failure output: $report
+$annex_lines
 - Your original brief remains the authority: $brief
 
 Fix the failure. You decide fresh what to keep from the prior diff; the
@@ -352,8 +407,12 @@ unsatisfiable, report TEST_DEFECT instead of changing it.
 Report using the same status contract as before.
 FIXEOF
 
+  # Resume the OPERADOR's own session, never the generic record: after the
+  # revisor dispatch, task-N-session.txt points at the REVIEWER session, and
+  # resuming it would continue the wrong role. The per-agent record written
+  # by dispatch (task-N-two-model-coder-session.txt) is the only source here.
   session=""
-  [ -f "$ws/task-$task-session.txt" ] && session=$(cat "$ws/task-$task-session.txt")
+  [ -f "$ws/task-$task-two-model-coder-session.txt" ] && session=$(cat "$ws/task-$task-two-model-coder-session.txt")
   DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 
   if [ -n "$session" ]; then
