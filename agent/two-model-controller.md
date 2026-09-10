@@ -1,7 +1,7 @@
 ---
-description: Strategic fallback of the two-model pipeline (DeepSeek v4 Flash). Used only for final-branch review or arbitration when the interactive session (B) is unavailable.
+description: Strategic fallback of the two-model pipeline (Muse Spark 1.3). Used only for final-branch review or arbitration when the interactive session (B) is unavailable.
 mode: all
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/muse-spark-1.3-contributor
 permission:
   edit: deny
   read: allow

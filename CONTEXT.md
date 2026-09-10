@@ -18,11 +18,11 @@ Persistence — architectural path only).
   tests, corrective briefs, TEST_DEFECT arbitration, and the final holistic review.
   Receives feedback only through Script A's outputs (stdout, ledger, gate reports);
   its context is preserved across tasks.
-- **C (Coder)** — Operational tier (`opencode-go/mimo-v2.5`). Write-only executor:
+- **C (Coder)** — Operational tier (`opencode-go/deepseek-v4-flash`). Write-only executor:
   receives the brief + RED tests, writes implementation code. Never runs tests or
   analysis — Script A decides task-tests / full-suite / analyze passes. Context is
   zeroed per task; fix rounds resume the same session within a task.
-- **D (Code Reviewer)** — Strategic tier (`opencode-go/deepseek-v4-flash`). Reviews
+- **D (Code Reviewer)** — Strategic tier (`opencode-go/muse-spark-1.3-contributor`). Reviews
   only compiler-approved code (tests + syntax already green). Evaluates design,
   architecture, spec compliance, and interface discipline. Returns a structured JSON
   verdict (APPROVED / SEND_BACK / ESCALATE + findings + minors). Context kept during
@@ -95,8 +95,8 @@ pub.dev dependency-research target in Phase 2a.
 - Strategic Coder tier removed — confirmed by developer.
 - C is write-only; test/analyze decisions live inside the script — confirmed.
 - Loop budget: round 1 + 3 fixes (4 total Coder attempts) — confirmed.
-- Operational tier model: `opencode-go/mimo-v2.5` (C). Strategic tier:
-  `opencode-go/deepseek-v4-flash` (D and B-side judgment). The README-LLM variant
+- Operational tier model: `opencode-go/deepseek-v4-flash` (C). Strategic tier:
+  `opencode-go/muse-spark-1.3-contributor` (D and B-side judgment). The README-LLM variant
   table is stale and will be corrected (no `variants` block exists in opencode.jsonc).
 - Final review via `/new` + clean context — confirmed.
 - Subagent headers: fixed templates + deterministically-resolved per-task values;

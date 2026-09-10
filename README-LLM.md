@@ -308,8 +308,8 @@ On the reference machine the tiers are fixed agent definitions (both
 
 | Tier | Agent | Model |
 |---|---|---|
-| Strategic (D, B-side judgment) | `two-model-reviewer`, `two-model-controller` | `opencode-go/deepseek-v4-flash` |
-| Operational (C) | `two-model-coder` | `opencode-go/mimo-v2.5` |
+| Strategic (D, B-side judgment) | `two-model-reviewer`, `two-model-controller` | `opencode-go/muse-spark-1.3-contributor` |
+| Operational (C) | `two-model-coder` | `opencode-go/deepseek-v4-flash` |
 
 No `variants` block is used; the model is selected by the agent definition.
 The repo mirrors these definitions under `agent/` for versioning.

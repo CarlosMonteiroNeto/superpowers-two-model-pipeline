@@ -1,7 +1,7 @@
 ---
-description: Operational tier of the two-model pipeline (MiMo V2.5). Write-only: implements code to satisfy a RED test; never runs tests or analysis.
+description: Operational tier of the two-model pipeline (DeepSeek v4 Flash). Write-only: implements code to satisfy a RED test; never runs tests or analysis.
 mode: all
-model: opencode-go/mimo-v2.5
+model: opencode-go/deepseek-v4-flash
 permission:
   edit: allow
   read: allow

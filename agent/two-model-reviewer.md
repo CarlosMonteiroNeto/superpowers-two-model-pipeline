@@ -1,7 +1,7 @@
 ---
-description: Strategic tier of the two-model pipeline (DeepSeek v4 Flash). Architectural reviewer of compiler-approved code; returns a structured JSON verdict.
+description: Strategic tier of the two-model pipeline (Muse Spark 1.3). Architectural reviewer of compiler-approved code; returns a structured JSON verdict.
 mode: all
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/muse-spark-1.3-contributor
 permission:
   edit: deny
   read: allow
