@@ -17,8 +17,8 @@ Write the full tasks[] into the tracked plan file, ALL at once. Per task:
 - title (imperative), summary (2-3 sentences: what and why)
 - spec_refs: spec section ids the task implements — REQUIRED, at least
   one per task. A task with no spec anchor is unreviewable downstream.
-- touches: files the implementation may change (used by the RED-proof
-  stash — list every file, miss none)
+- touches: files the implementation may change (reference for the task's
+  RED evidence and review scope — list every file, miss none)
 - depends_on: task ids that must land first
 - acceptance: BLACK-BOX observable behaviors (these become the test
   contract — write them so a stranger could test without reading code)

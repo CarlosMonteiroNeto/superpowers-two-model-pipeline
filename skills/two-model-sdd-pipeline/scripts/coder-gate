@@ -1,37 +1,36 @@
 #!/usr/bin/env bash
-# Closes the gap between round-1 dispatch (red-gate) and completion: runs
-# the gate check after EVERY Agente operador attempt, decides PASS/FAIL/
-# TEST_DEFECT by exit code and log content alone, and drives the whole retry
-# loop itself - ledgering coder_round, redispatching the operador with
-# --continue, or handing off to RED-proof + commit + revisor dispatch on
-# green. Zero LLM involvement between "operador just finished" and "task is
+# Approves the coder's green: runs the gate after EVERY Agente operador
+# attempt, decides PASS/FAIL/TEST_DEFECT by exit code and log content alone,
+# and drives the retry loop itself — ledgering coder_round, redispatching the
+# operador with --continue, or committing + dispatching the revisor on green.
+# Zero LLM involvement between "operador just finished" and "task is
 # committed and revisor dispatched" or "TEST_DEFECT, Agente diretor rules".
+#
+# Coder-owned RED (ADR-0007): the operador authors the RED tests, RUNS them
+# itself, confirms the expected failure, and saves that failing output to
+# <ws>/task-N-red.txt. Before approving green, this script verifies that the
+# evidence exists and contains the task's `expected_red`. The old
+# stash-and-rerun RED-proof is gone (it broke greenfield: stashing a new
+# implementation yields a compile error, not the expected behavior failure).
+# The RED check here is an artifact check, not a re-run — the operador owns
+# the RED/GREEN execution.
 #
 # The loop is UNBOUNDED: the operador keeps iterating (fix prompt + resume)
 # until the gate passes. There is no round budget and no hand-back for help.
-#
-# RED-proof (first green of the task): the operador authors RED tests, so
-# green alone proves nothing. Before committing, this script sets the
-# implementation (plan `touches`) aside, runs the new test files (must FAIL
-# with the task's `expected_red`), restores, and snapshots test hashes for
-# red-integrity. Tests that pass without implementation are sent back for
-# strengthening. Skipped loudly when the plan carries no task metadata
-# (legacy/test workspaces) - the real flow always has it (brief-scaffold
-# requires it).
 #
 # Chained by red-gate immediately after the first dispatch. Safe to call
 # again standalone on manual resume (e.g. after a crashed session).
 #
 # Requires a `gate` ledger entry (resolve-toolchain) with lang/test_cmd/
-# analyze_cmd, a brief at WORKSPACE/task-N-brief.md, and task metadata
-# (touches, expected_red) in WORKSPACE/plan.json for the RED-proof.
+# analyze_cmd, a brief at WORKSPACE/task-N-brief.md, and — for the RED-evidence
+# check — task metadata (expected_red) in WORKSPACE/plan.json.
 #
 # Usage: coder-gate WORKSPACE TASK
-# Exit codes: 0 = green, RED-proved, committed, revisor dispatched;
-#             1 = internal error (stash/restore or red-integrity failure -
-#                 tree may need a human; nothing committed on doubt);
-#             2 = TEST_DEFECT reported (escalated ledgered - route-next will emit
-#                 ARBITRATE); 3 = usage / missing gate or brief.
+# Exit codes: 0 = green, RED-evidence verified, committed, revisor dispatched;
+#             1 = internal error (commit/reviewer setup failed - nothing on
+#                 doubt is claimed green); 2 = TEST_DEFECT reported (escalated
+#                 ledgered - route-next will emit ARBITRATE);
+#             3 = usage / missing gate or brief.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -66,157 +65,40 @@ log="$ws/task-$task-coder.log"
 report="$ws/task-$task-gate.txt"
 diff_file="$ws/task-$task-diff.txt"
 fix_prompt="$ws/task-$task-fix.md"
-redproof_flag="$ws/task-$task-redproof.done"
-redproof_report="$ws/task-$task-redproof.txt"
-snapshot="$ws/task-$task-test-snapshot.txt"
-REDPROOF_REPORT=""
+red_evidence="$ws/task-$task-red.txt"
 
-# RED-proof: prove the operador's tests fail without the implementation.
-# Sets REDPROOF_REPORT and returns 1 when the tests prove nothing (or are
-# absent); returns 0 with snapshot+flag written when RED is proved, or when
-# skipped loudly for missing plan metadata.
-redproof() {
-  [ -f "$redproof_flag" ] && return 0
-
-  meta=$(python3 - "$ws/plan.json" "$task" <<'PY'
-import json, sys
+# The task's expected failure reason (from the plan). Empty when the plan or
+# task carries no metadata - the RED-evidence check is then skipped (legacy
+# layouts), matching the old RED-proof skip behaviour.
+expected_red() {
+  python3 - "$ws/plan.json" "$task" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+if not os.path.isfile(path):
+    print("")
+    raise SystemExit(0)
 try:
-    plan = json.load(open(sys.argv[1], encoding="utf-8"))
-except Exception as exc:
-    print("ERROR: %s" % exc)
-    raise SystemExit(1)
+    with open(path, encoding="utf-8") as fh:
+        plan = json.load(fh)
+except Exception:
+    print("")
+    raise SystemExit(0)
 for entry in plan.get("tasks", []):
     if str(entry.get("id")) == sys.argv[2]:
-        print("EXPECTED:" + str(entry.get("expected_red") or ""))
-        for touch in entry.get("touches", []) or []:
-            print("TOUCH:" + str(touch))
+        print(str(entry.get("expected_red") or ""))
         raise SystemExit(0)
-print("ERROR: no task")
-raise SystemExit(1)
+print("")
 PY
-)
-  if [ $? -ne 0 ]; then
-    echo "CODER-GATE: no plan metadata for task $task - skipping RED-proof" >&2
-    : > "$redproof_flag"
-    return 0
-  fi
-  expected=$(printf '%s\n' "$meta" | sed -n 's/^EXPECTED://p' | head -1)
-  mapfile -t touches < <(printf '%s\n' "$meta" | sed -n 's/^TOUCH://p' | sed '/^[[:space:]]*$/d')
-  if [ -z "$expected" ]; then
-    echo "CODER-GATE: task $task has no expected_red - skipping RED-proof" >&2
-    : > "$redproof_flag"
-    return 0
-  fi
+}
 
-  # New test files = changed files outside touches.
-  mapfile -t changed < <(git status --porcelain -uall | sed 's/^...//; s/.* -> //; s/^"//; s/"$//' | sed '/^[[:space:]]*$/d')
-  test_arr=()
-  for f in ${changed[@]+"${changed[@]}"}; do
-    skip=0
-    for t in ${touches[@]+"${touches[@]}"}; do
-      case "$f" in
-        "$t"|"$t"/*) skip=1; break ;;
-      esac
-    done
-    [ "$skip" -eq 0 ] && test_arr+=("$f")
-  done
-  if [ "${#test_arr[@]}" -eq 0 ]; then
-    {
-      echo "RED-proof FAILED: no test files detected (every changed file is a touch)."
-      echo "Agente operador must author RED tests before implementing."
-    } > "$redproof_report"
-    REDPROOF_REPORT="$redproof_report"
-    return 1
-  fi
-
-  # Snapshot hashes for red-integrity (LF; sha256 over raw bytes).
-  : > "$snapshot"
-  for f in "${test_arr[@]}"; do
-    sha256sum "$f" >> "$snapshot"
-  done
-
-  # Set the implementation aside: tracked touches via stash, untracked
-  # touches moved aside (new test files stay - the fail-run needs them).
-  tracked_arr=()
-  backup="$ws/redproof-backup-$task"
-  rm -rf "$backup"
-  mkdir -p "$backup"
-  for t in ${touches[@]+"${touches[@]}"}; do
-    if git ls-files --error-unmatch -- "$t" >/dev/null 2>&1; then
-      tracked_arr+=("$t")
-    elif [ -e "$t" ]; then
-      mkdir -p "$backup/$(dirname "$t")"
-      mv "$t" "$backup/$t" || {
-        echo "CODER-GATE: RED-proof cannot move $t aside" >&2
-        rm -rf "$backup"
-        return 2
-      }
-    fi
-  done
-  stashed=0
-  if [ "${#tracked_arr[@]}" -gt 0 ]; then
-    stash_before=$(git stash list | wc -l | tr -d ' ')
-    if ! git stash push -m "redproof-task-$task" -- "${tracked_arr[@]}" >/dev/null 2>&1; then
-      rm -rf "$backup"
-      echo "CODER-GATE: RED-proof cannot stash implementation" >&2
-      return 2
-    fi
-    # A no-change push exits 0 but creates no entry - only pop what we pushed.
-    stash_after=$(git stash list | wc -l | tr -d ' ')
-    [ "$stash_after" -gt "$stash_before" ] && stashed=1
-  fi
-
-  # Fail-run: tests must FAIL here (implementation is aside).
-  fail_rc=1
-  if [ "$lang" = "flutter" ]; then
-    FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
-    if "$FLUTTER_BIN" test "${test_arr[@]}" > "$redproof_report" 2>&1; then
-      fail_rc=0
-    fi
-  else
-    if bash -c "$test_cmd" > "$redproof_report" 2>&1; then
-      fail_rc=0
-    fi
-  fi
-
-  # Restore no matter what the fail-run said.
-  if [ "$stashed" = "1" ]; then
-    if ! git stash pop --quiet >/dev/null 2>&1; then
-      echo "CODER-GATE: RED-proof stash pop FAILED - inspect the tree, nothing committed" >&2
-      rm -rf "$backup"
-      return 2
-    fi
-  fi
-  if [ -d "$backup" ]; then
-    cp -r "$backup/." ./ || {
-      echo "CODER-GATE: RED-proof restore FAILED - inspect the tree, nothing committed" >&2
-      return 2
-    }
-    rm -rf "$backup"
-  fi
-
-  if [ "$fail_rc" -eq 0 ]; then
-    {
-      echo "RED-proof FAILED: tests pass WITHOUT the implementation - they prove nothing."
-      echo "Strengthen them (real behavior, hand-derived expectations)."
-      echo "---"
-      cat "$redproof_report"
-    } > "$redproof_report.tmp" && mv "$redproof_report.tmp" "$redproof_report"
-    REDPROOF_REPORT="$redproof_report"
-    return 1
-  fi
-  if ! grep -Fq "$expected" "$redproof_report"; then
-    {
-      echo "RED-proof FAILED: failure lacks the expected reason: $expected."
-      echo "---"
-      cat "$redproof_report"
-    } > "$redproof_report.tmp" && mv "$redproof_report.tmp" "$redproof_report"
-    REDPROOF_REPORT="$redproof_report"
-    return 1
-  fi
-  : > "$redproof_flag"
-  REDPROOF_REPORT=""
-  return 0
+# Coder-owned RED: the saved evidence must exist and contain expected_red.
+# Returns 0 (ok / no metadata to check) or 1 (missing or wrong reason).
+red_evidence_ok() {
+  local expected
+  expected=$(expected_red)
+  [ -n "$expected" ] || return 0
+  [ -f "$red_evidence" ] || return 1
+  grep -Fq -- "$expected" "$red_evidence"
 }
 
 while true; do
@@ -255,16 +137,35 @@ if last is not None:
         print(m[-1])
 PY
 )
-      if [ "$coder_status" = "TEST_DEFECT" ]; then
-        "$SCRIPT_DIR/ledger-append" "$ledger" escalated "$task" \
-          "TEST_DEFECT reported by operador"
-        echo "CODER-GATE: TEST_DEFECT - escalated, no further retries; Agente diretor arbitrates" >&2
-        exit 2
-      fi
+    if [ "$coder_status" = "TEST_DEFECT" ]; then
+      "$SCRIPT_DIR/ledger-append" "$ledger" escalated "$task" \
+        "TEST_DEFECT reported by operador"
+      echo "CODER-GATE: TEST_DEFECT - escalated, no further retries; Agente diretor arbitrates" >&2
+      exit 2
+    fi
   fi
 
   passed=0
-  if [ "$lang" = "flutter" ]; then
+  evidence_failed=0
+
+  # RED-evidence check first: the green gate commits, so the evidence must be
+  # valid before we let it run. A missing/wrong evidence is its own failure
+  # with a dedicated fix prompt.
+  if ! red_evidence_ok; then
+    evidence_failed=1
+    {
+      echo "RED evidence is missing or does not contain the expected failure."
+      echo "Required file: $red_evidence"
+      echo "Expected failure substring: $(expected_red)"
+      echo "Run your RED tests BEFORE implementing and save the failing output"
+      echo "there; if you already implemented, revert it, run the tests, save"
+      echo "the failure, then re-implement."
+      if [ -f "$red_evidence" ]; then
+        echo "--- current evidence ---"
+        cat "$red_evidence"
+      fi
+    } > "$report"
+  elif [ "$lang" = "flutter" ]; then
     if GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" \
         -w "$ws" -t "$task" -b "$base" -l "$ledger" \
         -m "task $task green"; then
@@ -274,30 +175,6 @@ PY
     RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
     if "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd"; then
       passed=1
-    fi
-  fi
-
-  if [ "$passed" -eq 1 ]; then
-    REDPROOF_REPORT=""
-    if redproof; then
-      rp_rc=0
-    else
-      rp_rc=$?
-    fi
-    if [ "$rp_rc" -eq 2 ]; then
-      echo "CODER-GATE: RED-proof internal error - nothing committed" >&2
-      exit 1
-    elif [ "$rp_rc" -ne 0 ]; then
-      # RED unproved: tests absent, vacuous, or failing for the wrong
-      # reason. Point the fix prompt at the RED-proof report and iterate.
-      passed=0
-      report="${REDPROOF_REPORT:-$report}"
-    elif [ -f "$snapshot" ]; then
-      RED_INTEGRITY="${RED_INTEGRITY_BIN:-$SCRIPT_DIR/red-integrity}"
-      if ! "$RED_INTEGRITY" "$ws" "$task"; then
-        echo "CODER-GATE: red-integrity failed pre-commit - nothing committed" >&2
-        exit 1
-      fi
     fi
   fi
 
@@ -325,8 +202,13 @@ PY
     exit 0
   fi
 
-  "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
-    "Coder failed the gate" status=FAIL
+  if [ "$evidence_failed" -eq 1 ]; then
+    "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
+      "Coder failed the gate (RED evidence)" status=FAIL
+  else
+    "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
+      "Coder failed the gate" status=FAIL
+  fi
 
   # No budget and no counting: loop until the gate passes. The only way out
   # besides green is TEST_DEFECT (checked at the top of the next iteration).
@@ -344,10 +226,12 @@ A previous coder attempt did not satisfy the gate. Read these first:
 - Your original brief remains the authority: $brief
 
 Fix the failure. You decide fresh what to keep from the prior diff; the
-brief and acceptance criteria are unchanged and still binding. Do not
-weaken any test file to make it pass — if the failure says your tests
-prove nothing, strengthen them; if the acceptance itself is
-unsatisfiable, report TEST_DEFECT instead of changing it.
+brief and acceptance criteria are unchanged and still binding. You own the
+RED/GREEN loop: the RED failure you observed must be saved to
+$red_evidence and contain the expected failure text. Do not weaken any test
+file to make it pass — if the failure says your tests prove nothing or the
+RED evidence is missing, strengthen them / re-run the RED tests; if the
+acceptance itself is unsatisfiable, report TEST_DEFECT instead of changing it.
 
 Report using the same status contract as before.
 FIXEOF

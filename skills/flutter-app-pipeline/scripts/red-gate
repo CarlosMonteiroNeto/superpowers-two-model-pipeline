@@ -2,8 +2,9 @@
 # Per-task kickoff: the brief is scaffolded from the plan (brief-scaffold),
 # never hand-written. This gate verifies the scaffold exists, ledgers the
 # red_check entry, dispatches Agente operador headlessly (Item 4), and chains
-# straight into coder-gate — which owns retries, the RED-proof (operador's
-# tests must fail pre-implementation), commit, and Revisor dispatch.
+# straight into coder-gate — which owns retries, the RED-evidence check (the
+# operador runs its own RED tests and saves the failing output; coder-gate
+# verifies it contains the expected reason), commit, and Revisor dispatch.
 # Agente operador authors the RED tests; no test is materialized here.
 #
 # Usage: red-gate WORKSPACE TASK

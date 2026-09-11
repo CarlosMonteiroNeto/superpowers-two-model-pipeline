@@ -9,7 +9,7 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 
 ## Pipeline Integration (two-model-sdd-pipeline)
 
-- **Review dispatch is automatic, not requested.** `green-gate` dispatches the revisor itself, immediately after a commit (RED-proof + full suite + analyze + format all green): there is no separate "now ask for review" step for the operador to remember. `--no-commit` runs never dispatch a reviewer — they're for revalidation only (e.g., Phase 4's `green-gate --no-commit`).
+- **Review dispatch is automatic, not requested.** `green-gate` dispatches the revisor itself, immediately after a commit (RED evidence checked + full suite + analyze + format all green): there is no separate "now ask for review" step for the operador to remember. `--no-commit` runs never dispatch a reviewer — they're for revalidation only (e.g., Phase 4's `green-gate --no-commit`).
 - **The revisor's inputs are fixed and minimal.** It receives compiler-approved code plus the task brief and the implementation diff (the review package) — never the full repo, and never re-runs test/analyze itself (that's Script CEO's job, already done by the time it sees the diff).
 - **The revisor's output is a contract, not a comment.** It must return the fixed JSON verdict shape (APPROVED / SEND_BACK / ESCALATE) — see `receiving-code-review`'s integration note for how that verdict is routed.
 

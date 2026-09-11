@@ -21,10 +21,11 @@ Persistence — architectural path only).
   plan shell into full tasks (acceptance + expected_red), appends corrective
   tasks, performs branch closing. Dispatched once per branch; resumed only on
   demand; task text in, never diffs/logs.
-- **Agente operador** — Operational tier (`opencode-go/deepseek-v4-flash`). Write-only executor:
-  receives the scaffolded brief, authors RED tests, writes implementation code. Never runs tests or
-  analysis — Script CEO decides task-tests / full-suite / analyze passes. Context is
-  zeroed per task; retries resume the same session within a task.
+- **Agente operador** — Operational tier (`opencode-go/deepseek-v4-flash`). Owns the RED/GREEN loop:
+  receives the scaffolded brief, authors RED tests, RUNS them to confirm the expected failure (saving
+  the output for coder-gate), then writes implementation code and runs the tests green. May run
+  test/analyze/format, never git; Script CEO verifies the RED evidence and decides the authoritative
+  gate. Context is zeroed per task; retries resume the same session within a task.
 - **Agente revisor** — Strategic tier (`opencode-go/muse-spark-1.3-contributor`). Reviews
   only compiler-approved code (tests + syntax already green). Evaluates design,
   architecture, spec compliance (incl. spec-refs alignment), interface
@@ -46,11 +47,11 @@ Persistence — architectural path only).
   No main-agent intermediation.
 - **green-gate** — chains full suite + `flutter analyze` + format check + commit.
   The test/analyze pass/fail decisions are made inside the script (item 2). On
-  success (after the RED-proof), Script CEO commits, then dispatches Agente
+  success (after the RED-evidence check), Script CEO commits, then dispatches Agente
   revisor directly (item 3).
-- **coder-gate** — unbounded retries until green; RED-proof (stash touches,
-  new tests must fail with expected_red, restore, snapshot); red-integrity
-  pre-commit. Only TEST_DEFECT leaves the loop.
+- **coder-gate** — unbounded retries until green; verifies the operador's saved
+  RED evidence contains `expected_red`; red-integrity pre-commit when a snapshot
+  exists. Only TEST_DEFECT leaves the loop.
 - **route-next** — deterministic router; Script CEO executes its emitted action.
   Actions: BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE /
   NEXT / FINAL_REVIEW. `STRATEGIC` action removed (Strategic Coder removed).
@@ -97,7 +98,7 @@ pub.dev dependency-research target in Phase 2a.
 
 - Items 1–7 of the pipeline-change request mapped in the design spec.
 - Strategic Coder tier removed — confirmed by developer.
-- C is write-only; test/analyze decisions live inside the script — confirmed.
+- C owns its RED/GREEN loop (runs its own tests, ADR-0007); the authoritative test/analyze decisions still live inside the script — confirmed.
 - Loop: unbounded retries until green, no failure counting — confirmed.
 - Operational tier model: `opencode-go/deepseek-v4-flash` (C). Strategic tier:
   `opencode-go/muse-spark-1.3-contributor` (D and B-side judgment). The README-LLM variant

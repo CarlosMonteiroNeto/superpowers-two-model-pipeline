@@ -50,14 +50,17 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("run-gates", text)
 
-    def test_coder_prompt_is_write_only(self):
-        """The Coder is write-only (ADR-0002): it must NOT route commands
-        through scripts/cmd — Script A runs all gates. The prompt must say
-        NEVER run test/analysis commands and preserve the TEST_DEFECT rule."""
+    def test_coder_prompt_runs_own_red_then_green(self):
+        """ADR-0007: the operador owns the RED/GREEN loop — it authors the
+        RED tests, RUNS them itself to verify the expected failure, saves the
+        output for coder-gate, then implements and runs green. Script CEO
+        approves the green and verifies the saved RED evidence."""
         prompt = (self.dir / "coder-prompt.md").read_text(encoding="utf-8")
-        self.assertIn("Write code ONLY", prompt)
-        self.assertIn("NEVER run test", prompt)
+        self.assertIn("task-N-red.txt", prompt)
+        self.assertIn("expected", prompt.lower())
+        self.assertIn("run", prompt.lower())
         self.assertIn("TEST_DEFECT", prompt)
+        self.assertNotIn("write-only", prompt.lower())
 
     def test_strategic_coder_prompt_removed(self):
         """The Strategic Coder role is removed (ADR-0001): escalation is B

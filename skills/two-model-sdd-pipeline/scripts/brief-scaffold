@@ -82,11 +82,16 @@ def main(argv):
         "",
         "Anything not listed under Acceptance (YAGNI fence).",
         "",
-        "## RED order",
+        "## RED order (you own the RED/GREEN loop)",
         "",
-        "Write BLACK-BOX tests encoding Acceptance first "
-        "(skills/test-driven-development/writing-good-tests.md), then "
-        "implement. Tests must fail now with the Expected failure above.",
+        "1. Write BLACK-BOX tests encoding Acceptance "
+        "(skills/test-driven-development/writing-good-tests.md).",
+        "2. RUN those tests yourself and save the failing output to "
+        "`%s/task-%s-red.txt`." % (ws.rstrip("/\\"), wanted),
+        "   The failure output MUST contain the Expected failure text above —",
+        "   coder-gate verifies this before approving green.",
+        "3. Once RED is confirmed, implement until the tests pass, and",
+        "   run them green before reporting DONE.",
         "",
     ]
     out_path = "%s/task-%s-brief.md" % (ws.rstrip("/\\"), wanted)

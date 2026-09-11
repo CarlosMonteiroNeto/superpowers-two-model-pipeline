@@ -64,6 +64,16 @@ class TestBriefScaffold(BriefScaffoldTestBase):
         self.assertIn("writing-good-tests.md", text)
         self.assertIn("§2.1", text)
 
+    def test_brief_names_red_evidence_file(self):
+        """The brief tells the operador where to save the RED run output so
+        coder-gate can verify the expected failure (coder-owned RED)."""
+        self.write_plan(plan_with(FULL_TASK))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("task-3-red.txt", text)
+        self.assertIn("run", text.lower())
+
     def test_missing_spec_refs_omits_section(self):
         task = dict(FULL_TASK)
         del task["spec_refs"]

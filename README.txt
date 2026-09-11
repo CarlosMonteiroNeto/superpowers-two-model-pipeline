@@ -44,12 +44,15 @@ PRINCIPLES
   dispatch) are chained into deterministic scripts whose verdict is an
   exit code or a stdout action line.
 - Script-autonomous dispatch (ADR-0001): red-gate dispatches Agente operador on
-  a scaffolded brief (then coder-gate retries it until green, RED-proof
-  before commit); green-gate commits and dispatches Agente revisor;
+  a scaffolded brief (then coder-gate retries it until green, RED-evidence
+  check before commit); green-gate commits and dispatches Agente revisor;
   route-next + the orchestrator driver route every transition.
   The interactive session is never a link in the dispatch chain.
-- Agente operador is write-only (ADR-0002): it never runs tests or analysis.
-  Script CEO decides task tests -> full suite -> analyze by exit code and
+- Agente operador owns its RED/GREEN loop (ADR-0007, superseding ADR-0002): it
+  authors RED tests, runs them to confirm the expected failure (saving the
+  output), then implements and runs them green. It may run test/analyze/format,
+  never git. Script CEO verifies the RED evidence and decides the authoritative
+  test/analyze gate by exit code and
   feeds failures back (unbounded retries until green; only TEST_DEFECT
   escalates to Agente diretor).
 - Agente revisor reviews compiler-approved code only (Item 2) and returns a
@@ -150,9 +153,9 @@ skills/flutter-app-pipeline/scripts/:
   pub-sync             download + lockfile + version-conflict report
   red-gate             verify the scaffolded brief, dispatch Agente operador
                        on success (then chains into coder-gate, which owns
-                       the retry loop: RED-proof + commit + revisor dispatch)
-  green-gate           chain test + analyze + format + commit (RED-proof
-                         first), then review package + revisor dispatch.
+                       the retry loop: RED-evidence check + commit + revisor dispatch)
+  green-gate           chain test + analyze + format + commit (RED evidence
+                         already verified), then review package + revisor dispatch.
                          On commit appends the ledger `commit` entry
                          (task from -t when given; ledger-append resolved
                          from the two-model scripts dir)
@@ -173,11 +176,12 @@ skills/two-model-sdd-pipeline/scripts/:
   ledger-append        append one structured JSONL ledger entry
   red-gate             per-task kickoff: verify the scaffolded brief,
                        dispatch Agente operador, chain coder-gate
-  coder-gate           owns every retry after the first dispatch: runs the gate
+  coder-gate           owns every retry after the first dispatch: verifies the
+                       operador's saved RED evidence, runs the gate
                        (green-gate for Flutter, run-gates otherwise), ledgers
                        coder_round, builds the fix prompt + resumes operador with
-                       --continue on failure; unbounded until green; RED-proof
-                       before commit; stops on TEST_DEFECT -> ARBITRATE
+                       --continue on failure; unbounded until green; RED-evidence
+                       checked before commit; stops on TEST_DEFECT -> ARBITRATE
                        (Agente diretor resumes)
   cmd                  generic command runner: saves FULL output to a file,
                        prints the RTK-compressed view on stdout, returns the
@@ -207,7 +211,7 @@ skills/two-model-sdd-pipeline/scripts/:
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW)
-  red-integrity        hash-compare tests vs the RED-proof snapshot
+  red-integrity        hash-compare tests vs a snapshot when one exists
                        (exit 0 intact; 1 weakened; 2 usage)
   keep-discard         escalation pre-gate: empty diff / out-of-scope
                        files -> DISCARD; else KEEP (exit 0/1/2)
@@ -236,14 +240,16 @@ full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
 escalation packages, red-integrity byte-compare) is ever compressed.
 
 Dispatch is script-owned too: red-gate dispatches Agente operador on a
-scaffolded brief (then coder-gate retries it until green, RED-proof first);
+scaffolded brief (then coder-gate retries it until green, RED-evidence check);
 green-gate commits,
 builds the review package, and dispatches Agente revisor. The
 revisor reviews compiler-approved code only (plus test-vs-acceptance fit)
 and returns a structured JSON
 verdict; minor findings are PARKED for closing, never fix loops.
-Agente operador is write-only: it never runs commands; Script CEO runs task tests ->
-full suite -> analyze and feeds failures back (unbounded retries until
+Agente operador owns its RED/GREEN loop: it runs its RED tests and saves the
+failure, then implements and runs green; Script CEO verifies that evidence and
+runs the authoritative task tests ->
+full suite -> analyze, feeding failures back (unbounded retries until
 green; only TEST_DEFECT escalates to Agente diretor).
 
 Routing is scripted too: after every ledgered outcome Script CEO runs

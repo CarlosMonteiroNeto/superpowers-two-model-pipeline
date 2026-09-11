@@ -51,7 +51,7 @@ spec compliance, interface discipline.
  4. Test fit: do the tests encode the brief's acceptance criteria — one
    break per test, real behavior, hand-derived expectations? Vacuous or
    implementation-mirroring tests are SEND_BACK findings (the operador
-   authors them; the RED-proof already confirmed they fail first).
+   authors them; the saved RED evidence already showed they fail first).
 
 ## Verdict
 
