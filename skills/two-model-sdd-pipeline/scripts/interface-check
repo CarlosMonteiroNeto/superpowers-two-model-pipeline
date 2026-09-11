@@ -33,7 +33,7 @@ def main():
         print("INTERFACE-CHECK: no plan.json at {}".format(plan), file=sys.stderr)
         return 2
 
-    with open(plan, "r", encoding="utf-8") as fh:
+    with open(plan, "r", encoding="utf-8", errors="replace") as fh:
         plan_data = json.load(fh)
 
     changed = set(git("diff", "--name-only", base, "HEAD").splitlines())

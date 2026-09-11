@@ -23,7 +23,7 @@ def main(argv):
     ws, task = argv
     plan_path = ws.rstrip("/\\") + "/plan.json"
     try:
-        with open(plan_path, encoding="utf-8") as fh:
+        with open(plan_path, encoding="utf-8", errors="replace") as fh:
             plan = json.load(fh)
     except (OSError, ValueError) as exc:
         print("BRIEF-SCAFFOLD: cannot read plan: %s" % exc, file=sys.stderr)
