@@ -167,22 +167,25 @@ skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
-                       acceptance, EXPECTED-RED, RED order). No LLM
+                       acceptance, EXPECTED-RED, RED order). Rejects test-like
+                       touches (tests are changed-minus-touches). No LLM
   resolve-toolchain    one-time-per-branch ecosystem detection: inspects the
                        project for a known marker (pubspec.yaml, Cargo.toml,
-                       go.mod, package.json, pyproject.toml, requirements.txt)
-                       and ledgers TEST_CMD/ANALYZE_CMD (exit 1/2 = ask once,
-                       then ledger manually)
+                       go.mod, package.json, pyproject.toml, requirements.txt),
+                       creates the workspace and ledgers TEST_CMD/ANALYZE_CMD
+                       unconditionally (exit 1/2 = ask once, then ledger
+                       manually)
   ledger-append        append one structured JSONL ledger entry
   red-gate             per-task kickoff: verify the scaffolded brief,
                        dispatch Agente operador, chain coder-gate
-  coder-gate           owns every retry after the first dispatch: verifies the
-                       operador's saved RED evidence, runs the gate
-                       (green-gate for Flutter, run-gates otherwise), ledgers
-                       coder_round, builds the fix prompt + resumes operador with
-                       --continue on failure; unbounded until green; RED-evidence
-                       checked before commit; stops on TEST_DEFECT -> ARBITRATE
-                       (Agente diretor resumes)
+  coder-gate           owns every retry after the first dispatch: runs the gate
+                       check-only first (Flutter) + auto-format before the
+                       check, ledgers coder_round, builds the fix prompt
+                       (prior diff + gate/annex reports + brief) + resumes the
+                       operador's own session with --continue on failure;
+                       unbounded until green; RED-proof over test/*.dart
+                       targets only, before commit; stops on TEST_DEFECT ->
+                       ARBITRATE (Agente diretor resumes)
   cmd                  generic command runner: saves FULL output to a file,
                        prints the RTK-compressed view on stdout, returns the
                        command's true exit code (flutter test/analyze via
@@ -196,10 +199,9 @@ skills/two-model-sdd-pipeline/scripts/:
                        tells the resumed model the brief has CHANGED and to
                        re-read it fully; exit 3 when the targeted agent is
                        not mode: all
-  session-clean        deletes the opencode sessions a completed task recorded
-                       (task-N-*-session.txt) so headless dispatches don't
-                       pollute session history; run by the orchestrator on
-                       NEXT / FINAL_REVIEW
+  session-clean        manual cleanup: deletes the opencode sessions a task
+                       recorded (task-N-*-session.txt); never auto-run -
+                       sessions are kept for resume/debugging
   orchestrator         thin per-task driver: executes route-next actions,
                        prints OUTCOME for the runner
   token-kill           RTK minification of error logs / source / JSON

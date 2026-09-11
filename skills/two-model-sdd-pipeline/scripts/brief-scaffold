@@ -51,6 +51,27 @@ def main(argv):
     touches = match.get("touches", []) or []
     depends = match.get("depends_on", []) or []
     spec_refs = match.get("spec_refs", []) or []
+    # B4 guard: RED-proof defines test files as `changed - touches`, so a
+    # test path inside `touches` empties the set and fails every round.
+    # Fail loudly here instead of looping downstream.
+    bad_touches = [
+        t for t in touches
+        if t == "test" or t == "tests"
+        or t.startswith("test/") or t.startswith("tests/")
+        or "/test/" in t or "/tests/" in t
+        or t.startswith("__tests__") or "/__tests__/" in t
+        or t.endswith("_test.dart") or t.endswith("_test.go")
+        or t.endswith("_test.py") or t.startswith("test_")
+        or ".test." in t or ".spec." in t
+    ]
+    if bad_touches:
+        print(
+            "BRIEF-SCAFFOLD: task %s touches look like test files: %s "
+            "(keep touches to implementation paths; RED tests are "
+            "changed - touches)" % (wanted, ", ".join(bad_touches)),
+            file=sys.stderr,
+        )
+        return 2
     lines = [
         "# Task %s Brief — %s (scaffolded from plan; transient)" % (wanted, match["title"]),
         "",
