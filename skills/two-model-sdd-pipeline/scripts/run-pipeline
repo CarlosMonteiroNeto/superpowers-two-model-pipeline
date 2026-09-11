@@ -256,8 +256,12 @@ PY
       [ -f "$findings" ] || block "no review findings for task $n"
       cat > "$WS/diretor-corrective-$n.md" <<EOF
 Mode: CORRECTIVE. Findings: $findings.
+Tracked plan file: $PLAN
+Append the corrective task to the TRACKED plan file above - NOT to the
+workspace copy ($WS/plan.json), which is overwritten from the tracked file
+after your dispatch. Reply: the new task id.
 Append ONE corrective task (next integer id, "corrects": $n), scoped to
-the findings only. Reply: the new task id.
+the findings only.
 EOF
       dispatch_diretor "$WS/diretor-corrective-$n.md" "corrective-$n" \
         || block "diretor dispatch failed"
@@ -292,6 +296,28 @@ print(max(cands) if cands else '')
         0|2) ;;
         *) block "coder-gate exit $rc on corrective task $m - inspect logs" ;;
       esac
+      # Resolve the original task once the corrective's reviewer approves, so
+      # route-next stops re-emitting CORRECTIVE for it (previous behaviour:
+      # an endless corrective loop, since route-next only reads the original
+      # task's last review_outcome).
+      if [ "$rc" -eq 0 ]; then
+        if "$SCRIPT_DIR/parse-review" "$WS/task-$m-reviewer.log" "$WS/task-$m-review.json" >/dev/null 2>&1; then
+          mv_verdict=$(python3 - "$WS/task-$m-review.json" <<'PY'
+import json, sys
+try:
+    print(json.load(open(sys.argv[1], encoding="utf-8", errors="replace")).get("verdict", ""))
+except Exception:
+    print("")
+PY
+)
+          if [ "$mv_verdict" = "APPROVED" ]; then
+            ledger review_outcome "$m" "APPROVED" "findings=0"
+            ledger task_complete "$m" "APPROVED"
+            ledger task_complete "$n" "SEND_BACK resolved by corrective $m"
+            ledger review_outcome "$n" "APPROVED" "findings=0"
+          fi
+        fi
+      fi
       ;;
     ARBITRATE)
       n=$2
