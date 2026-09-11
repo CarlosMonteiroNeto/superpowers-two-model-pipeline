@@ -40,7 +40,7 @@ def main():
         print("KEEP-DISCARD: not a git work tree (run from the repo root)", file=sys.stderr)
         return 2
 
-    with open(plan, "r", encoding="utf-8") as fh:
+    with open(plan, "r", encoding="utf-8", errors="replace") as fh:
         plan_data = json.load(fh)
     touches = set()
     for t in plan_data.get("tasks", []):

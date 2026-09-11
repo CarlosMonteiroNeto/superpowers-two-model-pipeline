@@ -163,7 +163,7 @@ def _cli():
     logfile, outfile = sys.argv[1], sys.argv[2]
 
     try:
-        with open(logfile, "r", encoding="utf-8") as fh:
+        with open(logfile, "r", encoding="utf-8", errors="replace") as fh:
             log_text = fh.read()
     except (FileNotFoundError, OSError) as exc:
         print("parse-review: cannot read logfile: {}: {}".format(logfile, exc), file=sys.stderr)
@@ -174,7 +174,7 @@ def _cli():
         sys.exit(1)
 
     try:
-        with open(outfile, "w", encoding="utf-8") as fh:
+        with open(outfile, "w", encoding="utf-8", errors="replace") as fh:
             json.dump(verdict, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
     except OSError as exc:

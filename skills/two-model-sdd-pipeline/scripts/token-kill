@@ -41,7 +41,7 @@ case "$mode" in
     if command -v python3 >/dev/null 2>&1; then
       python3 -c "
 import json, sys
-d = json.load(open(sys.argv[1], encoding='utf-8'))
+d = json.load(open(sys.argv[1], encoding='utf-8', errors='replace'))
 print(json.dumps(d, ensure_ascii=False, separators=(',', ':')))
 " "$file" 2>/dev/null || cat "$file"
     else

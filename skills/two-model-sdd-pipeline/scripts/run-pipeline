@@ -16,6 +16,10 @@
 #             2 = usage.
 set -euo pipefail
 
+# B6: force UTF-8 pipes so a latin-1 byte never poisons the ledger/logs.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PLAN=""
 TOTAL_ARG=""
@@ -61,7 +65,7 @@ ledger() { "$SCRIPT_DIR/ledger-append" "$LEDGER" "$@" || true; }
 plan_json() {
   python3 - "$WS/plan.json" <<'PY'
 import json, sys
-print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))))
+print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8", errors="replace"))))
 PY
 }
 
@@ -83,7 +87,7 @@ ledger = sys.argv[1]
 plan = json.load(sys.stdin)
 done = set()
 try:
-    fh = open(ledger, encoding='utf-8')
+    fh = open(ledger, encoding='utf-8', errors='replace')
 except OSError:
     fh = None
 if fh is not None:
@@ -221,13 +225,13 @@ while true; do
         || block "no verdict in task $n reviewer log"
       verdict=$(python3 - "$WS/task-$n-review.json" <<'PY'
 import json, sys
-print(json.load(open(sys.argv[1], encoding="utf-8")).get("verdict", ""))
+print(json.load(open(sys.argv[1], encoding="utf-8", errors="replace")).get("verdict", ""))
 PY
 )
       [ -n "$verdict" ] || block "empty verdict for task $n"
       findings=$(python3 - "$WS/task-$n-review.json" <<'PY'
 import json, sys
-v = json.load(open(sys.argv[1], encoding="utf-8"))
+v = json.load(open(sys.argv[1], encoding="utf-8", errors="replace"))
 print(len(v.get("findings", []) or []))
 PY
 )
@@ -235,7 +239,7 @@ PY
       if [ "$verdict" = "APPROVED" ]; then
         minors=$(python3 - "$WS/task-$n-review.json" <<'PY'
 import json, sys
-v = json.load(open(sys.argv[1], encoding="utf-8"))
+v = json.load(open(sys.argv[1], encoding="utf-8", errors="replace"))
 print("; ".join(v.get("minors", []) or []))
 PY
 )
