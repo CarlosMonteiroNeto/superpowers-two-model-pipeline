@@ -136,8 +136,8 @@ fi
 sid=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$log" | head -1)
 if [ -n "$sid" ]; then
   sid_dir=$(dirname "$log")
-  # Generic record (last writer, read by the runner) + per-agent record so
-  # session-clean can delete both the operador and revisor sessions.
+  # Generic record (last writer, read by the runner) + per-agent record
+  # (manual session-clean / resume can target operador and revisor).
   printf '%s\n' "$sid" > "$sid_dir/task-$task-session.txt"
   printf '%s\n' "$sid" > "$sid_dir/task-$task-$agent-session.txt"
 fi

@@ -102,9 +102,9 @@ class TestOrchestratorHandoff(OrchestratorTestBase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("OUTCOME: NEXT 4", r.stdout)
 
-    def test_approved_next_cleans_that_tasks_sessions(self):
-        # A completed task's sessions must be deleted (history hygiene) -
-        # the task-N-session.txt files vanish and opencode gets a delete call.
+    def test_approved_next_preserves_sessions(self):
+        # Sessions are kept (no auto-delete): the task-N-session.txt files
+        # remain and opencode is never asked to delete them.
         self.ledger([
             self.entry("brief_ready", 3, "task"),
             self.entry("red_check", 3, "RED"),
@@ -128,10 +128,10 @@ class TestOrchestratorHandoff(OrchestratorTestBase):
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("OUTCOME: NEXT 4", r.stdout)
-        self.assertEqual(sorted(deleted.read_text(encoding="utf-8").strip().splitlines()),
-                         ["ses_3c", "ses_3r"])
-        self.assertFalse((self.ws / "task-3-two-model-coder-session.txt").exists())
-        self.assertFalse((self.ws / "task-3-two-model-reviewer-session.txt").exists())
+        self.assertTrue((self.ws / "task-3-two-model-coder-session.txt").exists())
+        self.assertTrue((self.ws / "task-3-two-model-reviewer-session.txt").exists())
+        if deleted.exists():
+            self.assertEqual(deleted.read_text(encoding="utf-8").strip(), "")
 
 
 class TestOrchestratorExecutes(OrchestratorTestBase):

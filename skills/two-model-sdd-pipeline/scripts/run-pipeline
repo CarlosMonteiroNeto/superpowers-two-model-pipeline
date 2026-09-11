@@ -309,10 +309,7 @@ print(max(cands) if cands else '')
       ledger arbitrate "$n" "diretor ruled"
       ;;
     NEXT)
-      prev=$task
       task=$2
-      SESSION_CLEAN_BIN="${SESSION_CLEAN_BIN:-$SCRIPT_DIR/session-clean}"
-      "$SESSION_CLEAN_BIN" "$WS" "$prev" || true
       ;;
     FINAL_REVIEW)
       break

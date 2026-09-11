@@ -196,10 +196,9 @@ skills/two-model-sdd-pipeline/scripts/:
                        tells the resumed model the brief has CHANGED and to
                        re-read it fully; exit 3 when the targeted agent is
                        not mode: all
-  session-clean        deletes the opencode sessions a completed task recorded
-                       (task-N-*-session.txt) so headless dispatches don't
-                       pollute session history; run by the orchestrator on
-                       NEXT / FINAL_REVIEW
+  session-clean        manual cleanup: deletes the opencode sessions a task
+                       recorded (task-N-*-session.txt); never auto-run -
+                       sessions are kept for resume/debugging
   orchestrator         thin per-task driver: executes route-next actions,
                        prints OUTCOME for the runner
   token-kill           RTK minification of error logs / source / JSON
