@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Deterministic RED-form classifier for the two-model pipeline.
+
+Reads the Agente operador's saved machine-readable RED evidence
+(<workspace>/task-<task>-red.txt) and decides whether it is a valid red:
+the suite loaded, at least one test executed, and the run failed as an
+assertion or a runtime error. A compile/load red with no executed test is
+invalid. This is the script-side replacement for the expected_red grep: a
+verdict by exit code, never an LLM judgment.
+
+Per-language machine formats (spec §4):
+  flutter/dart  `flutter test --machine` JSONL: a `testDone` with
+                result=failure (assertion) or result=error (runtime) after a
+                `testStart`. A suite-level error with no executed test is a
+                compile/load red.
+  python        `pytest --json-report` object: at least one test outcome
+                failed/error. An empty tests list (collection error) is a
+                compile/load red.
+  go            `go test -json` JSONL: a per-test `run` action and a per-test
+                `fail` action. A build failure (`build-fail`, no test) is a
+                compile/load red.
+
+Usage: red-form-check WORKSPACE TASK LANG
+Exit codes: 0 = valid red; 1 = invalid red or missing evidence;
+            2 = unsupported language or bad usage.
+No LLM call: only file reads and pure JSON/string classification.
+"""
+import json
+import os
+import sys
+
+SUPPORTED_LANGS = ("flutter", "dart", "python", "go")
+
+
+def iter_json_lines(text):
+    """Yield the JSON objects of a JSONL document, skipping blank/malformed
+    lines (runner streams may interleave non-JSON noise)."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict):
+            yield event
+
+
+def classify_flutter(text):
+    """Valid red when a test loaded and a testDone reported failure/error."""
+    test_started = False
+    test_failed = False
+    for event in iter_json_lines(text):
+        kind = event.get("type")
+        if kind == "testStart":
+            test_started = True
+        elif kind == "testDone" and event.get("result") in ("failure", "error"):
+            test_failed = True
+    return test_started and test_failed
+
+
+def classify_python(text):
+    """Valid red when the json-report carries at least one executed test that
+    failed (assertion) or errored (runtime). A collection error has an empty
+    tests list and is not a valid red."""
+    try:
+        report = json.loads(text)
+    except ValueError:
+        return False
+    if not isinstance(report, dict):
+        return False
+    tests = report.get("tests")
+    if not isinstance(tests, list) or not tests:
+        return False
+    return any(
+        isinstance(test, dict) and test.get("outcome") in ("failed", "error")
+        for test in tests
+    )
+
+
+def classify_go(text):
+    """Valid red when a named test ran and that test's action failed. Build
+    failures carry no Test field and are ignored here."""
+    test_started = False
+    test_failed = False
+    for event in iter_json_lines(text):
+        if not event.get("Test"):
+            continue
+        action = event.get("Action")
+        if action == "run":
+            test_started = True
+        elif action == "fail":
+            test_failed = True
+    return test_started and test_failed
+
+
+CLASSIFIERS = {
+    "flutter": classify_flutter,
+    "dart": classify_flutter,
+    "python": classify_python,
+    "go": classify_go,
+}
+
+
+def main(argv):
+    if len(argv) != 3:
+        print("usage: red-form-check WORKSPACE TASK LANG", file=sys.stderr)
+        return 2
+    workspace, task, lang = argv
+    classify = CLASSIFIERS.get(lang.lower())
+    if classify is None:
+        print(
+            "RED-FORM-CHECK: unsupported language: %s (supported: %s)"
+            % (lang, ", ".join(SUPPORTED_LANGS)),
+            file=sys.stderr,
+        )
+        return 2
+    evidence = os.path.join(workspace.rstrip("/\\"), "task-%s-red.txt" % task)
+    if not os.path.isfile(evidence):
+        print("RED-FORM-CHECK: missing evidence: %s" % evidence, file=sys.stderr)
+        return 1
+    try:
+        with open(evidence, encoding="utf-8", errors="replace") as handle:
+            text = handle.read()
+    except OSError as exc:
+        print("RED-FORM-CHECK: cannot read evidence: %s" % exc, file=sys.stderr)
+        return 1
+    if classify(text):
+        print("RED-FORM-CHECK: valid red - executed test failed (%s)" % lang)
+        return 0
+    print(
+        "RED-FORM-CHECK: invalid red - suite did not run a failing test (%s)"
+        % lang,
+        file=sys.stderr,
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
