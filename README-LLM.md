@@ -169,6 +169,14 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   a scaffolded brief; green-gate dispatches Agente revisor after commit;
   `run-pipeline` drives the whole branch. The interactive session is never
   a link in the dispatch chain.
+- **Batching is a plan-authoring decision, never a runtime one:** a task may
+  cover several same-shape, mutually independent edits — every file in
+  `touches`, every observable behavior in `acceptance`, one `expected_red`
+  for the combined RED. The pipeline runs one brief / operador dispatch /
+  commit / revisor / ledger entry per task, so batching needs no script
+  change. Never batch a task whose files an earlier batch member changes
+  (a batched RED would go stale against a mid-batch interface change).
+  The revisor checks a batched brief's diff file by file.
 - **Operador owns the RED/GREEN loop (ADR-0007, superseding ADR-0002):** it
   authors RED tests, runs them to confirm the expected failure (saving the
   output for `coder-gate`), then implements and runs them green. It may run

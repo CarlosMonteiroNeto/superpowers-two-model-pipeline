@@ -63,6 +63,13 @@ PRINCIPLES
   green. On resume (dispatch --continue --session),
   the corrective-round prompt tells the resumed model the brief has
   CHANGED and to re-read it fully.
+- Batching is a plan-authoring decision, never a runtime one: a task may
+  cover several same-shape, mutually independent edits (every file in
+  touches, every behavior in acceptance, one expected_red). The pipeline
+  runs one brief/operador/commit/revisor/ledger entry per task, so no
+  script changes; never batch a task whose files an earlier batch member
+  changes (stale RED vs a mid-batch interface change). The revisor checks
+  a batched brief's diff file by file.
 - Every command line is scripted and RTK-compressed. All LLM-invoked
   commands run through scripts/cmd: full output is saved to a workspace
   file (gates and escalation read the file) and the LLM sees the

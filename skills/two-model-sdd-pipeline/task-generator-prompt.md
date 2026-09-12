@@ -26,6 +26,12 @@ Write the full tasks[] into the tracked plan file, ALL at once. Per task:
   BEFORE the implementation exists (name the missing behavior, never a
   compile-error artifact)
 
+Batching: you MAY fold several same-shape, mutually independent edits into
+one task (one brief, one operador dispatch, one commit, one review). List
+every file in `touches`, every observable behavior in `acceptance`, and one
+`expected_red` for the combined RED. Never batch a task whose files an
+earlier batch member changes — interface-dependent work stays per-task.
+
 Then reply with ONLY: expanded task count + plan path.
 
 ## Corrective (resume with revisor findings)

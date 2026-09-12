@@ -353,6 +353,34 @@ workspace). Then run `scripts/pipeline-workspace <that path>`, which copies
 it to `<workspace>/plan.json` for the gates. Read it once yourself; note global
 constraints and dependencies. Create one todo per task.
 
+### Batching same-shape tasks
+
+A task may cover **several same-shape, mutually independent edits** instead
+of one. Batch them as a single plan task: list every file in `touches`,
+every observable behavior in `acceptance`, and one `expected_red` for the
+combined RED. The pipeline already runs one unit per task — one brief
+(scaffolded from the task), one operador dispatch (it authors the combined
+RED and runs it), one commit, one revisor, one ledger entry — so no script
+changes: batching is a plan-authoring decision, made here, never a runtime
+judgment.
+
+Batch only when all hold:
+- **Same shape** — the same kind of edit repeated across files (a one-line
+  fix, a constant change, a field addition). Different-shaped work keeps
+  one task each.
+- **Mutually independent** — no batch member's `depends_on` (directly or
+  transitively) is another member. A task whose files an earlier task
+  changes is exactly what must stay per-task: a batched RED would go stale
+  against an interface change made mid-batch. This is the old "never
+  batched" rule, scoped to its real target.
+- **One review surface** — nothing in the batch needs its own judgment,
+  its own RED, or its own review.
+
+Cost of batching: the ledger and review see one unit, so per-member cost
+and per-member verdict are lost, and a bad member hides behind the unit's
+review — the revisor's file-by-file check (below) is the net. Batch the
+mechanical bulk; keep anything needing judgment per-task.
+
 ### Per-Task Loop
 
 For each task in order:
@@ -462,8 +490,10 @@ For each task in order:
 - The ledger carries continuity — written by the script from structured
   output, read by any role needing prior decisions (closing reads
   all of it; nobody else needs more than excerpts).
-- RED tests are generated just-in-time, per task, by Agente operador —
-  never batched.
+- RED tests are authored just-in-time, per work unit, by Agente operador. A
+  work unit is one plan task — including a same-shape batch (see "Batching
+  same-shape tasks"), which is one task — so a unit's RED set is never
+  pre-written across tasks.
 - Revisor context is script-curated (review package) to avoid both
   under-informed review and attention dilution.
 - **Observability:** operador/revisor progress is teed to workspace logs (`dispatch`) plus the live digest on stdout; the developer can tail the logs; headless sessions never pollute the main session

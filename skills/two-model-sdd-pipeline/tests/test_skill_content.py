@@ -114,6 +114,14 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertNotIn("4 attempts", text)
         self.assertNotIn("4/4", text)
 
+    def test_batching_convention_documented(self):
+        """Batching same-shape independent edits is a plan-authoring decision
+        (one task = one unit), so the skill must document it and the
+        independence criterion that keeps interface-dependent work per-task."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("Batching same-shape tasks", text)
+        self.assertIn("mutually independent", text)
+
 
 if __name__ == "__main__":
     unittest.main()

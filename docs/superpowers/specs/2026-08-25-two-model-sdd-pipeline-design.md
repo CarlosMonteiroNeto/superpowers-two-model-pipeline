@@ -136,6 +136,11 @@ If declined, fall back to native `subagent-driven-development` behavior.
   Orchestrator from structured outputs, and read by any role that needs
   prior-decision context (e.g., the Controller's final review).
 - RED tests are generated just-in-time, per task, never batched in advance.
+  (Superseded scope note: batching is now allowed at the plan level — several
+  same-shape, mutually independent edits may form ONE task, whose single RED
+  set is still authored just-in-time for that unit. What stays forbidden is
+  pre-writing RED for a task whose files an earlier task changes. See
+  `skills/two-model-sdd-pipeline/SKILL.md` → "Batching same-shape tasks".)
 - The Code Reviewer's context is script-curated (diff + affected
   interfaces) specifically to avoid both under-informed review and
   attention dilution from unrelated accumulated history.

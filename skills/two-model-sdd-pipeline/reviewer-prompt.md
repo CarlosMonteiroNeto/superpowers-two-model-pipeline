@@ -43,7 +43,11 @@ spec compliance, interface discipline.
  1. Spec compliance: everything in the brief present; nothing extra; nothing
     misunderstood. The brief cites its spec sections (`Spec refs`) — verify
     the diff covers them; a loose plan (task with no spec anchor) is itself
-    a SEND_BACK finding: unreviewable alignment.
+    a SEND_BACK finding: unreviewable alignment. If the brief lists several
+    files each with its own change (a batched task), check the diff against
+    that list file by file: every listed file must have its corresponding
+    hunk; a listed file the diff never touches is a Missing finding
+    (Important), however clean the rest of the batch looks.
 2. Architecture & design: clean separation, real error handling, no verbatim
    duplication, edge cases handled, follows existing patterns.
  3. Interface discipline: does the diff break or silently widen any contract in
