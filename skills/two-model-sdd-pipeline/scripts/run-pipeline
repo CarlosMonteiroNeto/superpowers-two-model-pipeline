@@ -123,29 +123,34 @@ red_gate_for() {
   fi
 }
 
-diretor_session() { cat "$WS/task-0-session.txt" 2>/dev/null || true; }
-
-dispatch_diretor() {
-  # dispatch_diretor PROMPT_FILE LOG_SUFFIX ; resumes the diretor session
-  # when recorded, else dispatches fresh.
-  local prompt=$1 log="$WS/task-generator-$2.log" session
-  session=$(diretor_session)
-  if [ -n "$session" ]; then
-    "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
-      --continue "$session" --prompt-file "$prompt" --log "$log"
-  else
-    "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
-      --prompt-file "$prompt" --log "$log"
-  fi
+dispatch_task_generator() {
+  # dispatch_task_generator PROMPT_FILE LOG_FILE ; always fresh. The
+  # task-generator is punctual: one dispatch per corrective/arbitrate
+  # episode and one for closing. No cross-task (or cross-branch) session is
+  # ever resumed.
+  "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
+    --prompt-file "$1" --log "$2"
 }
 
 refresh_plan() { "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null || true; }
+
+task_json() {
+  # task_json TASK ; prints the full task object, or nothing if absent.
+  plan_json | python3 -c "
+import json, sys
+task = sys.argv[1]
+for t in json.load(sys.stdin).get('tasks', []):
+    if str(t.get('id')) == task:
+        print(json.dumps(t, ensure_ascii=False))
+        break
+" "$1"
+}
 
 tasks_usable() {
   plan_json | python3 -c "
 import json, sys
 tasks = json.load(sys.stdin).get('tasks', [])
-ok = bool(tasks) and all(t.get('acceptance') and t.get('expected_red') for t in tasks)
+ok = bool(tasks) and all(t.get('acceptance') for t in tasks)
 sys.exit(0 if ok else 1)
 "
 }
@@ -157,21 +162,8 @@ if ! grep -qE '"type": *"gate"' "$LEDGER" 2>/dev/null; then
     || block "resolve-toolchain needs a human (ambiguous/unknown toolchain)"
 fi
 
-# --- task expansion (Agente diretor, once per branch) ---
-if ! tasks_usable; then
-  say "plan has no usable tasks - dispatching Agente diretor"
-  cat > "$WS/diretor-expand.md" <<EOF
-Mode: EXPAND. Plan shell: $PLAN.
-Fill tasks[] per the Agente diretor rules (title, summary, spec_refs,
-touches, depends_on, acceptance, expected_red) - ALL tasks at once, in the
-tracked plan file. Reply: expanded task count + plan path.
-EOF
-  dispatch_diretor "$WS/diretor-expand.md" "expand" \
-    || block "diretor dispatch failed"
-  refresh_plan
-  tasks_usable || block "diretor did not expand tasks - inspect $WS/task-generator-expand.log"
-  ledger plan_ready "-" "tasks expanded by Agente diretor"
-fi
+# --- plan completeness (no EXPAND: brainstorming owns task authoring) ---
+tasks_usable || block "plan has no usable tasks (every task needs acceptance) - complete it before running"
 
 # --- main loop ---
 task=$(first_incomplete)
@@ -254,12 +246,18 @@ PY
       n=$2
       findings="$WS/task-$n-review.json"
       [ -f "$findings" ] || block "no review findings for task $n"
+      target=$(task_json "$n")
+      [ -n "$target" ] || block "task $n not found in plan"
       cat > "$WS/diretor-corrective-$n.md" <<EOF
-Mode: CORRECTIVE. Findings: $findings.
+Mode: CORRECTIVE. Target task: $n
+Plan: $PLAN
+Findings: $findings
+Target task: $target
 Append ONE corrective task (next integer id, "corrects": $n), scoped to
 the findings only. Reply: the new task id.
 EOF
-      dispatch_diretor "$WS/diretor-corrective-$n.md" "corrective-$n" \
+      dispatch_task_generator "$WS/diretor-corrective-$n.md" \
+        "$WS/task-generator-corrective-$n.log" \
         || block "diretor dispatch failed"
       refresh_plan
       # NOTE: -c (not heredoc) - see first_incomplete.
@@ -297,13 +295,18 @@ print(max(cands) if cands else '')
       n=$2
       esc=$(grep -E '"type": *"escalated"' "$LEDGER" 2>/dev/null | tail -1 || true)
       rev="$WS/task-$n-review.json"
+      target=$(task_json "$n")
+      [ -n "$target" ] || block "task $n not found in plan"
       {
         echo "Mode: ARBITRATE for task $n."
+        echo "Plan: $PLAN"
+        echo "Target task: $target"
         echo "Escalation: ${esc:-none}"
         [ -f "$rev" ] && echo "Review: $rev"
         echo "Rule on task viability: fix the task in the tracked plan, or re-plan. Reply: what changed."
       } > "$WS/diretor-arbitrate-$n.md"
-      dispatch_diretor "$WS/diretor-arbitrate-$n.md" "arbitrate-$n" \
+      dispatch_task_generator "$WS/diretor-arbitrate-$n.md" \
+        "$WS/task-generator-arbitrate-$n.log" \
         || block "diretor dispatch failed"
       refresh_plan
       ledger arbitrate "$n" "diretor ruled"
@@ -330,10 +333,11 @@ base=$(git merge-base HEAD origin/main 2>/dev/null || git rev-list --max-parents
 spec_doc=$(plan_json | python3 -c "import json,sys; print(json.load(sys.stdin).get('spec_doc',''))")
 {
   echo "Mode: CLOSING. Diff: $WS/closing-review.diff. Ledger: $LEDGER."
+  echo "Plan: $PLAN."
   echo "Spec: ${spec_doc:-none (skip coverage, note it)}."
   echo "Assess: open risks, parked minors triage, follow-ups. Reply with the assessment."
 } > "$WS/diretor-closing.md"
-dispatch_diretor "$WS/diretor-closing.md" "closing" \
+dispatch_task_generator "$WS/diretor-closing.md" "$WS/task-generator-closing.log" \
   || block "diretor dispatch failed"
 ledger final_review "-" "diretor closing complete"
 "$SCRIPT_DIR/doc-check" "$ROOT" || block "update README.txt and README-LLM.md, then re-run"

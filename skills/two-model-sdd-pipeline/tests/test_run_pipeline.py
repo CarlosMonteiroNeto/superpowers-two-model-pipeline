@@ -25,10 +25,11 @@ def write_stub(directory, name, body):
     return str(p)
 
 
+# Complete task per design §3: acceptance-driven, no expected_red.
 FULL_TASK = {
-    "id": 1, "title": "Add thing", "summary": "Add the thing.",
-    "spec_refs": ["§1"], "touches": ["lib/a.go"], "depends_on": [],
-    "acceptance": ["thing exists"], "expected_red": "no thing",
+    "id": 1, "title": "Add the target widget", "summary": "Add the widget.",
+    "spec_refs": ["§9.7"], "touches": ["lib/a.go"], "depends_on": [],
+    "acceptance": ["thing exists"],
 }
 
 
@@ -55,18 +56,22 @@ class RunPipelineTestBase(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
+    def ws(self):
+        return self.repo / ".superpowers" / "two-model" / "plan.json"
+
     def write_plan(self, tasks):
         self.plan.write_text(json.dumps({"feature": "t", "tasks": tasks}),
                              encoding="utf-8")
 
-    def write_gate(self):
-        ws = self.repo / ".superpowers" / "two-model" / "plan.json"
+    def write_gate(self, *extra):
+        ws = self.ws()
         ws.mkdir(parents=True, exist_ok=True)
+        entries = [{"ts": "x", "type": "gate", "task": "-",
+                    "summary": "go", "lang": "go",
+                    "test_cmd": "true", "analyze_cmd": "true"}]
+        entries.extend(extra)
         (ws / "ledger.jsonl").write_text(
-            json.dumps({"ts": "x", "type": "gate", "task": "-",
-                        "summary": "go", "lang": "go",
-                        "test_cmd": "true", "analyze_cmd": "true"}) + "\n",
-            encoding="utf-8")
+            "".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8")
 
     def fake_dispatch(self):
         return write_stub(
@@ -74,6 +79,32 @@ class RunPipelineTestBase(unittest.TestCase):
             """
 echo "$*" >> "${STUB_DISPATCH_LOG:?}"
 exit 0
+""",
+        )
+
+    def fake_capture_fail(self):
+        # Records the dispatch argv and the prompt file contents, then fails
+        # so run-pipeline stops right after the task-generator dispatch
+        # (bounded observations for prompt/context assertions).
+        return write_stub(
+            self.stub_dir, "dispatch-capture",
+            """
+log="${STUB_DISPATCH_LOG:?}"
+{
+  echo "CALL $*"
+  prompt=""
+  prev=""
+  for a in "$@"; do
+    if [ "$prev" = "--prompt-file" ]; then prompt=$a; fi
+    prev=$a
+  done
+  if [ -n "$prompt" ] && [ -f "$prompt" ]; then
+    echo "PROMPT-BEGIN"
+    cat "$prompt"
+    echo "PROMPT-END"
+  fi
+} >> "$log"
+exit 1
 """,
         )
 
@@ -110,6 +141,9 @@ exit 0
 
 class TestRunPipelineFlow(RunPipelineTestBase):
     def test_full_branch_to_closing_no_push(self):
+        """Acceptance: a complete plan without expected_red runs with no
+        expand dispatch, and closing builds the curated package and
+        dispatches the task-generator once."""
         self.write_plan([dict(FULL_TASK)])
         self.write_gate()
         r = self.run_pipeline(
@@ -120,19 +154,22 @@ class TestRunPipelineFlow(RunPipelineTestBase):
             LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        ws = self.repo / ".superpowers" / "two-model" / "plan.json"
+        ws = self.ws()
         ledger_text = (ws / "ledger.jsonl").read_text(encoding="utf-8")
         for want in ("brief_ready", "task_complete", "final_review"):
             self.assertIn(want, ledger_text)
         self.assertTrue((ws / "closing-review.diff").exists())
         dcalls = self.dispatch_log.read_text(encoding="utf-8")
-        self.assertIn("two-model-task-generator", dcalls)
+        self.assertNotIn("EXPAND", dcalls)
+        # Complete plan: exactly one task-generator dispatch, the closing one.
+        self.assertEqual(dcalls.count("two-model-task-generator"), 1,
+                         dcalls)
         self.assertIn("FINAL_REVIEW", r.stdout)
 
-    def test_empty_plan_dispatches_diretor_then_blocks(self):
-        """No usable tasks: Script CEO must call Agente diretor once; if
-        tasks still cannot be used, block loudly instead of looping."""
-        self.write_plan([])
+    def test_incomplete_plan_blocks_without_expand_dispatch(self):
+        """The expand dispatch is removed: a plan whose tasks lack
+        acceptance must block, never call the task-generator to fill tasks[]."""
+        self.write_plan([{"id": 1, "title": "Thin", "summary": "x"}])
         self.write_gate()
         r = self.run_pipeline(
             "--no-push",
@@ -140,9 +177,43 @@ class TestRunPipelineFlow(RunPipelineTestBase):
             STUB_DISPATCH_LOG=str(self.dispatch_log),
         )
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        dcalls = self.dispatch_log.read_text(encoding="utf-8")
-        self.assertIn("two-model-task-generator", dcalls)
-        self.assertIn("did not expand", r.stdout + r.stderr)
+        dispatched = (self.dispatch_log.read_text(encoding="utf-8")
+                      if self.dispatch_log.exists() else "")
+        self.assertEqual(dispatched.strip(), "", dispatched)
+
+    def _assert_punctual_dispatch(self, verdict):
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate({
+            "ts": "x", "type": "review_outcome", "task": "1",
+            "summary": verdict, "findings": "1",
+        })
+        (self.ws() / "task-1-review.json").write_text(
+            json.dumps({"verdict": verdict, "findings": ["weak"]}),
+            encoding="utf-8")
+        # A stale cross-task session must never be resumed.
+        (self.ws() / "task-0-session.txt").write_text(
+            "STALE-SESSION\n", encoding="utf-8")
+        self.run_pipeline(
+            "--no-push",
+            DISPATCH_BIN=self.fake_capture_fail(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+        )
+        calls = self.dispatch_log.read_text(encoding="utf-8")
+        self.assertIn(str(self.plan), calls)
+        self.assertIn("Add the target widget", calls)
+        self.assertIn("§9.7", calls)
+        self.assertNotIn("--continue", calls)
+        self.assertNotIn("STALE-SESSION", calls)
+
+    def test_corrective_dispatch_passes_plan_and_target_task(self):
+        """Acceptance: a corrective dispatch passes the plan path and the
+        target task (with its spec_refs), fresh - no session reuse."""
+        self._assert_punctual_dispatch("SEND_BACK")
+
+    def test_arbitrate_dispatch_passes_plan_and_target_task(self):
+        """Acceptance: an arbitrate dispatch passes the plan path and the
+        target task (with its spec_refs), fresh - no session reuse."""
+        self._assert_punctual_dispatch("ESCALATE")
 
     def test_missing_plan_is_usage(self):
         r = subprocess.run(
