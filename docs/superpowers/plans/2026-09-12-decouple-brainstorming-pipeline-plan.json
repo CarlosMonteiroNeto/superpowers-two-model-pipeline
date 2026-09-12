@@ -1,0 +1,119 @@
+{
+  "feature": "Decouple brainstorming from the pipeline: brainstorming writes a complete plan.json; expected_red is replaced by a deterministic RED-form check plus coder reason pre-approval, with the revisor as the sole semantic guarantee; the task-generator becomes a punctual corrective/arbitrate/closing owner.",
+  "spec_doc": "docs/superpowers/specs/2026-09-12-decouple-brainstorming-pipeline-design.md",
+  "global_constraints": [
+    "All artifacts are English-only; UI copy keeps the product's established locale.",
+    "The script never reads the calling session's context - only the plan file and the ledger.",
+    "Every LLM-invoked command runs through scripts/cmd (RTK-compressed stdout; full output to files).",
+    "Workers never commit; Script CEO commits.",
+    "touches lists implementation paths only - test paths are the RED (changed minus touches) and must never appear in touches.",
+    "Task order is mandatory: the form checker lands first, then coder-gate consumes it, then brief-scaffold stops emitting expected_red. Reversing this breaks every brief scaffolded in between.",
+    "This branch is executed by the pre-change pipeline, so every task still carries expected_red for bootstrap; the new scripts ignore it once they land."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Add the deterministic RED-form checker",
+      "summary": "Create scripts/red-form-check, a deterministic per-language classifier that reads the operador's machine-readable RED evidence and decides whether it is a valid red (suite loaded, at least one test executed, failed as an assertion or runtime error). Compile/load reds are invalid. This is the script-side replacement for the expected_red grep and an additive first step.",
+      "spec_refs": ["§4"],
+      "touches": ["skills/two-model-sdd-pipeline/scripts/red-form-check"],
+      "depends_on": [],
+      "acceptance": [
+        "red-form-check exits 0 when the evidence shows an executed test that failed as an assertion or runtime error",
+        "red-form-check exits 1 when the evidence shows a suite load/compile error with no executed test",
+        "red-form-check exits 1 when the evidence file is missing",
+        "red-form-check exits 2 for an unsupported language or bad usage",
+        "the checker is deterministic and makes no LLM call"
+      ],
+      "expected_red": "red-form-check must accept an executed assertion failure"
+    },
+    {
+      "id": 2,
+      "title": "Make coder-gate validate RED form instead of expected_red",
+      "summary": "Replace coder-gate's expected_red lookup and substring grep with a call to red-form-check. A missing or invalid form is a FAIL round with a dedicated fix prompt; TEST_DEFECT remains terminal. After this the plan no longer needs expected_red.",
+      "spec_refs": ["§4"],
+      "touches": ["skills/two-model-sdd-pipeline/scripts/coder-gate"],
+      "depends_on": [1],
+      "acceptance": [
+        "coder-gate no longer reads expected_red from plan.json",
+        "a form-valid RED is accepted even when the plan carries no expected_red",
+        "a form-invalid RED produces a FAIL round and a fix prompt, not a TEST_DEFECT",
+        "TEST_DEFECT in the operador's final status line still escalates and stops the loop"
+      ],
+      "expected_red": "coder-gate must accept a form-only RED"
+    },
+    {
+      "id": 3,
+      "title": "Drop expected_red from brief-scaffold and require reason pre-approval",
+      "summary": "brief-scaffold stops requiring expected_red and drops the Expected-failure section. The brief instead instructs the operador to save the RED run in the runner's machine-readable format and to declare and confirm the expected reason before implementing. The test-like touches guard stays.",
+      "spec_refs": ["§3", "§4"],
+      "touches": ["skills/two-model-sdd-pipeline/scripts/brief-scaffold"],
+      "depends_on": [2],
+      "acceptance": [
+        "a task without expected_red scaffolds successfully",
+        "the brief contains no Expected-failure section and contains the reason-declaration and machine-readable-evidence instructions",
+        "test-like touches still cause exit 2",
+        "the brief still lists acceptance and spec_refs"
+      ],
+      "expected_red": "brief-scaffold must not require expected_red"
+    },
+    {
+      "id": 4,
+      "title": "Remove EXPAND and make task ownership punctual in run-pipeline",
+      "summary": "tasks_usable checks acceptance only and the expand dispatch is removed. Corrective and arbitrate dispatch the task-generator fresh with findings plus the full plan path plus the target task and its spec_refs, resuming only within the episode. Closing remains a curated one-shot package. No cross-branch task-generator session is reused.",
+      "spec_refs": ["§2", "§3", "§5"],
+      "touches": ["skills/two-model-sdd-pipeline/scripts/run-pipeline"],
+      "depends_on": [3],
+      "acceptance": [
+        "a complete plan without expected_red runs with no expand dispatch",
+        "a corrective or arbitrate dispatch passes the plan path and the target task",
+        "the task-generator session is not reused across tasks",
+        "closing still builds the curated package and dispatches the task-generator once"
+      ],
+      "expected_red": "run-pipeline must not require expected_red in the plan"
+    },
+    {
+      "id": 5,
+      "title": "Update tier agent definitions and prompts for the new roles",
+      "summary": "two-model-task-generator loses EXPAND and documents punctual corrective/arbitrate/closing with script-controlled context. two-model-coder declares the expected reason before implementing, saves the machine-readable RED, and no longer references a brief expected-failure string.",
+      "spec_refs": ["§4", "§5"],
+      "touches": [
+        "agent/two-model-task-generator.md",
+        "agent/two-model-coder.md",
+        "skills/two-model-sdd-pipeline/task-generator-prompt.md",
+        "skills/two-model-sdd-pipeline/coder-prompt.md"
+      ],
+      "depends_on": [1, 3],
+      "acceptance": [
+        "the task-generator definition and prompt contain no EXPAND mode and document the controlled context for corrective, arbitrate and closing",
+        "the coder definition and prompt instruct saving a machine-readable RED and declaring and confirming the reason before implementing",
+        "no prompt references the brief's expected-failure text"
+      ],
+      "expected_red": "task-generator must not expand tasks"
+    },
+    {
+      "id": 6,
+      "title": "Sync skills, ADR, CONTEXT and READMEs with the decoupled pipeline",
+      "summary": "Document that brainstorming and writing-plans author a complete plan.json (acceptance, no expected_red); that the RED form is script-checked and the revisor is the sole semantic guarantee; and that task ownership is punctual. Record ADR-0008 and update CONTEXT.md, README.txt and README-LLM.md.",
+      "spec_refs": ["§1", "§2", "§3", "§4", "§5"],
+      "touches": [
+        "skills/brainstorming/SKILL.md",
+        "skills/writing-plans/SKILL.md",
+        "skills/two-model-sdd-pipeline/SKILL.md",
+        "skills/test-driven-development/SKILL.md",
+        "docs/superpowers/adr/0008-brainstorming-pipeline-decoupling.md",
+        "CONTEXT.md",
+        "README.txt",
+        "README-LLM.md"
+      ],
+      "depends_on": [4, 5],
+      "acceptance": [
+        "the skills state that brainstorming authors a complete plan.json without expected_red",
+        "the two-model and TDD skills describe the deterministic form check and the revisor as the sole semantic guarantee",
+        "ADR-0008 records the decision and supersedes ADR-0006",
+        "README.txt and README-LLM.md reflect the change"
+      ],
+      "expected_red": "docs must describe the decoupled pipeline"
+    }
+  ]
+}

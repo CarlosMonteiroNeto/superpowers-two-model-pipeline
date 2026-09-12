@@ -15,16 +15,21 @@ Persistence — architectural path only).
   ledger-append). Script CEO is never an
   LLM; its verdicts are exit codes and its outputs are files.
 - **Agente estratégico** — the interactive OpenCode session the developer
-  opened. Owns brainstorming, the plan shell + spec, then DONE. Never in the
-  per-task loop.
-- **Agente diretor** — Strategic tier (`two-model-task-generator`). Expands the
-  plan shell into full tasks (acceptance + expected_red), appends corrective
-  tasks, performs branch closing. Dispatched once per branch; resumed only on
-  demand; task text in, never diffs/logs.
+  opened for brainstorming. Produces the design spec and a COMPLETE `plan.json`
+  (tasks with acceptance, spec_refs, touches, depends_on; no expected_red), then
+  DONE. A separate clean session launches `run-pipeline`. Never in the per-task
+  loop.
+- **Agente diretor** — Strategic tier (`two-model-task-generator`). Punctual
+  task owner: on corrective/arbitrate the script dispatches it with
+  script-controlled context (findings + FULL `plan.json` + target task + cited
+  spec_refs), resuming only within the same episode; closing is a one-shot
+  curated package (plan + spec + consolidated diff + ledger). No EXPAND, no
+  cross-branch persistent session.
 - **Agente operador** — Operational tier (`opencode-go/deepseek-v4-flash`). Owns the RED/GREEN loop:
-  receives the scaffolded brief, authors RED tests, RUNS them to confirm the expected failure (saving
-  the output for coder-gate), then writes implementation code and runs the tests green. May run
-  test/analyze/format, never git; Script CEO verifies the RED evidence and decides the authoritative
+  receives the scaffolded brief, authors RED tests, RUNS them and saves the machine-readable output
+  (form-checked by the script), DECLARES and confirms the expected reason before implementing (a
+  self-check, not a guarantee), then writes implementation code and runs the tests green. May run
+  test/analyze/format, never git; Script CEO verifies the RED form and decides the authoritative
   gate. Context is zeroed per task; retries resume the same session within a task.
 - **Agente revisor** — Strategic tier (`opencode-go/muse-spark-1.3-contributor`). Reviews
   only compiler-approved code (tests + syntax already green). Evaluates design,
@@ -41,7 +46,8 @@ Persistence — architectural path only).
   tracked plan: loops route-next → execute until FINAL_REVIEW → closing →
   push+PR. No Agente estratégico in the loop.
 - **brief-scaffold** — mechanically scaffolds task briefs from plan tasks
-  (statement, acceptance, EXPECTED-RED, RED order). No LLM call.
+  (statement, acceptance, spec_refs, reason-declaration and machine-readable RED
+  instructions). No `expected_red`. No LLM call.
 - **red-gate** — verifies the scaffolded brief exists. On success, Script CEO
   dispatches Agente operador directly (item 4), then chains coder-gate.
   No main-agent intermediation.
@@ -50,8 +56,9 @@ Persistence — architectural path only).
   success (after the RED-evidence check), Script CEO commits, then dispatches Agente
   revisor directly (item 3).
 - **coder-gate** — unbounded retries until green; verifies the operador's saved
-  RED evidence contains `expected_red`; red-integrity pre-commit when a snapshot
-  exists. Only TEST_DEFECT leaves the loop.
+  RED evidence by FORM via `red-form-check` (suite loaded, ≥1 test executed,
+  failed as assertion/runtime — never a compile/load red); red-integrity
+  pre-commit when a snapshot exists. Only TEST_DEFECT leaves the loop.
 - **route-next** — deterministic router; Script CEO executes its emitted action.
   Actions: BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE /
   NEXT / FINAL_REVIEW. `STRATEGIC` action removed (Strategic Coder removed).
@@ -71,7 +78,9 @@ Persistence — architectural path only).
 - **Context retention:** operador and revisor keep their sessions until the
   revisor approves the task (within-task fix/correction loops resume the same
   session). Both are zeroed at task approval; fresh dispatch per task.
-  Agente diretor persists across the branch on task text only.
+  Agente diretor is punctual: it resumes only within one corrective/arbitrate
+  episode, and closing is one dispatch with a curated package — no cross-branch
+  persistent session.
 - **Observability:** the developer watches operador/revisor progress via the
   live dispatch digest plus workspace log files (teed by `dispatch`);
   headless subagent sessions never pollute the main session's
@@ -105,3 +114,20 @@ pub.dev dependency-research target in Phase 2a.
   table is stale and will be corrected (no `variants` block exists in opencode.jsonc).
 - Final review via `/new` + clean context — confirmed.
 - Subagent headers: fixed templates + deterministically-resolved per-task values.
+
+## Decision points locked during brainstorming (2026-09-12)
+
+- Brainstorming is decoupled: a prior session produces spec + complete
+  `plan.json`; a separate clean session launches `run-pipeline`. The script is
+  stateless toward the calling session (reads only the plan file and the ledger).
+- `expected_red` is removed. RED integrity = deterministic form check
+  (`red-form-check`) + operador reason pre-approval (self-check) + revisor as the
+  SOLE independent semantic guarantee.
+- The Agente diretor no longer expands; it is a punctual corrective/arbitrate/
+  closing owner. Corrective/arbitrate get the full plan.json plus findings and
+  the target task; closing gets the curated package.
+- The interactive session is never the exception owner (cache/cost: a persistent
+  session re-bills its accumulated prefix after TTL expiry).
+- Holistic review stays artifact-driven (plan + spec + diff + ledger); the fix
+  for missing holism is a stronger spec, not reopening the brainstorming session.
+- ADR-0008 records this and supersedes ADR-0006 (amends ADR-0001/0007).
