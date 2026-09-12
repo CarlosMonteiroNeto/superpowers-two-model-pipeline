@@ -6,10 +6,13 @@
 # Zero LLM involvement between "operador just finished" and "task is
 # committed and revisor dispatched" or "TEST_DEFECT, Agente diretor rules".
 #
-# Coder-owned RED (ADR-0007): the operador authors the RED tests, RUNS them
-# itself, confirms the expected failure, and saves that failing output to
-# <ws>/task-N-red.txt. Before approving green, this script verifies that the
-# evidence exists and contains the task's `expected_red`. The old
+# Coder-owned RED, form-checked (ADR-0007, spec §4): the operador authors the
+# RED tests, RUNS them itself, and saves the runner's machine-readable output
+# to <ws>/task-N-red.txt. Before approving green, this script asks
+# scripts/red-form-check whether that artifact is a valid red (suite loaded,
+# >=1 test executed, failed as an assertion or runtime error) — a verdict by
+# exit code, never a substring grep. A missing or form-invalid red is a FAIL
+# round with a dedicated fix prompt; TEST_DEFECT stays terminal. The old
 # stash-and-rerun RED-proof is gone (it broke greenfield: stashing a new
 # implementation yields a compile error, not the expected behavior failure).
 # The RED check here is an artifact check, not a re-run — the operador owns
@@ -22,8 +25,8 @@
 # again standalone on manual resume (e.g. after a crashed session).
 #
 # Requires a `gate` ledger entry (resolve-toolchain) with lang/test_cmd/
-# analyze_cmd, a brief at WORKSPACE/task-N-brief.md, and — for the RED-evidence
-# check — task metadata (expected_red) in WORKSPACE/plan.json.
+# analyze_cmd and a brief at WORKSPACE/task-N-brief.md. The RED form is
+# checked by scripts/red-form-check (same directory); no plan metadata is read.
 #
 # Usage: coder-gate WORKSPACE TASK
 # Exit codes: 0 = green, RED-evidence verified, committed, revisor dispatched;
@@ -70,38 +73,22 @@ diff_file="$ws/task-$task-diff.txt"
 fix_prompt="$ws/task-$task-fix.md"
 red_evidence="$ws/task-$task-red.txt"
 
-# The task's expected failure reason (from the plan). Empty when the plan or
-# task carries no metadata - the RED-evidence check is then skipped (legacy
-# layouts), matching the old RED-proof skip behaviour.
-expected_red() {
-  python3 - "$ws/plan.json" "$task" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-if not os.path.isfile(path):
-    print("")
-    raise SystemExit(0)
-try:
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        plan = json.load(fh)
-except Exception:
-    print("")
-    raise SystemExit(0)
-for entry in plan.get("tasks", []):
-    if str(entry.get("id")) == sys.argv[2]:
-        print(str(entry.get("expected_red") or ""))
-        raise SystemExit(0)
-print("")
-PY
-}
-
-# Coder-owned RED: the saved evidence must exist and contain expected_red.
-# Returns 0 (ok / no metadata to check) or 1 (missing or wrong reason).
-red_evidence_ok() {
-  local expected
-  expected=$(expected_red)
-  [ -n "$expected" ] || return 0
-  [ -f "$red_evidence" ] || return 1
-  grep -Fq -- "$expected" "$red_evidence"
+# Coder-owned RED, form-checked by scripts/red-form-check (spec §4): the
+# checker reads task-N-red.txt and classifies the runner's machine-readable
+# output — 0 valid red, 1 invalid/missing, 2 unsupported language. Exit 2 falls
+# back to a presence check (the spec's stated fallback for languages the
+# classifier does not know), so an unknown language never wedges the loop.
+# Returns 0 (valid / unsupported but non-empty) or 1 (missing or form-invalid).
+# Sets red_form_output to the checker's own message for the fix report.
+red_form_output=""
+red_form_ok() {
+  local rc=0
+  red_form_output=$(python3 "$SCRIPT_DIR/red-form-check" "$ws" "$task" "$lang" 2>&1) || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) [ -s "$red_evidence" ] ;;
+    *) return 1 ;;
+  esac
 }
 
 while true; do
@@ -151,18 +138,21 @@ PY
   passed=0
   evidence_failed=0
 
-  # RED-evidence check first: the green gate commits, so the evidence must be
-  # valid before we let it run. A missing/wrong evidence is its own failure
-  # with a dedicated fix prompt.
-  if ! red_evidence_ok; then
+  # RED form check first: the green gate commits, so the evidence must be a
+  # valid red before we let it run. Missing or form-invalid evidence is its own
+  # failure with a dedicated fix prompt - never a TEST_DEFECT.
+  if ! red_form_ok; then
     evidence_failed=1
     {
-      echo "RED evidence is missing or does not contain the expected failure."
+      echo "RED evidence is missing or is not a valid red by form."
       echo "Required file: $red_evidence"
-      echo "Expected failure substring: $(expected_red)"
-      echo "Run your RED tests BEFORE implementing and save the failing output"
-      echo "there; if you already implemented, revert it, run the tests, save"
-      echo "the failure, then re-implement."
+      if [ -n "$red_form_output" ]; then
+        echo "red-form-check: $red_form_output"
+      fi
+      echo "Run your RED tests BEFORE implementing, in the runner's"
+      echo "machine-readable format, and save the failing output there; if you"
+      echo "already implemented, revert it, run the tests, save the failure,"
+      echo "then re-implement."
       if [ -f "$red_evidence" ]; then
         echo "--- current evidence ---"
         cat "$red_evidence"
@@ -243,8 +233,9 @@ $annex_lines
 
 Fix the failure. You decide fresh what to keep from the prior diff; the
 brief and acceptance criteria are unchanged and still binding. You own the
-RED/GREEN loop: the RED failure you observed must be saved to
-$red_evidence and contain the expected failure text. Do not weaken any test
+RED/GREEN loop: save the RED run in the runner's machine-readable format to
+$red_evidence so red-form-check classifies it as a valid red (the suite
+loaded, at least one test executed, and it failed). Do not weaken any test
 file to make it pass — if the failure says your tests prove nothing or the
 RED evidence is missing, strengthen them / re-run the RED tests; if the
 acceptance itself is unsatisfiable, report TEST_DEFECT instead of changing it.

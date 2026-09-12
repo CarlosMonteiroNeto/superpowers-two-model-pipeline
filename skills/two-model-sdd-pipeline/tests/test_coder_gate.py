@@ -14,6 +14,36 @@ if os.name == "nt":
 else:
     BASH = "bash"
 
+# --- go test -json fixtures (the gate entry in setUp resolves lang=go) ---
+# Hand-derived runner output, not computed by the code under test.
+
+# A named test ran and failed: a valid red for scripts/red-form-check.
+GO_TEST_FAILURE = "\n".join([
+    '{"Time":"2026-01-01T00:00:00Z","Action":"run",'
+    '"Package":"example.com/foo","Test":"TestAdd"}',
+    '{"Time":"2026-01-01T00:00:00Z","Action":"output",'
+    '"Package":"example.com/foo","Test":"TestAdd",'
+    '"Output":"=== RUN   TestAdd\\n"}',
+    '{"Time":"2026-01-01T00:00:00Z","Action":"output",'
+    '"Package":"example.com/foo","Test":"TestAdd",'
+    '"Output":"    add_test.go:10: got 5, want 4\\n"}',
+    '{"Time":"2026-01-01T00:00:00Z","Action":"fail",'
+    '"Package":"example.com/foo","Test":"TestAdd","Elapsed":0.0}',
+]) + "\n"
+
+# A build failure with no executed test: form-invalid (compile/load red).
+GO_BUILD_FAILURE = "\n".join([
+    '{"Time":"2026-01-01T00:00:00Z","Action":"output",'
+    '"Package":"example.com/foo","Output":"# example.com/foo\\n"}',
+    '{"Time":"2026-01-01T00:00:00Z","Action":"output",'
+    '"Package":"example.com/foo",'
+    '"Output":"./add.go:5:2: undefined: bar\\n"}',
+    '{"Time":"2026-01-01T00:00:00Z","Action":"build-fail",'
+    '"Package":"example.com/foo","Elapsed":0.1}',
+    '{"Time":"2026-01-01T00:00:00Z","Action":"fail",'
+    '"Package":"example.com/foo","Elapsed":0.1}',
+]) + "\n"
+
 
 def write_stub(directory, name, body):
     p = pathlib.Path(directory) / name
@@ -159,6 +189,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
             f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
                                 "summary": "attempt failed", "status": "FAIL"}) + "\n")
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -185,6 +216,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         with open(self.ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -238,6 +270,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
             f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
                                 "summary": "attempt failed", "status": "FAIL"}) + "\n")
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
         # latest coder log: fix-prompt-style text + final Status: DONE
         # (dispatch overwrites the fixed log path every retry, so this file
         # is always the latest round)
@@ -261,18 +294,19 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.assertNotIn("escalated", ledger_text)
 
 
-class TestRedEvidence(CoderGateTestBase):
-    """Coder-owned RED: the operador authors its RED tests, RUNS them itself,
-    verifies the expected failure, and saves the failing output to
-    task-N-red.txt. coder-gate then only approves green — it checks that the
-    saved evidence contains the task's expected_red before letting the green
-    gate commit."""
+class TestRedFormEvidence(CoderGateTestBase):
+    """Coder-owned RED, form-checked: the operador authors its RED tests, RUNS
+    them itself, and saves the runner's machine-readable output to
+    task-N-red.txt. coder-gate only approves green after scripts/red-form-check
+    finds a valid red (suite loaded, at least one test executed, failed as an
+    assertion/runtime error). There is no expected_red substring anymore — the
+    plan carries none, and legacy plan metadata is ignored."""
 
     def _plan(self, task):
         (self.ws / "plan.json").write_text(
             json.dumps({"feature": "t", "tasks": [task]}), encoding="utf-8")
 
-    def _stubs(self, gate_log, dispatch_log, dispatch_writes_evidence=False):
+    def _stubs(self, gate_log, dispatch_log, dispatch_writes_valid_red=False):
         self.gate = write_stub(
             self.stub_dir, "run-gates",
             """
@@ -281,10 +315,14 @@ exit "${STUB_GATE_EXIT:-0}"
 """,
         )
         evidence_write = ""
-        if dispatch_writes_evidence:
+        if dispatch_writes_valid_red:
+            # On a coder retry, drop the prepared machine-readable RED in
+            # place so the next round passes the form check.
             evidence_write = (
-                'printf "FAIL: missing feature\\n" > "%s/task-1-red.txt"\n'
-                % self.ws.as_posix()
+                'case "$*" in\n'
+                '  *two-model-coder*) cp "${STUB_RED_SRC:?}" '
+                '"%s/task-1-red.txt" ;;\n'
+                'esac\n' % self.ws.as_posix()
             )
         self.dispatch = write_stub(
             self.stub_dir, "dispatch",
@@ -310,72 +348,107 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         env.update(extra)
         return env
 
-    def test_red_evidence_present_then_committed(self):
+    def _run(self, **extra):
+        return run_script(
+            "coder-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra=self._env(**extra),
+        )
+
+    def test_form_valid_red_without_expected_red_is_accepted(self):
+        """A form-valid RED is accepted even when the plan carries no
+        expected_red at all."""
         self.brief()
         self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
-                    "expected_red": "missing feature"})
+                    "acceptance": ["thing works"]})
         (self.ws / "task-1-red.txt").write_text(
-            "FAIL: missing feature\n", encoding="utf-8")
+            GO_TEST_FAILURE, encoding="utf-8")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
         (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
-        r = run_script(
-            "coder-gate", [str(self.ws), "1"],
-            cwd=str(self.repo),
-            env_extra=self._env(STUB_GATE_EXIT="0"),
-        )
+        r = self._run(STUB_GATE_EXIT="0")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        # no fix prompt: the evidence was accepted on the first round
-        self.assertFalse((self.ws / "task-1-fix.md").exists())
+        self.assertFalse((self.ws / "task-1-fix.md").exists(),
+                         "coder-gate must accept a form-only RED")
         ledger_text = self.ledger_path.read_text(encoding="utf-8")
         self.assertIn("Coder passed the gate", ledger_text)
-        # committed (base + green) and reviewer dispatched
         log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
                              capture_output=True, text=True).stdout
         self.assertEqual(log.count("\n"), 2, log)
-        self.assertIn("two-model-reviewer", dispatch_log.read_text(encoding="utf-8"))
+        self.assertIn("two-model-reviewer",
+                      dispatch_log.read_text(encoding="utf-8"))
 
-    def test_missing_red_evidence_fails_then_recovers(self):
-        """No saved RED evidence: the round fails with a dedicated fix prompt
-        (never a green approval), the resumed coder saves the evidence, and
-        the next round passes."""
-        self.brief()
-        self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
-                    "expected_red": "missing feature"})
-        gate_log = self._tmp / "gate.log"
-        dispatch_log = self._tmp / "dispatch.log"
-        self._stubs(gate_log, dispatch_log, dispatch_writes_evidence=True)
-        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
-        r = run_script(
-            "coder-gate", [str(self.ws), "1"],
-            cwd=str(self.repo),
-            env_extra=self._env(STUB_GATE_EXIT="0"),
-        )
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue((self.ws / "task-1-fix.md").exists())
-        ledger_text = self.ledger_path.read_text(encoding="utf-8")
-        self.assertIn("Coder failed the gate", ledger_text)
-        self.assertIn("Coder passed the gate", ledger_text)
-
-    def test_red_evidence_wrong_reason_fails_then_recovers(self):
-        """Evidence exists but lacks the expected reason: still rejected."""
+    def test_form_valid_red_is_not_grepped_against_expected_red(self):
+        """A plan that still carries a legacy expected_red is ignored: form
+        validity alone decides, so a form-valid RED whose text does not contain
+        expected_red is accepted without a fix round."""
         self.brief()
         self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
                     "expected_red": "missing feature"})
         (self.ws / "task-1-red.txt").write_text(
-            "some unrelated failure\n", encoding="utf-8")
+            GO_TEST_FAILURE, encoding="utf-8")
+        # Legacy retry evidence: lets the pre-change implementation (substring
+        # grep) terminate so this test fails fast instead of looping.
+        legacy = self._tmp / "legacy-red.txt"
+        legacy.write_text("FAIL: missing feature\n", encoding="utf-8")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
-        self._stubs(gate_log, dispatch_log, dispatch_writes_evidence=True)
+        self._stubs(gate_log, dispatch_log, dispatch_writes_valid_red=True)
         (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
-        r = run_script(
-            "coder-gate", [str(self.ws), "1"],
-            cwd=str(self.repo),
-            env_extra=self._env(STUB_GATE_EXIT="0"),
-        )
+        r = self._run(STUB_GATE_EXIT="0", STUB_RED_SRC=legacy.as_posix())
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue((self.ws / "task-1-fix.md").exists())
+        self.assertFalse(
+            (self.ws / "task-1-fix.md").exists(),
+            "coder-gate must accept a form-only RED: a form-valid RED is "
+            "accepted even when it does not contain the plan's expected_red",
+        )
+
+    def test_form_invalid_red_fails_then_recovers(self):
+        """A compile/load red (no executed test) is a FAIL round with a fix
+        prompt — never a green, never a TEST_DEFECT. The coder saves a
+        form-valid red on retry and the next round passes."""
+        self.brief()
+        self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
+                    "acceptance": ["thing works"]})
+        (self.ws / "task-1-red.txt").write_text(
+            GO_BUILD_FAILURE, encoding="utf-8")
+        valid = self._tmp / "valid-red.txt"
+        valid.write_text(GO_TEST_FAILURE, encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log, dispatch_writes_valid_red=True)
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
+        r = self._run(STUB_GATE_EXIT="0", STUB_RED_SRC=valid.as_posix())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(
+            (self.ws / "task-1-fix.md").exists(),
+            "a form-invalid RED must fail the round with a fix prompt",
+        )
+        ledger_text = self.ledger_path.read_text(encoding="utf-8")
+        self.assertIn("Coder failed the gate", ledger_text)
+        self.assertIn("Coder passed the gate", ledger_text)
+        self.assertNotIn("escalated", ledger_text)
+
+    def test_missing_red_evidence_fails_then_recovers(self):
+        """No saved RED evidence: the round fails with a dedicated fix prompt
+        (never a green approval), the resumed coder saves machine-readable
+        evidence, and the next round passes."""
+        self.brief()
+        self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
+                    "acceptance": ["thing works"]})
+        valid = self._tmp / "valid-red.txt"
+        valid.write_text(GO_TEST_FAILURE, encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log, dispatch_writes_valid_red=True)
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
+        r = self._run(STUB_GATE_EXIT="0", STUB_RED_SRC=valid.as_posix())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(
+            (self.ws / "task-1-fix.md").exists(),
+            "missing RED evidence must fail the round with a fix prompt",
+        )
         ledger_text = self.ledger_path.read_text(encoding="utf-8")
         self.assertIn("Coder failed the gate", ledger_text)
         self.assertIn("Coder passed the gate", ledger_text)
