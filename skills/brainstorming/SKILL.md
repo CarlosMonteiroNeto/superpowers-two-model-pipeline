@@ -31,6 +31,13 @@ the approval gate never does.
   `writing-plans`, never directly into implementation. Per-task design
   decisions (Phase 2) belong to `flutter-app-pipeline`'s research/selection
   loop, not to this skill.
+- **Architectural output includes a COMPLETE `plan.json`.** Alongside the
+  design spec, this phase authors every task in full — title, summary,
+  `spec_refs`, `touches`, `depends_on`, and `acceptance` — with **no
+  `expected_red`**. `writing-plans` carries the exact schema. The plan is
+  complete when brainstorming ends: a separate clean session launches
+  `run-pipeline PLAN_FILE`, and the script reads only the plan file and the
+  ledger (never this session).
 - **Artifacts are English-only.** The spec document, `CONTEXT.md`, and any
   ADRs this phase produces are written in English regardless of the
   developer's spoken language — the one exception anywhere in the pipeline is
@@ -143,7 +150,7 @@ your path and complete them in order.
 7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
 8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 9. **User reviews written spec** — ask user to review the spec file before proceeding
-10. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+10. **Transition to implementation** — invoke writing-plans skill to write the complete `plan.json` (every task with acceptance and `spec_refs`; no `expected_red`)
 
 **After any path — reusable technique?** If the session surfaced a technique
 others would reuse across projects (`writing-skills` "When to Create"

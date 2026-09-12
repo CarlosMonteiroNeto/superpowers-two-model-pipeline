@@ -82,8 +82,9 @@ depends on them, and they must survive compaction.
   the interactive session is never a link in the dispatch chain (ADR-0001).
 - **Stateless LLM calls, cache-aware:** operador and revisor start cold per
   task, fed curated context (a task brief, a diff, a ledger excerpt), never
-  an accumulating conversation. Exception: Agente diretor persists across
-  the branch on task text only (ADR-0006).
+  an accumulating conversation. Agente diretor is **punctual** (ADR-0008):
+  each corrective/arbitrate dispatch is fresh with script-controlled context,
+  resuming only within one episode; closing is one curated-package dispatch.
   **Resume rule:** operador and revisor retain their sessions WITHIN a task
   until the revisor approves (fix/correction rounds resume via
   `--continue --session`); when the task changes, the dispatch is **fresh**
@@ -96,23 +97,27 @@ depends on them, and they must survive compaction.
   stdout), so raw command output never enters an LLM context window. LLMs
   never run bare commands.
 - **The operador owns the RED/GREEN loop (ADR-0007, superseding ADR-0002):**
-  it authors the RED tests, RUNS them to confirm the expected failure (saving
-  the output for coder-gate), then implements and runs green. `coder-gate`
-  verifies the saved RED evidence contains the task's `expected_red`, then runs
-  the authoritative gate (`green-gate` for Flutter, `run-gates` otherwise),
-  deciding by exit code alone; on failure it builds the fix prompt and
-  redispatches the operador itself — B is never in this loop.
+  it authors the RED tests, RUNS them and saves the machine-readable output,
+  declares and confirms the expected reason before implementing, then runs
+  the tests green. `coder-gate` validates the saved evidence by FORM with
+  `red-form-check` (suite loaded, ≥1 test executed, failed as
+  assertion/runtime; a compile/load red is a FAIL round, not a TEST_DEFECT),
+  then runs the authoritative gate (`green-gate` for Flutter, `run-gates`
+  otherwise), deciding by exit code alone; on failure it builds the fix
+  prompt and redispatches the operador itself — B is never in this loop.
 - **The revisor reviews compiler-approved code only (Item 2):** the revisor never
   runs or re-runs test/analyze; its scope is design, architecture, spec
-  compliance, and interface discipline on the committed diff.
+  compliance, and interface discipline on the committed diff. It is the
+  **sole independent semantic guarantee** that the tests encode the task's
+  acceptance — weak or vacuous tests are SEND_BACK findings.
 
 ## Tier Assignment
 
 | Role | Tier | Rationale |
 |---|---|---|
 | Script CEO | none — deterministic | gates, dispatch, routing, commits, ledger |
-| Agente estratégico (interactive session) | Strategic (human) | plan shell + spec, then DONE |
-| Agente diretor | Strategic (`two-model-task-generator`, `mode: all`) | expands plan tasks, corrective tasks, closing |
+| Agente estratégico (interactive session) | Strategic (human) | spec + complete `plan.json`, then DONE |
+| Agente diretor | Strategic (`two-model-task-generator`, `mode: all`) | punctual: corrective/arbitrate episodes + one closing package (No EXPAND) |
 | Agente operador | Operational (`two-model-coder`, `mode: all`) | RED/GREEN loop: authors RED tests, runs them, then implements |
 | Agente revisor | Strategic (`two-model-reviewer`, `mode: all`) | JSON verdict on compiler-approved code + test fit |
 | Strategic Coder | REMOVED | escalation is Agente diretor arbitration (`ARBITRATE`), not a coder tier |
@@ -154,9 +159,10 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   it retries until the gate passes and never hands back for help. It stops
   only on `TEST_DEFECT` found in the latest log, ledgering `escalated` so
   `route-next` goes straight to ARBITRATE (Agente diretor resumes). On PASS:
-  it first verifies the operador's saved RED evidence (`<ws>/task-N-red.txt`)
-  contains the task's `expected_red` — missing/wrong evidence fails the round
-  with a dedicated fix prompt — then commits (generic engine) or leaves the
+  it first validates the operador's saved RED evidence
+  (`<ws>/task-N-red.txt`) by FORM with `red-form-check` — a compile/load red
+  or missing evidence fails the round with a dedicated fix prompt — then
+  commits (generic engine) or leaves the
   commit to `green-gate` (Flutter, which already did it as part of the passing
   check), then builds the review package and dispatches the revisor. See
   `orchestrator`'s `CODER*` comment for the one case that still routes through
@@ -198,37 +204,44 @@ the spike: subagent-mode agents cannot be targeted headlessly by
 
 Script CEO never implements, reviews, or fixes anything itself.
 
-### Agente estratégico (interactive session — plan + spec only)
+### Agente estratégico (interactive session — spec + complete plan only)
 
-- Owns brainstorming, the plan shell, and the spec — written directly, no
+- Owns brainstorming and writes the spec plus a COMPLETE `plan.json` (every
+  task with acceptance and spec_refs; no `expected_red`) — directly, no
   subagents (Item 1). Then DONE: never writes briefs, RED tests, corrective
   tasks, never arbitrates, never reviews.
+- The plan is complete before `run-pipeline` starts; that is why there is
+  **No EXPAND** downstream and no expansion hop.
 - After handoff, the only session that watches the branch is the one running
   `run-pipeline`, reading the live dispatch digest — never the dispatch chain
   itself.
 
-### Agente diretor (task owner — `two-model-task-generator`)
+### Agente diretor (punctual task owner — `two-model-task-generator`)
 
-- Dispatched once per branch by Script CEO; expands the plan shell into full
-  tasks (all at once: title, summary, touches, depends_on, acceptance,
-  expected_red). Session id recorded; resumed (`--continue`) only for
-  corrective tasks and branch closing.
-- Receives task text + revisor findings only — never diffs, logs, or gate
-  output (context discipline; the session persists across the branch).
-- Rules TEST_DEFECT (fix the task, re-scaffold) and performs closing
-  (final-gate, review package, assessment).
+- **No EXPAND.** The plan arrives complete; `tasks_usable` checks `acceptance`
+  only and the expand dispatch is removed. Script CEO dispatches the diretor
+  per corrective/arbitrate episode with script-controlled context (findings +
+  the FULL `plan.json` + the target task + its `spec_refs`), resuming
+  (`--continue`) only within that episode. Between tasks the dispatch is
+  fresh — no cross-branch persistent session.
+- Closing stays a one-shot curated package (plan + spec + consolidated diff +
+  full ledger): a fresh dispatch, never a resumed brainstorming session.
+- Receives the plan and findings only — never diffs, logs, or gate output.
+- Rules TEST_DEFECT (fix the task's acceptance, re-scaffold) and performs
+  closing (final-gate, review package, assessment).
 
 ### Agente operador (Operational, `two-model-coder`)
 
 - Owns the RED/GREEN loop: authors the RED tests AND the implementation from
-  the scaffolded brief + acceptance, RUNS the RED tests itself to confirm the
-  expected failure (saving the output to `<ws>/task-N-red.txt`), then runs the
-  tests green. May run test/analyze/format commands; never runs git commands
-  (ADR-0007).
-- Never weakens a test after green. `coder-gate` checks the saved RED evidence,
-  and `red-integrity` hash-compares test files whenever a snapshot exists. If a
-  test looks unsatisfiable: report `TEST_DEFECT`; Agente diretor rules (Item 6 —
-  EXPECTED-RED already catches compile-error reds at the gate).
+  the scaffolded brief + acceptance, RUNS the RED tests saving the
+  machine-readable output to `<ws>/task-N-red.txt`, DECLARES the expected
+  reason and confirms the observed RED is that reason (saving the declaration
+  beside the evidence), then runs the tests green. May run test/analyze/format
+  commands; never runs git commands (ADR-0007).
+- Never weakens a test after green. `coder-gate` validates the saved RED form
+  with `red-form-check` (a compile/load red does not count), and
+  `red-integrity` hash-compares test files whenever a snapshot exists. If a
+  test looks unsatisfiable: report `TEST_DEFECT`; Agente diretor rules.
 - Context zeroed per task; retries resume the same session
   (`--continue --session`). No round budget, no failure counting: the loop
   runs until the gate passes. Only `TEST_DEFECT` leaves the loop (→ Agente
@@ -240,6 +253,9 @@ Script CEO never implements, reviews, or fixes anything itself.
   architecture, spec compliance, interface discipline — AND whether the
   tests encode the task's acceptance (weak/vacuous tests are SEND_BACK
   findings, since the operador authors them).
+- The revisor is the **sole independent semantic guarantee** that the tests
+  encode the task's acceptance; no other actor provides an independent
+  semantic check.
 - Returns exactly one structured JSON verdict: `APPROVED` / `SEND_BACK` /
   `ESCALATE` + findings + minors.
 - Context kept during the task's correction loops (same session resumed);
@@ -292,14 +308,13 @@ your recollection. Resume at the first task without a `task_complete` line.
 ```dot
 digraph pipeline {
     rankdir=TB;
-    "Agente estratégico: plan shell + spec" -> "Agente diretor: expand tasks (once per branch)";
-    "Agente diretor: expand tasks (once per branch)" -> "brief-scaffold: task -> brief (task N)";
+    "Agente estratégico: spec + complete plan.json" -> "brief-scaffold: task -> brief (task N)";
     "brief-scaffold: task -> brief (task N)" -> "dispatch operador (headless, fresh)";
-    "dispatch operador (headless, fresh)" -> "coder-gate: RED-evidence check, gates, ledger coder_round";
-    "coder-gate: RED-evidence check, gates, ledger coder_round" -> "resume operador (--continue), re-check" [label="fail: retry until green"];
-    "resume operador (--continue), re-check" -> "coder-gate: RED-evidence check, gates, ledger coder_round";
-    "coder-gate: RED-evidence check, gates, ledger coder_round" -> "ARBITRATE: resume diretor" [label="TEST_DEFECT only"];
-    "coder-gate: RED-evidence check, gates, ledger coder_round" -> "green-gate: commit" [label="green"];
+    "dispatch operador (headless, fresh)" -> "coder-gate: RED-form check, gates, ledger coder_round";
+    "coder-gate: RED-form check, gates, ledger coder_round" -> "resume operador (--continue), re-check" [label="fail: retry until green"];
+    "resume operador (--continue), re-check" -> "coder-gate: RED-form check, gates, ledger coder_round";
+    "coder-gate: RED-form check, gates, ledger coder_round" -> "ARBITRATE: resume diretor" [label="TEST_DEFECT only"];
+    "coder-gate: RED-form check, gates, ledger coder_round" -> "green-gate: commit" [label="green"];
     "green-gate: commit" -> "dispatch revisor (headless, fresh) + review package";
     "dispatch revisor (headless, fresh) + review package" -> "revisor JSON verdict: APPROVED / SEND_BACK / ESCALATE";
     "revisor JSON verdict: APPROVED / SEND_BACK / ESCALATE" -> "route-next";
@@ -318,7 +333,7 @@ digraph pipeline {
 
 1. Worktree via superpowers:using-git-worktrees. Never implement on
    main/master without explicit consent.
- 2. Agente estratégico writes the JSON plan shell to the tracked path ("The JSON Plan" below),
+ 2. Agente estratégico writes the COMPLETE `plan.json` to the tracked path ("The JSON Plan" below),
    then resolve the workspace (`scripts/pipeline-workspace PLAN_FILE`,
    which stages a working copy), create the ledger, append the `gate` entry.
 3. Brainstorm and design with the human partner (native brainstorming,
@@ -326,7 +341,9 @@ digraph pipeline {
 
 ### The JSON Plan
 
-Agente estratégico writes the plan directly. Keep it compact — metadata, not prose. Schema:
+Agente estratégico writes the plan directly, and it is COMPLETE here: every
+task in full with `acceptance` and `spec_refs`, and no `expected_red` (ADR-0008).
+Keep it compact — metadata, not prose. Schema:
 
 ```json
 {
@@ -351,14 +368,16 @@ Save it as `docs/superpowers/plans/YYYY-MM-DD-<topic>-plan.json` — a tracked,
 permanent project record (unlike the workspace copy, it survives the
 workspace). Then run `scripts/pipeline-workspace <that path>`, which copies
 it to `<workspace>/plan.json` for the gates. Read it once yourself; note global
-constraints and dependencies. Create one todo per task.
+constraints and dependencies. Create one todo per task. The plan is the
+complete contract: there is no expansion hop and `tasks_usable` checks
+`acceptance` only.
 
 ### Batching same-shape tasks
 
 A task may cover **several same-shape, mutually independent edits** instead
-of one. Batch them as a single plan task: list every file in `touches`,
-every observable behavior in `acceptance`, and one `expected_red` for the
-combined RED. The pipeline already runs one unit per task — one brief
+of one. Batch them as a single plan task: list every file in `touches` and
+every observable behavior in `acceptance`. The pipeline already runs one unit
+per task — one brief
 (scaffolded from the task), one operador dispatch (it authors the combined
 RED and runs it), one commit, one revisor, one ledger entry — so no script
 changes: batching is a plan-authoring decision, made here, never a runtime
@@ -389,30 +408,31 @@ For each task in order:
    execute its emitted action via `scripts/orchestrator` (or inline). The
    router, not the LLM, decides every transition.
 
- 1. **Task expansion (Agente diretor, once per branch).** Script CEO
-   dispatches `two-model-task-generator` with the plan shell; it fills
-   `tasks[]` (title, summary, touches, depends_on, acceptance,
-   expected_red) for ALL tasks at once, in the tracked plan file, then
-   re-run `pipeline-workspace` to refresh the working copy. Ledger a
-   single `plan_ready` entry. Session id recorded for later resumes
-   (corrective tasks, closing).
+ 1. **Plan is complete (No EXPAND).** The tracked `plan.json` already carries
+   every task in full (`acceptance`, `spec_refs`, `touches`, `depends_on`; no
+   `expected_red`); `tasks_usable` checks `acceptance` only and there is no
+   expand dispatch. Re-run `pipeline-workspace` once to refresh the working
+   copy after any plan edit. Agente diretor is dispatched only later, per
+   corrective/arbitrate episode.
 
  2. **Scaffold brief.** Run `scripts/brief-scaffold <workspace> TASK` — it
    reads the task from `<workspace>/plan.json` and writes
    `<workspace>/task-N-brief.md` mechanically (statement, acceptance,
-   `EXPECTED-RED:`, RED-authorship order). No LLM call. Ledger:
+   spec_refs, reason-declaration and machine-readable RED instructions). No
+   LLM call. Ledger:
    `brief_ready`.
 
- 3. **Dispatch + RED-evidence loop.** Run `scripts/red-gate <workspace> TASK`.
+ 3. **Dispatch + RED-form loop.** Run `scripts/red-gate <workspace> TASK`.
    It dispatches the operador with the scaffolded brief (the operador authors
-   RED tests, runs them itself to confirm the expected failure, saves that
-   output, then implements — one session, tests per
+   RED tests, runs them and saves the machine-readable output, declares and
+   confirms the expected reason, then implements — one session, tests per
    [writing-good-tests.md](../../test-driven-development/writing-good-tests.md)),
    then chains straight into `coder-gate` — this call does not return until the
    task is green-and-reviewed, or TEST_DEFECT stops it. Ledger: `red_check`, then
    `coder_round` per attempt, `escalated` on TEST_DEFECT. Before approving
-   green, coder-gate verifies the saved RED evidence contains the task's
-   `expected_red`. No budget, no counting, no Agente estratégico anywhere.
+   green, coder-gate validates the saved RED form with `red-form-check`
+   (never a compile/load red). No budget, no counting, no Agente estratégico
+   anywhere.
 
  4. **Wrap-up on success.** All gates green → commit, append the `commit`
    ledger entry, build the review package, and dispatch D. Run
@@ -443,7 +463,7 @@ For each task in order:
 
  7. **TEST_DEFECT.** The operador reports the test contradicts the
    acceptance and cannot satisfy it. Script CEO resumes Agente diretor,
-   which fixes the task's acceptance/`expected_red` in the tracked plan,
+   which fixes the task's acceptance in the tracked plan,
    re-scaffolds the brief, and the same operador resumes. No Agente
    estratégico involvement — ever.
 
@@ -519,7 +539,7 @@ For each task in order:
 | Excuse | Reality |
 |---|---|
 | "I'll dispatch the operador myself via the task tool" | Script CEO owns dispatch (`red-gate`/`green-gate`/`orchestrator`/`run-pipeline`). You dispatching re-inserts the session into the hot path and pollutes your context — the thing the design removes. |
-| "The operador should not run the tests itself" | ADR-0007 made the operador own the RED/GREEN loop: it must run its RED tests to verify the expected failure and run green before reporting. Script CEO still owns the authoritative gate and the RED-evidence check. |
+| "The operador should not run the tests itself" | ADR-0007 made the operador own the RED/GREEN loop: it must run its RED tests to verify the expected failure and run green before reporting. Script CEO still owns the authoritative gate and the RED-form check. |
 | "A fresh revisor per correction is safer" | Within-task revisor resume (ADR-0003) reuses prior findings; the final verdict is still a fresh judgment recorded in the ledger. |
 | "The operador is stuck, I'll take over the fix loop" | The loop is unbounded and never asks for help — taking over re-inserts your session into the hot path and pollutes your context. Only TEST_DEFECT comes back (to Agente diretor). |
 | "One more operador retry needs my approval" | No approval gate exists on retries. coder-gate retries until green on its own. |
@@ -533,12 +553,13 @@ For each task in order:
 ```
 Human: Build the invoice export feature.
 
-Agente estratégico: [plan shell + spec approved]
+Agente estratégico: [complete plan.json + spec approved]
 [scripts/run-pipeline docs/superpowers/plans/invoice-plan.json]
-  Script CEO: dispatch diretor (once) -> tasks expanded (acceptance + expected_red)
+  Script CEO: plan is complete (acceptance; no expected_red) -> no expand dispatch
   Task 1: brief-scaffold -> dispatch operador (headless)
-    operador writes RED tests, runs them (saves RED evidence), implements ->
-    coder-gate verifies RED evidence + gates
+    operador writes RED tests, runs them (saves machine-readable RED,
+    declares the reason), implements ->
+    coder-gate validates the RED form + gates
     (retries until green) -> commit + dispatch revisor (headless)
     revisor returns JSON -> route-next -> NEXT 2
   Task 2: ... operador reports TEST_DEFECT ...

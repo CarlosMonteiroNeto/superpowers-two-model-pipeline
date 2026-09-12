@@ -11,7 +11,8 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 - **This skill produces Phase 2c artifacts.** Per-task plans are written *after* research/scoring (`pkg-score`, developer selection between as-is / modified / from-scratch) and are technically complete with no code pre-downloaded — dependency resolution happens later via `pub-sync`, lockfile only.
 - **Plans are machine-readable, not just prose.** Tasks live in a JSON plan that `route-next` reads directly to drive the deterministic per-task loop — write plans expecting a script consumer, not only a human reading a markdown doc.
-- **Each task pairs with a scaffolded brief** (built by `brief-scaffold` from the task, consumed by `red-gate`, see `test-driven-development`'s integration note) — a plan task without acceptance + `expected_red` is incomplete on this fork.
+- **Each task pairs with a scaffolded brief** (built by `brief-scaffold` from the task, consumed by `red-gate`, see `test-driven-development`'s integration note) — a complete task carries `acceptance` and `spec_refs`; there is **no `expected_red`**. The RED tests are authored just-in-time by Agente operador and their form is checked by `red-form-check`.
+- **The plan is complete at planning time.** `writing-plans` writes every task in full into the machine-readable, complete `plan.json` (acceptance, spec_refs, touches, depends_on) — no `expected_red` and no expansion hop. A separate clean session launches `run-pipeline PLAN_FILE`; the Agente diretor is a punctual corrective/arbitrate/closing owner, never an expander.
 - **English-only, per policy** — plan documents, task briefs, and ADRs, regardless of the developer's spoken language.
 
 

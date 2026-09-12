@@ -14,14 +14,17 @@ WHAT THIS FORK ADDS
    PLAN_FILE`) owns the per-task loop: gates, test/analyze
    decisions, subagent dispatch (headless `opencode run --agent`), routing,
    and commits. The interactive session (Agente estratégico) writes
-   the plan shell + spec, then DONE. A cheap "Operational"
+   the spec and a complete `plan.json` (acceptance; no `expected_red`),
+   then DONE. A cheap "Operational"
    Agente operador writes RED tests + code; an expensive "Strategic"
    Agente revisor reviews compiler-approved code (plus test-vs-acceptance
    fit) and returns a structured JSON verdict. A "Strategic" Agente diretor
-   expands plan tasks, appends corrective tasks, and closes the branch.
+   is a punctual task owner: it appends corrective tasks, rules arbitration,
+   and closes the branch (No EXPAND).
    Every LLM call is fed curated context - no agent holds a continuous
    session across the branch (operador/revisor retain within-task
-   sessions for fix/correction loops; diretor persists on task text only).
+   sessions for fix/correction loops; the diretor is punctual, one episode
+   at a time).
 
 2. brainstorming enrichment
    grill-with-docs merged into brainstorming, plus Incremental
@@ -44,17 +47,19 @@ PRINCIPLES
   dispatch) are chained into deterministic scripts whose verdict is an
   exit code or a stdout action line.
 - Script-autonomous dispatch (ADR-0001): red-gate dispatches Agente operador on
-  a scaffolded brief (then coder-gate retries it until green, RED-evidence
+  a scaffolded brief (then coder-gate retries it until green, RED-form
   check before commit); green-gate commits and dispatches Agente revisor;
   route-next + the orchestrator driver route every transition.
   The interactive session is never a link in the dispatch chain.
 - Agente operador owns its RED/GREEN loop (ADR-0007, superseding ADR-0002): it
-  authors RED tests, runs them to confirm the expected failure (saving the
-  output), then implements and runs them green. It may run test/analyze/format,
-  never git. Script CEO verifies the RED evidence and decides the authoritative
+  authors RED tests, runs them and saves the machine-readable output, declares
+  and confirms the expected reason, then implements and runs them green. It may
+  run test/analyze/format, never git. Script CEO checks the RED form with
+  `red-form-check` and decides the authoritative
   test/analyze gate by exit code and
   feeds failures back (unbounded retries until green; only TEST_DEFECT
-  escalates to Agente diretor).
+  escalates to Agente diretor). The revisor is the sole independent semantic
+  guarantee that the tests encode the acceptance.
 - Agente revisor reviews compiler-approved code only (Item 2) and returns a
   structured JSON verdict; minor findings are PARKED for closing, never fix
   loops.
@@ -65,7 +70,7 @@ PRINCIPLES
   CHANGED and to re-read it fully.
 - Batching is a plan-authoring decision, never a runtime one: a task may
   cover several same-shape, mutually independent edits (every file in
-  touches, every behavior in acceptance, one expected_red). The pipeline
+  touches, every behavior in acceptance). The pipeline
   runs one brief/operador/commit/revisor/ledger entry per task, so no
   script changes; never batch a task whose files an earlier batch member
   changes (stale RED vs a mid-batch interface change). The revisor checks
@@ -174,7 +179,8 @@ skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
-                       acceptance, EXPECTED-RED, RED order). Rejects test-like
+                       acceptance, spec_refs, reason-declaration and
+                       machine-readable RED instructions). Rejects test-like
                        touches (tests are changed-minus-touches). No LLM
   resolve-toolchain    one-time-per-branch ecosystem detection: inspects the
                        project for a known marker (pubspec.yaml, Cargo.toml,
@@ -190,9 +196,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        check, ledgers coder_round, builds the fix prompt
                        (prior diff + gate/annex reports + brief) + resumes the
                        operador's own session with --continue on failure;
-                       unbounded until green; RED-proof over test/*.dart
-                       targets only, before commit; stops on TEST_DEFECT ->
-                       ARBITRATE (Agente diretor resumes)
+                       unbounded until green; validates the saved RED form with
+                       red-form-check before commit; stops on TEST_DEFECT ->
+                       ARBITRATE (Agente diretor rules)
+  red-form-check       classify the operador's saved machine-readable RED
+                       evidence (suite loaded, >=1 test executed, failed as
+                       assertion/runtime; compile/load red -> exit 1)
   cmd                  generic command runner: saves FULL output to a file,
                        prints the RTK-compressed view on stdout, returns the
                        command's true exit code (flutter test/analyze via
@@ -245,21 +254,24 @@ skills/brainstorming/scripts/:
 
 Every LLM-invoked command line runs through scripts/cmd, so no raw command
 output ever enters an LLM context window. Deterministic gates keep reading
-full files - nothing a verdict depends on (red-gate's EXPECTED-RED substring,
-escalation packages, red-integrity byte-compare) is ever compressed.
+full files - nothing a verdict depends on (red-form-check's machine-readable
+evidence, escalation packages, red-integrity byte-compare) is ever compressed.
 
 Dispatch is script-owned too: red-gate dispatches Agente operador on a
-scaffolded brief (then coder-gate retries it until green, RED-evidence check);
+scaffolded brief (then coder-gate retries it until green, validates the RED
+form);
 green-gate commits,
 builds the review package, and dispatches Agente revisor. The
 revisor reviews compiler-approved code only (plus test-vs-acceptance fit)
 and returns a structured JSON
 verdict; minor findings are PARKED for closing, never fix loops.
-Agente operador owns its RED/GREEN loop: it runs its RED tests and saves the
-failure, then implements and runs green; Script CEO verifies that evidence and
+Agente operador owns its RED/GREEN loop: it runs its RED tests, saves the
+machine-readable output and declares the expected reason, then implements and
+runs green; Script CEO validates the RED form and
 runs the authoritative task tests ->
 full suite -> analyze, feeding failures back (unbounded retries until
-green; only TEST_DEFECT escalates to Agente diretor).
+green; only TEST_DEFECT escalates to Agente diretor). The revisor is the
+sole independent semantic guarantee of test-vs-acceptance fit.
 
 Routing is scripted too: after every ledgered outcome Script CEO runs
 `route-next` and executes the action it emits - the LLM never decides
