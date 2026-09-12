@@ -456,7 +456,11 @@ For each task in order:
      the findings; diretor appends a corrective task (`corrects: N`) to
      the tracked plan; `brief-scaffold` builds the corrective brief; the
      SAME operador session resumes via `dispatch --continue --session
-     <id>` until green. Then wrap-up + revisor re-review.
+     <id>` until green. Then wrap-up + revisor re-review. An approved
+     corrective resolves its parent: the parent's last review is
+     overwritten with APPROVED and the parent is marked `task_complete`,
+     so `route-next` never re-emits `CORRECTIVE` for it and `final-gate`
+     sees every task closed.
    - `ESCALATE` → `ARBITRATE`: Agente diretor validates the task's
      viability and reissues or re-plans.
    If findings persist across correction rounds, treat as escalation.

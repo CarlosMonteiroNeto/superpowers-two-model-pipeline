@@ -130,13 +130,75 @@ exit 0
 """,
         )
 
+    def fake_red_gate_send_back(self):
+        # Simulates task 1 going green then being SEND_BACK by the revisor:
+        # commit + a SEND_BACK review_outcome (route-next reads the verdict
+        # and emits CORRECTIVE without a REVIEW round).
+        return write_stub(
+            self.stub_dir, "red-gate-send-back",
+            """
+ws=$1; task=$2
+append="${LEDGER_APPEND_BIN:?}"
+sha=$(git rev-parse --short HEAD)
+"$append" "$ws/ledger.jsonl" red_check "$task" "RED"
+"$append" "$ws/ledger.jsonl" commit "$task" "green" "commits=$sha"
+"$append" "$ws/ledger.jsonl" review_outcome "$task" "SEND_BACK" "findings=1"
+exit 0
+""",
+        )
+
+    def fake_coder_gate_committed(self):
+        # The corrective task goes green: commit only. The run-pipeline
+        # REVIEW handler records the verdict from the (pre-written)
+        # task-2-reviewer.log reviewer event stream.
+        return write_stub(
+            self.stub_dir, "coder-gate-committed",
+            """
+ws=$1; task=$2
+append="${LEDGER_APPEND_BIN:?}"
+sha=$(git rev-parse --short HEAD)
+"$append" "$ws/ledger.jsonl" commit "$task" "green" "commits=$sha"
+exit 0
+""",
+        )
+
+    def write_reviewer_log(self, task, verdict):
+        event = {
+            "type": "text",
+            "part": {
+                "type": "text",
+                "text": json.dumps({
+                    "verdict": verdict, "findings": [], "minors": [],
+                    "summary": "ok",
+                }),
+            },
+        }
+        (self.ws() / ("task-%s-reviewer.log" % task)).write_text(
+            json.dumps(event) + "\n", encoding="utf-8")
+
     def run_pipeline(self, *args, **extra_env):
         env = dict(os.environ)
         env.update(extra_env)
-        return subprocess.run(
-            [BASH, str(SCRIPTS / "run-pipeline"), str(self.plan), *args],
-            capture_output=True, text=True, cwd=str(self.repo), env=env,
+        out = self._tmp / "run-pipeline.out"
+        err = self._tmp / "run-pipeline.err"
+        with open(out, "w", encoding="utf-8") as fo, \
+                open(err, "w", encoding="utf-8") as fe:
+            proc = subprocess.Popen(
+                [BASH, str(SCRIPTS / "run-pipeline"), str(self.plan), *args],
+                stdout=fo, stderr=fe, cwd=str(self.repo), env=env,
+            )
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                raise
+        result = subprocess.CompletedProcess(
+            args=args, returncode=proc.returncode,
+            stdout=out.read_text(encoding="utf-8", errors="replace"),
+            stderr=err.read_text(encoding="utf-8", errors="replace"),
         )
+        return result
 
 
 class TestRunPipelineFlow(RunPipelineTestBase):
@@ -165,6 +227,54 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.assertEqual(dcalls.count("two-model-task-generator"), 1,
                          dcalls)
         self.assertIn("FINAL_REVIEW", r.stdout)
+
+    def test_send_back_episode_reaches_final_review(self):
+        """Regression: a SEND_BACK on task 1 must route its pre-seeded
+        corrective task 2 to review, reconcile task 1, and reach FINAL_REVIEW
+        - never loop on CORRECTIVE 1 forever. The corrective episode must
+        complete: both tasks end with task_complete and an APPROVED last
+        review."""
+        corrective = {
+            "id": 2, "title": "Fix task 1", "summary": "Corrective for 1.",
+            "spec_refs": ["§9.7"], "touches": ["lib/b.go"], "depends_on": [1],
+            "acceptance": ["thing fixed"], "corrects": 1,
+        }
+        self.write_plan([dict(FULL_TASK), corrective])
+        self.write_gate()
+        (self.ws() / "task-1-review.json").write_text(
+            json.dumps({"verdict": "SEND_BACK", "findings": ["weak tests"],
+                        "minors": [], "summary": "x"}),
+            encoding="utf-8")
+        self.write_reviewer_log(2, "APPROVED")
+        r = self.run_pipeline(
+            "--no-push",
+            RED_GATE_BIN=self.fake_red_gate_send_back(),
+            CODER_GATE_BIN=self.fake_coder_gate_committed(),
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("FINAL_REVIEW", r.stdout)
+        entries = [
+            json.loads(line)
+            for line in (self.ws() / "ledger.jsonl").read_text(
+                encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+        def task_entries(tid):
+            return [e for e in entries if str(e.get("task")) == tid]
+
+        for tid in ("1", "2"):
+            types = [e["type"] for e in task_entries(tid)]
+            self.assertIn("task_complete", types,
+                          "task %s not complete: %s" % (tid, types))
+            reviews = [e["summary"] for e in task_entries(tid)
+                       if e["type"] == "review_outcome"]
+            self.assertEqual(reviews[-1], "APPROVED",
+                             "task %s last review not APPROVED: %s"
+                             % (tid, reviews))
 
     def test_incomplete_plan_blocks_without_expand_dispatch(self):
         """The expand dispatch is removed: a plan whose tasks lack

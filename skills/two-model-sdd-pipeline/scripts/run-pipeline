@@ -146,6 +146,39 @@ for t in json.load(sys.stdin).get('tasks', []):
 " "$1"
 }
 
+corrects_of() {
+  # corrects_of TASK ; prints the task's `corrects` ancestor id, or nothing.
+  plan_json | python3 -c "
+import json, sys
+task = sys.argv[1]
+for t in json.load(sys.stdin).get('tasks', []):
+    if str(t.get('id')) == task:
+        c = t.get('corrects')
+        print('' if c is None else c)
+        break
+" "$1"
+}
+
+reconcile_parents() {
+  # reconcile_parents CHILD ; an approved corrective resolves the task(s) it
+  # corrects: walk the `corrects` chain and, for every ancestor still without
+  # a task_complete, record an APPROVED review (superseding its SEND_BACK) and
+  # task_complete. Without this the parent's partition keeps its unresolved
+  # SEND_BACK, so route-next re-emits CORRECTIVE forever and final-gate blocks.
+  local child=$1 parent done
+  while :; do
+    parent=$(corrects_of "$child")
+    [ -n "$parent" ] || break
+    done=$(grep -E '"type": *"task_complete"' "$LEDGER" 2>/dev/null \
+      | grep -cE "\"task\": *\"$parent\"" || true)
+    if [ "$done" -eq 0 ]; then
+      ledger review_outcome "$parent" "APPROVED" "superseded_by=corrective-$child"
+      ledger task_complete "$parent" "APPROVED" "RECONCILED_BY=$child"
+    fi
+    child=$parent
+  done
+}
+
 tasks_usable() {
   plan_json | python3 -c "
 import json, sys
@@ -240,6 +273,12 @@ PY
         else
           ledger task_complete "$n" "APPROVED"
         fi
+        # An approved corrective also resolves the task(s) it corrects, then
+        # the loop resumes at the first task still lacking task_complete (a
+        # corrective can land mid-branch; the next incomplete task may not be
+        # the corrective's successor id).
+        reconcile_parents "$n"
+        task=$(first_incomplete)
       fi
       ;;
     CORRECTIVE)
@@ -290,6 +329,10 @@ print(max(cands) if cands else '')
         0|2) ;;
         *) block "coder-gate exit $rc on corrective task $m - inspect logs" ;;
       esac
+      # Route the corrective task itself (as a normal task) so its revisor
+      # verdict is recorded and the parent reconciled; without this the loop
+      # stays on the parent and re-emits CORRECTIVE forever.
+      task=$m
       ;;
     ARBITRATE)
       n=$2

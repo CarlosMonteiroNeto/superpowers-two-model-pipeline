@@ -205,7 +205,10 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   ledgered transition) run `route-next` and execute its emitted action — the
   LLM never decides "APPROVED → next task" or "SEND_BACK → corrective" by
   reasoning. SEND_BACK → `CORRECTIVE` (diretor appends a task, same operador
-  resumes); ESCALATE → `ARBITRATE` (diretor rules).
+  resumes); ESCALATE → `ARBITRATE` (diretor rules). An approved corrective
+  reconciles its parent (`corrects: N`): the parent's last review becomes
+  APPROVED and the parent is marked complete, so the loop never re-emits
+  `CORRECTIVE` and `final-gate` sees all tasks closed.
 - **Cache-aware calls:** operador and revisor retain their sessions WITHIN a task until
   approval (fix/correction rounds resume via `--continue --session`; the
   provider cache-bills the stable prefix — system + plan + brief); when the task changes, dispatch fresh. Agente diretor is punctual: each corrective/arbitrate episode resumes only within that episode with script-controlled context, and closing is one curated-package dispatch — no cross-branch persistent session.

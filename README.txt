@@ -66,8 +66,11 @@ PRINCIPLES
 - Corrective tasks append to plan.json (`corrects: N`); `brief-scaffold`
   builds the corrective brief and the SAME operador session resumes until
   green. On resume (dispatch --continue --session),
-  the corrective-round prompt tells the resumed model the brief has
-  CHANGED and to re-read it fully.
+   the corrective-round prompt tells the resumed model the brief has
+   CHANGED and to re-read it fully. An approved corrective reconciles its
+   parent (parent review becomes APPROVED, parent `task_complete`), so
+   `route-next` never re-emits `CORRECTIVE` and `final-gate` sees every
+   task closed.
 - Batching is a plan-authoring decision, never a runtime one: a task may
   cover several same-shape, mutually independent edits (every file in
   touches, every behavior in acceptance). The pipeline
