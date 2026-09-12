@@ -25,6 +25,7 @@ def plan_with(task):
     }
 
 
+# Complete task per design §3: acceptance-driven, no expected_red.
 FULL_TASK = {
     "id": 3,
     "title": "Add export",
@@ -33,7 +34,6 @@ FULL_TASK = {
     "touches": ["lib/export.dart"],
     "depends_on": [1],
     "acceptance": ["CSV has header row", "rows match invoices"],
-    "expected_red": "MissingExport",
 }
 
 
@@ -51,37 +51,81 @@ class BriefScaffoldTestBase(unittest.TestCase):
 
 
 class TestBriefScaffold(BriefScaffoldTestBase):
-    def test_scaffold_writes_brief_from_plan(self):
+    def test_task_without_expected_red_scaffolds(self):
+        """brief-scaffold must not require expected_red."""
         self.write_plan(plan_with(FULL_TASK))
         r = run_scaffold(self.ws, 3)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(
+            r.returncode, 0,
+            "brief-scaffold must not require expected_red: "
+            + r.stdout + r.stderr,
+        )
         text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
         self.assertIn("Add export", text)
         self.assertIn("Export invoices to CSV.", text)
         self.assertIn("lib/export.dart", text)
-        self.assertIn("CSV has header row", text)
-        self.assertIn("MissingExport", text)
-        self.assertIn("writing-good-tests.md", text)
-        self.assertIn("§2.1", text)
 
-    def test_brief_names_red_evidence_file(self):
-        """The brief tells the operador where to save the RED run output so
-        coder-gate can verify the expected failure (coder-owned RED)."""
+    def test_brief_lists_acceptance_and_spec_refs(self):
         self.write_plan(plan_with(FULL_TASK))
         r = run_scaffold(self.ws, 3)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
-        self.assertIn("task-3-red.txt", text)
-        self.assertIn("run", text.lower())
+        self.assertIn("## Acceptance", text)
+        self.assertIn("CSV has header row", text)
+        self.assertIn("rows match invoices", text)
+        self.assertIn("## Spec refs", text)
+        self.assertIn("§2.1", text)
+        self.assertIn("§2.4", text)
 
-    def test_missing_spec_refs_omits_section(self):
-        task = dict(FULL_TASK)
-        del task["spec_refs"]
+    def test_brief_has_no_expected_failure_section(self):
+        self.write_plan(plan_with(FULL_TASK))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertNotIn("Expected failure", text)
+        self.assertNotIn("expected_red", text)
+
+    def test_brief_requires_machine_readable_red_evidence(self):
+        """The operador must save the RED run in the runner's machine-readable
+        format so red-form-check can classify it (design §4)."""
+        self.write_plan(plan_with(FULL_TASK))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("machine-readable", text)
+        self.assertIn("task-3-red.txt", text)
+
+    def test_brief_requires_reason_declaration_before_implementing(self):
+        """The operador must declare the expected reason and confirm the
+        observed RED matches it before implementing (design §4)."""
+        self.write_plan(plan_with(FULL_TASK))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        lower = text.lower()
+        self.assertIn("reason", lower)
+        self.assertIn("declare", lower)
+        self.assertIn("confirm", lower)
+        self.assertIn("before implementing", lower)
+
+    def test_legacy_expected_red_is_ignored(self):
+        """Bootstrap: this branch's tasks still carry expected_red; it must
+        scaffold without error and never leak into the brief."""
+        task = dict(FULL_TASK, expected_red="MissingExport")
         self.write_plan(plan_with(task))
         r = run_scaffold(self.ws, 3)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("§2.1", text)
+        self.assertNotIn("MissingExport", text)
+        self.assertNotIn("expected_red", text)
+
+    def test_test_like_touches_is_usage(self):
+        task = dict(FULL_TASK, touches=["tests/test_export.py"])
+        self.write_plan(plan_with(task))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("test files", r.stderr)
+        self.assertFalse((self.ws / "task-3-brief.md").exists())
 
     def test_scaffold_overwrites_transient_brief(self):
         self.write_plan(plan_with(FULL_TASK))
@@ -96,13 +140,13 @@ class TestBriefScaffold(BriefScaffoldTestBase):
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertFalse((self.ws / "task-99-brief.md").exists())
 
-    def test_task_missing_fields_is_usage(self):
+    def test_task_missing_acceptance_is_usage(self):
         thin = {"id": 3, "title": "Add export", "summary": "x"}
         self.write_plan(plan_with(thin))
         r = run_scaffold(self.ws, 3)
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertIn("acceptance", r.stderr)
-        self.assertIn("expected_red", r.stderr)
+        self.assertNotIn("expected_red", r.stderr)
 
     def test_missing_plan_is_violation(self):
         r = run_scaffold(self.ws, 3)

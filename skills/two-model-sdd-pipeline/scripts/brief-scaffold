@@ -2,15 +2,18 @@
 """Mechanically scaffold a task brief from the plan (Script CEO, no LLM).
 
 Reads task TASK from <WORKSPACE>/plan.json and writes
-<WORKSPACE>/task-N-brief.md: statement, acceptance, EXPECTED-RED,
+<WORKSPACE>/task-N-brief.md: statement, acceptance, spec refs, touches,
 out-of-scope fence, and the RED-authorship order for Agente operador.
-Overwrites an existing brief for the same task (scaffolds are derived,
-never hand-edited).
+The order tells the operador to save the RED run in the runner's
+machine-readable format and to declare and confirm the expected reason
+before implementing (spec §4). expected_red is no longer read: a legacy
+task that still carries it scaffolds unchanged. Overwrites an existing
+brief for the same task (scaffolds are derived, never hand-edited).
 
 Usage: brief-scaffold WORKSPACE TASK
 Exit codes: 0 = scaffold written; 1 = plan unreadable;
             2 = usage / missing plan / task without required fields
-               (title, summary, acceptance[], expected_red).
+               (title, summary, acceptance[]).
 """
 import json
 import sys
@@ -38,7 +41,7 @@ def main(argv):
         print("BRIEF-SCAFFOLD: no task %s in plan" % wanted, file=sys.stderr)
         return 2
     missing = [
-        key for key in ("title", "summary", "acceptance", "expected_red")
+        key for key in ("title", "summary", "acceptance")
         if not match.get(key)
     ]
     if missing:
@@ -95,10 +98,6 @@ def main(argv):
         "",
         *(("- %s" % item) for item in match["acceptance"]),
         "",
-        "## Expected failure",
-        "",
-        match["expected_red"],
-        "",
         "## Out of scope",
         "",
         "Anything not listed under Acceptance (YAGNI fence).",
@@ -107,11 +106,16 @@ def main(argv):
         "",
         "1. Write BLACK-BOX tests encoding Acceptance "
         "(skills/test-driven-development/writing-good-tests.md).",
-        "2. RUN those tests yourself and save the failing output to "
+        "2. RUN those tests yourself and save the failing output in the "
+        "runner's machine-readable format to "
         "`%s/task-%s-red.txt`." % (ws.rstrip("/\\"), wanted),
-        "   The failure output MUST contain the Expected failure text above —",
-        "   coder-gate verifies this before approving green.",
-        "3. Once RED is confirmed, implement until the tests pass, and",
+        "   red-form-check reads that file: the suite must load, at least one "
+        "test must execute, and it must fail as an assertion or runtime "
+        "error.",
+        "3. DECLARE the expected failure reason and CONFIRM the observed RED "
+        "is that reason BEFORE implementing; save the declaration beside the "
+        "evidence.",
+        "4. Once RED is confirmed, implement until the tests pass, and",
         "   run them green before reporting DONE.",
         "",
     ]
