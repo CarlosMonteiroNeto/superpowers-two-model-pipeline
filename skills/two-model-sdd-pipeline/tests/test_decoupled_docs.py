@@ -6,6 +6,10 @@ the two-model and TDD skills describe the deterministic form check and the
 revisor as the sole semantic guarantee; ADR-0008 records the decision and
 supersedes ADR-0006; README.txt and README-LLM.md reflect the change.
 
+Task 7 adds the negative half: the READMEs must carry no trace of the retired
+plan-shell / RED-evidence / RED-proof model, and the red-gate/coder-gate rows
+must name `red-form-check` instead.
+
 Expectations are hand-derived literals naming the documented behavior, not
 values computed by any code under test.
 """
@@ -108,6 +112,62 @@ class TestReadmesReflectChange(unittest.TestCase):
         text = read("README-LLM.md")
         self.assertIn("complete `plan.json`", text)
         self.assertNotIn("expands plan tasks", text)
+
+
+class TestReadmesDroppedRetiredRedTerms(unittest.TestCase):
+    """Task 7: the retired model wording is gone and the script rows name
+    the deterministic form check.
+
+    Retired terms are asserted absent over the whole README text, so a
+    regression that reintroduces any of them in either document fails the
+    suite (this is the acceptance's "fails when reintroduced" requirement).
+    """
+
+    RETIRED = ("plan shell", "RED-evidence", "RED-proof")
+
+    def test_readme_llm_has_no_retired_terms(self):
+        text = read("README-LLM.md")
+        for term in self.RETIRED:
+            self.assertNotIn(term, text, f"README-LLM.md still mentions {term!r}")
+
+    def test_readme_txt_has_no_retired_terms(self):
+        text = read("README.txt")
+        for term in self.RETIRED:
+            self.assertNotIn(term, text, f"README.txt still mentions {term!r}")
+
+    def test_readme_llm_role_table_authors_complete_plan(self):
+        rows = [
+            line
+            for line in read("README-LLM.md").splitlines()
+            if line.startswith("| Agente estratégico ")
+        ]
+        self.assertEqual(1, len(rows), "expected exactly one estrategista role row")
+        self.assertIn("complete `plan.json`", rows[0])
+
+    def test_readme_llm_red_gate_row_names_form_check(self):
+        rows = [
+            line
+            for line in read("README-LLM.md").splitlines()
+            if line.startswith("| `red-gate WORKSPACE TASK` ")
+        ]
+        self.assertEqual(1, len(rows), "expected exactly one red-gate script row")
+        self.assertIn("red-form-check", rows[0])
+
+    def test_readme_llm_coder_gate_row_names_form_check(self):
+        rows = [
+            line
+            for line in read("README-LLM.md").splitlines()
+            if line.startswith("| `coder-gate WORKSPACE TASK` ")
+        ]
+        self.assertEqual(1, len(rows), "expected exactly one coder-gate script row")
+        self.assertIn("red-form-check", rows[0])
+
+    def test_readme_txt_retry_loop_names_form_check(self):
+        lines = read("README.txt").splitlines()
+        hits = [i for i, line in enumerate(lines) if "retry loop" in line]
+        self.assertEqual(1, len(hits), "expected exactly one retry-loop entry")
+        block = "\n".join(lines[hits[0] : hits[0] + 2])
+        self.assertIn("red-form-check", block)
 
 
 if __name__ == "__main__":

@@ -165,8 +165,9 @@ skills/flutter-app-pipeline/scripts/:
   pub-sync             download + lockfile + version-conflict report
   red-gate             verify the scaffolded brief, dispatch Agente operador
                        on success (then chains into coder-gate, which owns
-                       the retry loop: RED-evidence check + commit + revisor dispatch)
-  green-gate           chain test + analyze + format + commit (RED evidence
+                       the retry loop: RED-form check (`red-form-check`) + commit
+                       + revisor dispatch)
+  green-gate           chain test + analyze + format + commit (RED form
                          already verified), then review package + revisor dispatch.
                          On commit appends the ledger `commit` entry
                          (task from -t when given; ledger-append resolved

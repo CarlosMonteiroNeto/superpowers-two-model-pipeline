@@ -114,6 +114,22 @@
         "README.txt and README-LLM.md reflect the change"
       ],
       "expected_red": "docs must describe the decoupled pipeline"
+    },
+    {
+      "id": 7,
+      "corrects": 6,
+      "title": "Align README-LLM and README.txt with the decoupled RED-form model",
+      "summary": "Remove the retired references the task-6 review found in the READMEs: the role table still says the Agente estrategico writes a plan shell, and the script rows still advertise the RED-evidence check and the stash-and-rerun RED-proof that coder-gate no longer performs. Strengthen the existing docs test with negative assertions on those retired terms so the green suite actually catches a regression to the old wording.",
+      "spec_refs": ["§1", "§2", "§4"],
+      "touches": ["README-LLM.md", "README.txt"],
+      "depends_on": [6],
+      "acceptance": [
+        "README-LLM.md's role table describes the Agente estrategico as authoring a complete `plan.json`, with no 'plan shell'",
+        "README-LLM.md's red-gate and coder-gate rows name `red-form-check` and carry no RED-evidence-check or RED-proof fail-run wording",
+        "README.txt's retry-loop entry names `red-form-check` and carries no RED-evidence or RED-proof wording",
+        "the decoupled-docs test suite fails when any retired term (plan shell, RED-evidence, RED-proof) is reintroduced into either README"
+      ],
+      "expected_red": "the READMEs must drop the retired plan-shell and RED-evidence wording"
     }
   ]
 }
