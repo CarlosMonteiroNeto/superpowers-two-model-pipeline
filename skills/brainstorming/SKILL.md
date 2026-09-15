@@ -38,6 +38,9 @@ the approval gate never does.
   complete when brainstorming ends: a separate clean session launches
   `run-pipeline PLAN_FILE`, and the script reads only the plan file and the
   ledger (never this session).
+- `depends_on`: the task ids that must be `task_complete` before this task may
+  run (empty array = no predecessor). `touches`: the exclusive file set; tasks
+  with overlapping `touches` never share a wave.
 - **Interface design is governed by `apple-design`.** When Phase 1 design touches
   a user interface (screens, components, gestures, motion, materials,
   typography), invoke the vendored `apple-design` skill

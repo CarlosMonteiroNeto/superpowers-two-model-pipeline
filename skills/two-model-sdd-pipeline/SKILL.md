@@ -373,6 +373,14 @@ Keep it compact — metadata, not prose. Schema:
 }
 ```
 
+**`depends_on` and `touches` are scheduling-authoritative.** `depends_on` holds
+task **ids** (never paths); a task is dispatched only once every id in it is
+`task_complete`. `touches` is the concurrency contract: two tasks may share a
+wave only when their `touches` sets are **disjoint**. A task that produces a
+type/interface/model consumed by ≥2 tasks is a wave of its own and must land
+before the consuming wave. Corrective tasks (`corrects: N`) never get their own
+wave slot.
+
 Save it as `docs/superpowers/plans/YYYY-MM-DD-<topic>-plan.json` — a tracked,
 permanent project record (unlike the workspace copy, it survives the
 workspace). Then run `scripts/pipeline-workspace <that path>`, which copies
