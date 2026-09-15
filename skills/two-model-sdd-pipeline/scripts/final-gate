@@ -11,6 +11,11 @@
 #      succeed - SKIPPED when the tree is unchanged since the last green task
 #      commit (clean `git status` + HEAD == last ledger `commit` sha): the
 #      last task's gates already proved this tree.
+#   5. No task's newest `integration_failed` postdates its completion
+#      (`task_complete`/`integrated`): the merge is still unresolved.
+#   6. Every `worktree_alloc` has a matching `worktree_release`: no wave is
+#      still in flight.
+#   7. No leftover `task/<N>` branch: integration never closed the task out.
 #
 # Reads `test_cmd`/`analyze_cmd` (resolve-toolchain shape), falling back to
 # legacy `test`/`analyze` keys.
@@ -83,7 +88,35 @@ for t in $(seq 1 "$total"); do
   case "$parked_sev" in
     Critical|Important) emit "task $t has a blocking parked finding ($parked_sev)" ;;
   esac
+
+  # 5: a newer integration_failed than the task's last close means the merge
+  # is still unresolved (wave-next reopens it). Compare line positions with
+  # the same tail-based ordering used above for verdicts/parked severity.
+  last_close_ln=$(printf '%s' "$entries" \
+    | grep -nE '"type": *"(task_complete|integrated)"' | tail -1 | cut -d: -f1 || true)
+  last_fail_ln=$(printf '%s' "$entries" \
+    | grep -nE '"type": *"integration_failed"' | tail -1 | cut -d: -f1 || true)
+  if [ -n "$last_fail_ln" ] && [ -n "$last_close_ln" ] \
+     && [ "$last_fail_ln" -gt "$last_close_ln" ]; then
+    emit "task $t failed integration after completion"
+  fi
 done
+
+# 6: an unmatched worktree_alloc means a wave is still in flight (the same
+# condition ledger-migrate defers on) - integration never closed the task.
+alloc=$(grep -cE '"type": *"worktree_alloc"' "$ledger" || true)
+released=$(grep -cE '"type": *"worktree_release"' "$ledger" || true)
+if [ "${alloc:-0}" -gt "${released:-0}" ]; then
+  emit "a worktree is still allocated ($alloc alloc / $released release)"
+fi
+
+# 7: a leftover task/<N> branch means the task was never integrated/cleaned
+# up. git branch prints nothing (and exits non-zero) outside a repo, so a
+# missing repo is not a blocker here.
+task_branches=$(git branch --list 'task/*' 2>/dev/null | tr -d ' *' | tr '\n' ' ' || true)
+if [ -n "$task_branches" ]; then
+  emit "unmerged task branch(es) remain: $task_branches"
+fi
 
 skip_rerun=0
 if tree_unchanged_since_green; then

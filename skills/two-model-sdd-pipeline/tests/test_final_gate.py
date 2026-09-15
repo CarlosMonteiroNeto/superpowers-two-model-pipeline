@@ -202,6 +202,76 @@ class TestFinalGate(FinalGateBase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertNotIn("skipping", r.stdout + r.stderr)
 
+    def test_unmatched_worktree_alloc_blocks(self):
+        """A wave that allocated a worktree but never released it means a
+        parallel task never closed out - not ready for final review."""
+        repo, _ = self._git_repo()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "worktree_alloc", "task": "1", "summary": "alloc"},
+        ])
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("worktree", r.stdout + r.stderr)
+
+    def test_released_worktree_does_not_block(self):
+        repo, _ = self._git_repo()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "worktree_alloc", "task": "1", "summary": "alloc"},
+            {"ts": "t", "type": "worktree_release", "task": "1", "summary": "release"},
+        ])
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_leftover_task_branch_blocks(self):
+        repo, _ = self._git_repo()
+        subprocess.run(["git", "branch", "task/2"], cwd=str(repo), check=True)
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+        ])
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("task/2", r.stdout + r.stderr)
+
+    def test_failed_integration_after_completion_blocks(self):
+        repo, _ = self._git_repo()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "integration_failed", "task": "1", "summary": "gates"},
+        ])
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("task 1", r.stdout + r.stderr)
+
+    def test_integration_failed_then_complete_does_not_block(self):
+        """A failure that was later re-run and closed out is not a blocker."""
+        repo, _ = self._git_repo()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"),
+            {"ts": "t", "type": "integration_failed", "task": "1", "summary": "gates"},
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "integrated", "task": "1", "summary": "integrated"},
+        ])
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_clean_serial_ledger_does_not_fire_new_checks(self):
+        repo, _ = self._git_repo()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            self.review(2, "APPROVED"), self.complete(2),
+            self.review(3, "APPROVED"), self.complete(3),
+        ])
+        r = self._run_in(repo, total="3")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_missing_ledger_is_usage(self):
         r = self.run_it()
         self.assertEqual(r.returncode, 2)
