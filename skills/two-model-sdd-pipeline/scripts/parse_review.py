@@ -74,6 +74,60 @@ def _try_parse_verdict(candidate):
     return None
 
 
+def _escape_unescaped_content_quotes(text):
+    """Best-effort repair for LLM JSON that leaves double quotes unescaped
+    inside string values (e.g. ``"loses the "how overdue" cue"``).
+
+    A ``"`` is treated as a delimiter when it is structurally positioned —
+    preceded (ignoring whitespace) by ``: , [ {`` or the start, or followed
+    (ignoring whitespace) by ``: , } ]`` or the end. Any other ``"`` is
+    content and gets escaped. Backslash escapes are passed through
+    untouched."""
+    out = []
+    i = 0
+    n = len(text)
+    structural_prev = set(":,{[")
+    structural_next = set(":,}]")
+    while i < n:
+        ch = text[i]
+        if ch == "\\" and i + 1 < n:
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        if ch != '"':
+            out.append(ch)
+            i += 1
+            continue
+        j = i - 1
+        while j >= 0 and text[j] in " \t\r\n":
+            j -= 1
+        prev = text[j] if j >= 0 else ""
+        k = i + 1
+        while k < n and text[k] in " \t\r\n":
+            k += 1
+        nxt = text[k] if k < n else ""
+        if prev == "" or prev in structural_prev or nxt == "" or nxt in structural_next:
+            out.append(ch)
+        else:
+            out.append('\\"')
+        i += 1
+    return "".join(out)
+
+
+def _fallback_verdict(text):
+    """Last-resort extraction when the JSON is too malformed to repair:
+    pull the ``"verdict"`` string plus a findings count by regex. The
+    pipeline only needs the verdict; minor lists are best-effort."""
+    match = re.search(r'"verdict"\s*:\s*"([^"]+)"', text)
+    if not match:
+        return None
+    obj = {"verdict": match.group(1)}
+    severities = len(re.findall(r'"severity"\s*:', text))
+    if severities:
+        obj["findings"] = [{} for _ in range(severities)]
+    return obj
+
+
 def extract_verdict(text):
     """Return the verdict dict parsed from *text*, or None if absent.
 
@@ -81,25 +135,28 @@ def extract_verdict(text):
     and returns the first dict that contains ``"verdict"``.  Tolerates
     prose before/after the JSON, ``````json`` fences, a single trailing
     comma before the final ``}``, newlines inside strings, and unicode
-    escapes.
+    escapes.  When the JSON is malformed beyond repair (a recurring
+    reviewer defect: unescaped content quotes), repairs the quotes and,
+    failing that, falls back to a regex verdict extraction.
     """
     if not text or not isinstance(text, str):
         return None
 
     # Strip ```json ... ``` fences if present (take the innermost block).
+    body = text
     fence_match = re.search(r"```(?:json)?\s*\n(.*?)\n\s*```", text, re.DOTALL)
     if fence_match:
-        text = fence_match.group(1)
+        body = fence_match.group(1)
 
     # Iterate every opening brace position – the verdict dict may not be
     # the first `{` in the text (e.g. prose containing braces).
     idx = 0
     while True:
-        start = text.find("{", idx)
+        start = body.find("{", idx)
         if start == -1:
             break
 
-        candidate = _extract_brace_block(text, start)
+        candidate = _extract_brace_block(body, start)
         if candidate is not None:
             verdict = _try_parse_verdict(candidate)
             if verdict is not None:
@@ -108,7 +165,17 @@ def extract_verdict(text):
         # Advance past this position to try the next `{`.
         idx = start + 1
 
-    return None
+    # Repair pass: escape unescaped content quotes and retry the whole block.
+    repaired = _escape_unescaped_content_quotes(body)
+    try:
+        obj = json.loads(repaired)
+        if isinstance(obj, dict) and "verdict" in obj:
+            return obj
+    except json.JSONDecodeError:
+        pass
+
+    # Last resort: regex verdict (+ findings count).
+    return _fallback_verdict(body)
 
 
 def extract_from_log(log_text):

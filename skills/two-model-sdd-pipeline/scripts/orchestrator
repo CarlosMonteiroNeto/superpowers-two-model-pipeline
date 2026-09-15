@@ -101,7 +101,19 @@ case "$action" in
         RED_GATE_BIN="$SCRIPT_DIR/red-gate"
       fi
     fi
-    "$RED_GATE_BIN" "$ws" "$task" || true
+    # rc 0 = green (the retry loop is inside), rc 2 = TEST_DEFECT (escalated,
+    # route emits ARBITRATE). Any other rc is an interrupted/unexpected
+    # dispatch (e.g. provider timeout rc=124): propagate it so run-pipeline
+    # reports BLOCKED instead of re-routing over a silent failure (5134b05).
+    rc=0
+    "$RED_GATE_BIN" "$ws" "$task" || rc=$?
+    case "$rc" in
+      0|2) ;;
+      *)
+        echo "ORCHESTRATOR: red-gate exit $rc on task $task - interrupted or unexpected; not re-routing" >&2
+        exit "$rc"
+        ;;
+    esac
     action=$(route)
     echo "OUTCOME: $action"
     exit 0
@@ -114,7 +126,15 @@ case "$action" in
     # session (round N's dispatch happened, its gate check did not) - drive
     # it the same way red-gate would have.
     CODER_GATE_BIN="${CODER_GATE_BIN:-${CODER_GATE:-$SCRIPT_DIR/coder-gate}}"
-    "$CODER_GATE_BIN" "$ws" "$task" || true
+    rc=0
+    "$CODER_GATE_BIN" "$ws" "$task" || rc=$?
+    case "$rc" in
+      0|2) ;;
+      *)
+        echo "ORCHESTRATOR: coder-gate exit $rc on task $task - interrupted or unexpected; not re-routing" >&2
+        exit "$rc"
+        ;;
+    esac
     action=$(route)
     echo "OUTCOME: $action"
     exit 0

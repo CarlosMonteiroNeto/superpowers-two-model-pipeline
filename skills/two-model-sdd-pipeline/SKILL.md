@@ -179,12 +179,14 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   (it treats the positional message as a file path and dies). Refuses
   (exit 3) when the targeted agent is not `mode: all`, so a silent fallback
   to the default agent can never break the tiers.
-- **`session-clean`** — manual session hygiene: deletes the opencode
-  sessions a task recorded (`task-N-*-session.txt`, per-agent only;
-  the generic record was removed as a trap). Never auto-run — the
-  orchestrator and `run-pipeline` keep sessions so corrective rounds and
-  debugging can resume them. Best-effort; `OPENCODE_BIN` overrides the
-  binary.
+- **`session-clean`** — session hygiene: deletes the opencode sessions a
+  task recorded (`task-N-*-session.txt`, per-agent only; the generic record
+  was removed as a trap). The per-task loop keeps sessions so corrective
+  rounds and debugging can resume them; a phase launcher runs
+  `session-clean WS all` after `run-pipeline` returns (and a DB-maintenance
+  tool prunes stragglers) so headless sessions cannot accumulate — unbounded
+  growth bloated `opencode.db` and contributed to a 2026-09-14 freeze.
+  Best-effort; `OPENCODE_BIN` overrides the binary.
 - **`route-next`** — deterministic router (see Approval Policy).
 - **`cmd`** — generic command runner (RTK compression; flutter test → `rtk
   test`, flutter analyze → `rtk err` wrapper derivation, verdict from the

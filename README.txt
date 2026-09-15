@@ -203,7 +203,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        manually)
   ledger-append        append one structured JSONL ledger entry
   red-gate             per-task kickoff: verify the scaffolded brief,
-                       dispatch Agente operador, chain coder-gate
+                       dispatch the lang-selected operador variant, chain
+                       coder-gate. An interrupted dispatch (opencode-timed
+                       rc=124) ledgers a terminal dispatch_interrupted entry;
+                       run-pipeline reports BLOCKED instead of a silent EXIT,
+                       and a re-run resumes at the same task
   coder-gate           owns the retry loop after the first dispatch: validates
                        the saved RED form with red-form-check, runs the gate
                        (auto-format before the Flutter check), ledgers
@@ -230,9 +234,14 @@ skills/two-model-sdd-pipeline/scripts/:
                        tells the resumed model the brief has CHANGED and to
                        re-read it fully; exit 3 when the targeted agent is
                        not mode: all
-  session-clean        manual cleanup: deletes the opencode sessions a task
-                       recorded (task-N-*-session.txt); never auto-run -
-                       sessions are kept for resume/debugging
+  session-clean        session hygiene: deletes the opencode sessions a task
+                       recorded (task-N-*-session.txt, per-agent only; the
+                       generic record was removed as a trap). The per-task loop
+                       keeps sessions for resume/debugging; a phase launcher
+                       runs it with 'all' after run-pipeline returns, and a DB
+                       tool (~/.config/opencode/tools/db-maintenance.py
+                       prune-sessions) prunes stragglers, so headless sessions
+                       never accumulate (opencode.db bloat / freeze guard)
   orchestrator         the single dispatch table: runs route-next, executes
                        the script-owned action (scaffold BRIEF, lang-selected
                        red-gate, coder-gate), prints OUTCOME for the runner
@@ -266,6 +275,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        reads JSONL event log, extracts structured verdict,
                        writes JSON file (exit 0 verdict written; 1 no
                        verdict / read error / write error; 2 usage).
+                       Tolerant of the revisor's recurring JSON defects
+                       (prose/fences, trailing comma, invalid backslash
+                       escapes, unescaped content quotes) so a malformed
+                       reply never blocks the run.
                        Run by Script CEO after the log lands.
 
 skills/brainstorming/scripts/:

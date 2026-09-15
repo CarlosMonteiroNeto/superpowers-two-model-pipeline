@@ -169,17 +169,46 @@ class TestOrchestratorExecutes(OrchestratorTestBase):
 
     def test_coder_round_hands_off(self):
         """route-next CODER is owned by the per-task scripts (red-gate already
-        dispatched C); the orchestrator records the outcome and hands back."""
+        dispatched C); the orchestrator executes coder-gate and hands back."""
         self.ledger([
             self.entry("brief_ready", 3, "task"),
             self.entry("red_check", 3, "RED"),
         ])
+        coder_gate = self.stub("coder-gate", "exit 0\n")
         r = run_script(
             "orchestrator", [str(self.ws), "3", "5"],
-            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+            cwd=self._tmp,
+            env_extra={"RTK_ENABLED": "0", "CODER_GATE": coder_gate},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("OUTCOME: CODER 3", r.stdout)
+
+    def test_interrupted_red_gate_rc_propagates(self):
+        """An interrupted red-gate (rc not 0/2) must stop the orchestrator with
+        that rc, not be swallowed into a re-route - run-pipeline blocks loudly."""
+        self.ledger([self.entry("brief_ready", 3, "task")])
+        red_stub = self.stub("red-gate", "exit 124\n")
+        r = run_script(
+            "orchestrator", [str(self.ws), "3", "5"],
+            cwd=self._tmp,
+            env_extra={"RTK_ENABLED": "0", "RED_GATE_BIN": red_stub},
+        )
+        self.assertEqual(r.returncode, 124, r.stdout + r.stderr)
+        self.assertNotIn("OUTCOME:", r.stdout)
+
+    def test_interrupted_coder_gate_rc_propagates(self):
+        self.ledger([
+            self.entry("brief_ready", 3, "task"),
+            self.entry("red_check", 3, "RED"),
+        ])
+        coder_gate = self.stub("coder-gate", "exit 3\n")
+        r = run_script(
+            "orchestrator", [str(self.ws), "3", "5"],
+            cwd=self._tmp,
+            env_extra={"RTK_ENABLED": "0", "CODER_GATE": coder_gate},
+        )
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertNotIn("OUTCOME:", r.stdout)
 
 
 class TestOrchestratorUsage(OrchestratorTestBase):

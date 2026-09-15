@@ -229,6 +229,8 @@ while true; do
   set -- $action
   act=$1
   case "$act" in
+    # BRIEF/RED/CODER are executed by the orchestrator (the single dispatch
+    # table) before it reports the re-routed OUTCOME back here.
     REVIEW)
       n=$2
       "$SCRIPT_DIR/parse-review" "$WS/task-$n-reviewer.log" "$WS/task-$n-review.json" \
@@ -332,8 +334,8 @@ print(max(cands) if cands else '')
           --log "$WS/task-$m-coder.log" \
           || block "operador dispatch failed for corrective task $m"
       fi
-      "$CODER_GATE_BIN" "$WS" "$m"
-      rc=$?
+      rc=0
+      "$CODER_GATE_BIN" "$WS" "$m" || rc=$?
       case "$rc" in
         0|2) ;;
         *) block "coder-gate exit $rc on corrective task $m - inspect logs" ;;

@@ -393,6 +393,24 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.assertIn("--continue OPERADOR-SESSION", dcalls)
         self.assertNotIn("GENERIC-REVIEWER-SESSION", dcalls)
 
+    def test_interrupted_red_gate_blocks_loudly(self):
+        """5134b05: an interrupted dispatch (provider timeout rc=124) must
+        surface as BLOCKED, never a silent EXIT - even now that run-pipeline
+        delegates RED to the orchestrator."""
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate()
+        interrupted = write_stub(self.stub_dir, "red-gate-interrupted",
+                                 "exit 124\n")
+        r = self.run_pipeline(
+            "--no-push",
+            RED_GATE_BIN=interrupted,
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("BLOCKED", r.stderr)
+
     def test_missing_plan_is_usage(self):
         r = subprocess.run(
             [BASH, str(SCRIPTS / "run-pipeline"), str(self._tmp / "nope.json")],
