@@ -65,7 +65,7 @@ recorded so it is never asked again for that branch.
 | Tool | Role |
 |---|---|
 | OpenCode | Harness (CLI + agent runtime); `opencode run --agent` is the headless dispatch mechanism |
-| Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline, apple-design (vendored interface-design principles; MIT) |
+| Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline, apple-design (vendored interface-design principles; MIT), write-script + skill-scripter (skill-authoring chain: audit a skill for scriptizable steps, then write the script) |
 | RTK (`rtk`) | CLI proxy that compresses command output before it reaches an LLM context window (60-90% token savings); wired through `scripts/cmd` |
 | Tavily | Programmatic web search for solution research |
 | pub.dev API | Package metadata, score, popularity, SDK constraints |
@@ -393,6 +393,8 @@ skills/two-model-sdd-pipeline/scripts/   <- run-pipeline, brief-scaffold, pipeli
                                              resolve-toolchain, doc-check, parse-review,
                                              task-run, touches-overlap, wave-next, ledger-merge, ledger-migrate,
                                              worktree-alloc, worktree-release, integrate
+skills/write-script/SKILL.md      <- deterministic-script conventions (one file per rule family)
+skills/skill-scripter/SKILL.md    <- audits a skill/stage for prose decisions that should be scripts
 ```
 
 ## 13. How to work with this harness

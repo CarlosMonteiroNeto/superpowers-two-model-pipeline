@@ -11,6 +11,7 @@ description: Use when creating new skills, editing existing skills, or verifying
 
 - **Skills are dev-facing artifacts: English-only**, same as specs, briefs, and ADRs — the UI-language exception in this fork's language policy never extends to skill files themselves.
 - **Prefer a deterministic script over an LLM judgment call whenever one is checkable.** When drafting a new skill's checklist, ask whether a step is "the LLM decides X" that could instead be "a script computes X and returns an exit code / verdict" (mirroring the `route-next` / gate pattern used throughout this fork). Reserve LLM calls for genuinely ambiguous, non-mechanical decisions.
+- **Scriptization is part of authoring a skill here — run the chain, don't leave it to memory.** Once a skill is drafted (or when editing an existing skill), invoke `skill-scripter` to audit it and the stage it governs for prose decisions, dead/duplicated scripts, and unbounded loops; it writes a scriptization plan (a `.md` under `docs/superpowers/specs/`). After the human partner approves the plan, implement each candidate with `write-script`, then rewrite the skill to **reference** the script instead of restating the procedure. `doc-check` will require `README.txt` / `README-LLM.md` to change in the same branch.
 - **If the new skill dispatches subagents**, it must go through `scripts/dispatch --agent NAME` (never inline prompts) and should be cache-aware (`--continue` on same-task resume) — see `dispatching-parallel-agents`'s integration note.
 
 

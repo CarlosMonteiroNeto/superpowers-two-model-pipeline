@@ -44,6 +44,18 @@ WHAT THIS FORK ADDS
    springs, momentum, materials, typography, reduced motion), and the revisor
    checks them.
 
+4. write-script + skill-scripter (new skills)
+   The fork's skill-authoring chain. skill-scripter audits a skill or pipeline
+   stage for decisions still settled by prose but mechanically decidable (and
+   for dead, duplicated, or unbounded-loop scripts), and writes a scriptization
+   plan under docs/superpowers/specs/. write-script then encodes the fork's
+   deterministic-script conventions (fixed exit-code family per script type,
+   ledger-append as the sole ledger writer, the cmd/dispatch boundaries,
+   idempotent re-runs, a resource-profile header, Windows git-bash rules, and
+   one unit test per script). writing-skills invokes the chain: draft the skill,
+   audit it with skill-scripter, implement approved items with write-script,
+   then have the skill reference the script instead of restating the procedure.
+
 PRINCIPLES
 ----------
 
@@ -417,6 +429,10 @@ skills/               the skills (SKILL.md per skill)
   two-model-sdd-pipeline/ the generic two-tier engine + scripts
   apple-design/           vendored Apple interface-design skill (MIT;
                           https://github.com/emilkowalski/skills)
+  write-script/           deterministic-script conventions (exit-code families,
+                          ledger sole-writer, resource header, unit tests)
+  skill-scripter/         audits a skill/stage for prose decisions that should
+                          be scripts; writes a scriptization plan
 
 LICENSE
 -------
