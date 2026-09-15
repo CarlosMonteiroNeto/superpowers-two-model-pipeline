@@ -6,7 +6,7 @@ share a wave only if their declared `touches` sets are disjoint.
 
 Usage: touches-overlap WORKSPACE ID [ID...]    (reads <ws>/plan.json)
 Exit codes: 0 = disjoint, 1 = overlap (conflicting pairs on stderr),
-            2 = usage / missing plan / unknown id.
+            2 = usage / missing plan / unknown id / malformed plan.
 
 Resource profile: dispatch none; stdout not LLM-facing; ledger read none
 (plan.json only); one Python pass; wall-clock trivial; git none.
@@ -26,8 +26,16 @@ def main():
     if not os.path.isfile(plan_path):
         print("TOUCHES-OVERLAP: no plan.json at {}".format(plan_path), file=sys.stderr)
         return 2
-    with open(plan_path, encoding="utf-8", errors="replace") as fh:
-        plan = json.load(fh)
+    try:
+        with open(plan_path, encoding="utf-8", errors="replace") as fh:
+            plan = json.load(fh)
+    except (ValueError, OSError):
+        print("TOUCHES-OVERLAP: unreadable plan.json at {}".format(plan_path),
+              file=sys.stderr)
+        return 2
+    if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
+        print("TOUCHES-OVERLAP: plan.json has no tasks list", file=sys.stderr)
+        return 2
     touches = {str(t.get("id")): set(t.get("touches", []))
                for t in plan.get("tasks", [])}
     unknown = [i for i in ids if i not in touches]

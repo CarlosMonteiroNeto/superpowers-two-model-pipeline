@@ -38,6 +38,8 @@ class TouchesOverlapTest(unittest.TestCase):
     def test_overlap_is_one_and_names_files(self):
         r = self.run_it(1, 3)
         self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stdout, "")
+        self.assertIn("1 and 3", r.stderr)
         self.assertIn("src/shared.go", r.stderr)
 
     def test_single_id_is_disjoint(self):
@@ -48,6 +50,10 @@ class TouchesOverlapTest(unittest.TestCase):
 
     def test_missing_plan_is_usage(self):
         (self.ws / "plan.json").unlink()
+        self.assertEqual(self.run_it(1, 2).returncode, 2)
+
+    def test_malformed_plan_is_usage(self):
+        (self.ws / "plan.json").write_text("{not json", encoding="utf-8")
         self.assertEqual(self.run_it(1, 2).returncode, 2)
 
     def test_no_args_is_usage(self):
