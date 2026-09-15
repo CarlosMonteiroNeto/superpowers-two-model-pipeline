@@ -307,15 +307,11 @@ else
         wt_ws=$(printf '%s\n' "$out" | sed -n 's/^WS=//p')
         [ -n "$wt" ] && [ -n "$wt_ws" ] \
           || block "worktree-alloc task $n printed no WORKTREE=/WS= (recovery)"
-        # Re-open the corrective episode deterministically: a SEND_BACK review
-        # in the worktree ledger plus the review.json task-run's CORRECTIVE
-        # branch reads. Without it the stale task_complete makes route-next
-        # no-op and integrate fails deterministically forever.
-        "$SCRIPT_DIR/ledger-append" "$wt_ws/ledger.jsonl" review_outcome "$n" \
-          "SEND_BACK" "findings=1" \
-          || block "failed to inject SEND_BACK for task $n"
-        printf '%s\n' '{"verdict":"SEND_BACK","findings":[{"severity":"Important","message":"integration failed"}]}' \
-          > "$wt_ws/task-$n-review.json"
+        # No episode is injected (controller ruling): route-next's has_complete
+        # rule fires before its SEND_BACK rule, so an injected SEND_BACK would
+        # be inert - and after a successful re-integrate it would be folded
+        # into the global ledger and poison final-gate ("last review
+        # unresolved: SEND_BACK"). The task's real history stays untouched.
         total=$(total_now)
         rc=0
         ( cd "$wt" && "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \

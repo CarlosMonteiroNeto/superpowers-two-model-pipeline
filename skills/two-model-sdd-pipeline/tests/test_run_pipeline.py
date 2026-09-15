@@ -616,7 +616,11 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         makes exactly ONE corrective attempt in the failed task's existing
         worktree (reusing it - worktree-alloc exit 1 still reports the paths),
         then blocks for a human. `_timeout` converts any regression to an
-        unbounded loop into a fast TimeoutExpired instead of a hung suite."""
+        unbounded loop into a fast TimeoutExpired instead of a hung suite.
+        The recovery must NOT inject a SEND_BACK episode: it is inert in
+        route-next (has_complete wins) and, once a re-integrate succeeds,
+        ledger-merge folds it into the integration ledger where it poisons
+        final-gate with 'last review unresolved: SEND_BACK'."""
         tasks = [
             {"id": 1, "title": "A", "summary": "Add a.", "spec_refs": ["s1"],
              "touches": ["lib/a.go"], "depends_on": [],
@@ -639,21 +643,23 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("still fails integration after one corrective", r.stderr)
         self.assertIn("task 1", r.stderr)
-        # The corrective episode was injected into the worktree ledger - and
-        # exactly once (recovery is bounded to one attempt per task per run).
+        # Regression guard for the SEND_BACK poisoning: the recovery must not
+        # inject an episode anywhere. Checking the worktree shard is what
+        # fails against the pre-fix script; checking the integration ledger is
+        # what protects final-gate once a re-integrate succeeds and folds the
+        # shard.
         wt_ws = (self.repo / ".superpowers" / "two-model" / "worktrees"
                  / "task-1" / ".superpowers" / "two-model" / "plan")
-        entries = [
-            json.loads(line)
-            for line in (wt_ws / "ledger.jsonl").read_text(
-                encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-        sends = [e for e in entries
-                 if e.get("type") == "review_outcome"
-                 and e.get("summary") == "SEND_BACK"]
-        self.assertEqual(len(sends), 1, entries)
-        self.assertTrue((wt_ws / "task-1-review.json").is_file())
+        for path in (self.ws() / "ledger.jsonl", wt_ws / "ledger.jsonl"):
+            entries = [
+                json.loads(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            sends = [e for e in entries
+                     if e.get("type") == "review_outcome"
+                     and e.get("summary") == "SEND_BACK"]
+            self.assertEqual(sends, [], (str(path), entries))
 
 
 if __name__ == "__main__":
