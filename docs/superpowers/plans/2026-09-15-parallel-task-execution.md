@@ -1364,7 +1364,16 @@ else
 fi
 ```
 
-Fill the serial branch with Task 9's exact loop. Any task the integrator failed is already ledgered `integration_failed`; the next `wave-next` re-emits it alone (Task 8's rules), so the loop self-heals without special-casing.
+Fill the serial branch with Task 9's exact loop.
+
+**Integration-failure recovery (bounded) — supersedes the earlier "re-emits it alone / self-heals" claim, which was wrong** (a re-emitted failed task keeps its worktree — `worktree-alloc` returns `1` — and its worktree ledger already holds `task_complete`, so `task-run` no-ops and `integrate` fails deterministically forever). After `integrate "$WS" $ids`:
+- Capture `int_rc` (`|| int_rc=$?`); on `= 0` continue the wave loop.
+- On non-zero, compute the failed ids (those whose newest `integration_failed` postdates their newest completion) and, for each in ascending order:
+  1. `worktree-alloc "$WS" "$n"`; accept exit `0` **or** `1` (already allocated) and parse `WORKTREE=`/`WS=` from either.
+  2. Open a corrective episode deterministically: append `review_outcome "$n" "SEND_BACK" findings=1` to the **worktree** ledger and write `<wt_ws>/task-$n-review.json` containing a minimal `{"verdict":"SEND_BACK","findings":[{"severity":"Important","message":"integration failed"}]}` (the shape `task-run`'s CORRECTIVE branch reads).
+  3. `( cd "$wt" && task-run "$wt_ws" "$n" "$(total_now)" )` — alone (max-parallel 1); ledger a fresh commit via the normal gate chain.
+  4. `integrate "$WS" "$n"` again. If it still fails, `block "task $n still fails integration after one corrective"` — a human blocker beats an unbounded loop.
+- The recovery is **bounded**: one corrective attempt per failed task per run; it never loops.
 
 - [ ] **Step 4: Run and watch them pass**
 

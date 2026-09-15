@@ -221,6 +221,13 @@ run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]
   ```
 - Excess ready tasks beyond `N` are simply deferred: `wave-next` never emits more than
   `N`, so the next loop iteration picks them up.
+- Integration-failure recovery is **bounded**: on `integrate` exit `1` the driver
+  re-opens each failed task for **one** corrective round inside its existing worktree
+  (`worktree-alloc` exit `1` = reuse; the driver re-injects a `SEND_BACK` episode so
+  `task-run`'s corrective path runs) and re-integrates that task alone; a second failure
+  blocks with a human-readable message. It never loops unbounded (a re-emitted failed
+  task cannot self-heal by itself: its worktree already holds `task_complete`, so
+  `task-run` no-ops).
 - Closing (`final-gate` → package → diretor) and push/PR are unchanged except for the
   new `final-gate` checks.
 
