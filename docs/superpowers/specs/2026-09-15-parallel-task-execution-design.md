@@ -221,13 +221,16 @@ run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]
   ```
 - Excess ready tasks beyond `N` are simply deferred: `wave-next` never emits more than
   `N`, so the next loop iteration picks them up.
-- Integration-failure recovery is **bounded**: on `integrate` exit `1` the driver
-  re-opens each failed task for **one** corrective round inside its existing worktree
-  (`worktree-alloc` exit `1` = reuse; the driver re-injects a `SEND_BACK` episode so
-  `task-run`'s corrective path runs) and re-integrates that task alone; a second failure
-  blocks with a human-readable message. It never loops unbounded (a re-emitted failed
-  task cannot self-heal by itself: its worktree already holds `task_complete`, so
-  `task-run` no-ops).
+- Integration-failure recovery is **bounded and does not self-heal**. On `integrate`
+  exit `1` the driver makes exactly **one** re-attempt per failed task (reusing the
+  existing worktree — `worktree-alloc` exit `1` — and running `task-run` alone), then
+  **blocks** with an actionable message if it still fails; it never loops unbounded.
+  A true in-place corrective is **deferred**: re-opening a task that already has
+  `task_complete` is forbidden by `route-next`'s decision order (the `has_complete`
+  rule fires before the `SEND_BACK` rule), so an injected episode is inert. Changing
+  that order means changing the already-reviewed router (the C1 `ARBITRATE` work) and
+  is out of scope here. This is consistent with the fork's stance that a human blocker
+  beats a silent/unbounded spend.
 - Closing (`final-gate` → package → diretor) and push/PR are unchanged except for the
   new `final-gate` checks.
 
