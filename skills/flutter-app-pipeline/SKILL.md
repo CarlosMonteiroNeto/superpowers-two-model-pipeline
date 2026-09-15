@@ -102,15 +102,16 @@ Gate logic (reported by `pkg-score` / `template-score` as the verdict):
 
 Delegate to `two-model-sdd-pipeline`. The gate records `flutter test` as the test command and `flutter analyze` as the analysis command.
 
-Flutter-specific additions to the per-task loop (script-autonomous —
-Agente diretor expands the plan tasks once per branch; Script CEO scaffolds
-each brief and receives feedback only through script outputs; dispatch is
-owned by scripts):
+Flutter-specific additions to the per-task loop (script-autonomous — the plan
+arrives complete from brainstorming, so there is no expand hop: Agente diretor is
+a punctual corrective/arbitrate/closing owner (ADR-0008); Script CEO scaffolds
+each brief with `brief-scaffold` and receives feedback only through script
+outputs; dispatch is owned by scripts):
 
 1. **Download & resolve — `scripts/pub-sync`** (deterministic, no LLM). Download what Phase 2 decided, update the lockfile, report version conflicts from `pub upgrade --dry-run` to a file.
-2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment). Verifies the scaffolded brief exists (statement, acceptance, `EXPECTED-RED:` from the task's `expected_red`), ledgers `red_check`, and dispatches Agente operador headlessly (Item 4 — `scripts/dispatch --agent two-model-coder`), then chains into `coder-gate`. Agente operador authors the RED tests, runs them itself to confirm the expected failure, and saves the output; `coder-gate` verifies that evidence contains `expected_red` (coder-owned RED, ADR-0007).
+2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment; a thin shim over the generic two-model red-gate). Verifies the scaffolded brief exists (statement, acceptance, spec_refs, and the machine-readable RED instructions `brief-scaffold` writes — never hand-written), ledgers `red_check`, dispatches the lang-selected operador headlessly (`coder-agent-for` maps `flutter` → `two-model-coder` via `scripts/dispatch`), then chains into `coder-gate`. Agente operador authors the RED tests, RUNS them itself, saves the runner's machine-readable output, and declares/confirms the expected reason; `coder-gate` validates that saved RED **form** with `red-form-check` (suite loaded, ≥1 test executed, failed as assertion/runtime) — never an `expected_red` substring (coder-owned RED, ADR-0007).
 3. **Operador RED/GREEN loop** — Operational tier (`two-model-coder`). Owns its RED/GREEN loop: runs the RED tests to confirm the expected failure, then implements and runs them green (ADR-0007). Script CEO runs the authoritative gate (task tests → full suite → `flutter analyze`) by exit code and feeds failures back. Unbounded retries until green via `--continue --session`; the loop never hands back for help — only `TEST_DEFECT` (acceptance unsatisfiable) escalates to `ARBITRATE` (Agente diretor rules).
-4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` + format check + commit in one script. Green (RED evidence already verified) → commits, ledger-appends, builds the review package, and **dispatches Agente revisor headlessly** (Item 3 — `scripts/dispatch --agent two-model-reviewer`). Not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix. `--no-commit` validates only (no commit, no dispatch).
+4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` (both through `scripts/cmd`) + commit in one script. There is no format step: `coder-gate` auto-applies the formatter before the gate, so drift never reaches it (M8). The `keep-discard` scope gate runs first (C2). Green (RED form already verified) → commits, appends the `commit` ledger entry, wires the advisory `interface-check`, builds the review package, and **dispatches Agente revisor headlessly** (Item 3 — `scripts/dispatch --agent two-model-reviewer`). Not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix. `--no-commit` validates only (no commit, no dispatch).
 5. **Agente revisor** — `two-model-reviewer`, Strategic, reviews compiler-approved code only (Item 2 — never runs test/analyze) plus test-vs-acceptance fit. Returns a structured JSON verdict (APPROVED / SEND_BACK / ESCALATE + findings + minors). Context kept within the task's correction loops (ADR-0003); minors PARKED for closing.
 6. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. `flutter test` → `rtk test` and `flutter analyze` → `rtk err` wrapper derivation (verdict always from the raw run — RTK wrappers mask child exit codes). Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
 7. **No knowledge graph.** The pipeline runs with no graph stage: no script builds, updates, or queries a code graph. Briefs are scaffolded from plan tasks; the revisor reviews brief + diff only.
@@ -177,6 +178,6 @@ GitHub REST rate limit is 60 req/h unauthenticated, 5000 req/h authenticated. Ba
 1a Commercial Requirements → 1b Generic Architecture
   → [project-level] 2a template-search + template-score (specific category first, stars descending, 3-AUTO_APPROVE stop)
   → [per task] 2a package research + pkg-score → 2b Selection (developer) → 2c writing-plans tasks (lockfile only; template: clone + gap analysis seeds plan tasks)
-  → 3 two-model loop, script-autonomous (pub-sync → red-gate → dispatch operador → gates incl. RED-evidence check → green-gate → dispatch revisor → route-next)
+  → 3 two-model loop, script-autonomous (pub-sync → red-gate → dispatch operador → gates incl. red-form-check → green-gate → dispatch revisor → route-next)
   → 4 green-gate --no-commit + full review → done
 ```

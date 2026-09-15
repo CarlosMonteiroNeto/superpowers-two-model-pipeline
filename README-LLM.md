@@ -237,6 +237,9 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   its exit code. `red-form-check` additionally validates the operador's saved
   machine-readable RED (suite loaded, ≥1 test executed, failed as
   assertion/runtime) before green is approved.
+- **Docs describe implemented behavior:** skill/integration docs must match the
+  scripts — no `expected_red` step (ADR-0007) and no `green-gate` format gate
+  (M8); stale claims are corrected in the same change as the code.
 - **Routing is scripted:** after every review outcome (and every earlier
   ledgered transition) run `route-next` and execute its emitted action — the
   LLM never decides "APPROVED → next task" or "SEND_BACK → corrective" by

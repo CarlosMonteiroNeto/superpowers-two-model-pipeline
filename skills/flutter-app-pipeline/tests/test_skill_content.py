@@ -81,9 +81,19 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         self.assertIn("70", text)
         self.assertIn("50", text)
 
-    def test_expected_red_reason_documented(self):
+    def test_red_contract_is_form_checked_not_expected_red(self):
+        """ADR-0007: the brief carries acceptance + machine-readable RED
+        instructions and `red-form-check` validates the form - there is no
+        EXPECTED-RED / expected_red step in the plan or the brief."""
         text = self.skill.read_text(encoding="utf-8")
-        self.assertIn("EXPECTED-RED", text)
+        self.assertNotIn("EXPECTED-RED", text)
+        self.assertIn("red-form-check", text)
+
+    def test_green_gate_has_no_format_gate(self):
+        """M8: formatting drift is auto-applied by coder-gate before the
+        gate, so green-gate has no format step."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertNotIn("format check", text)
 
     def test_apple_design_governs_interface_design(self):
         """Every interface the pipeline designs is governed by the vendored
