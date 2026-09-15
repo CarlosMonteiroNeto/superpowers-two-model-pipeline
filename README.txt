@@ -187,8 +187,45 @@ skills/flutter-app-pipeline/scripts/:
 
 skills/two-model-sdd-pipeline/scripts/:
   run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]
-                       [--no-push]; loops route-next -> execute to closing
-                       -> push+PR. Invokable anywhere, no estrategista loop
+                       [--no-push] [--max-parallel N]; drives the plan
+                       serially (N == 1) or in plan-derived waves (N > 1,
+                       default 2) to closing -> push+PR. Invokable anywhere,
+                       no estrategista loop
+  touches-overlap      declared-touches pairwise disjointness decider (two
+                       tasks share a wave only when their touches are
+                       disjoint; exit 0 disjoint; 1 overlap; 2 usage)
+  wave-next            plan-derived wave scheduler: reads plan.json + the
+                       merged ledger, prints FINAL_REVIEW or one RUN <id>
+                       per ready, touches-disjoint task (capped at
+                       MAX_PARALLEL, default 2); a corrective/open-episode
+                       task is emitted alone (exit 0 emitted/FINAL_REVIEW;
+                       1 WAVE_EMPTY blocked; 2 usage)
+  ledger-merge         fold per-worktree ledger shards into the integration
+                       ledger through ledger-append (skips gate entries and
+                       content-identical duplicates; rebuilds partitions;
+                       exit 0 merged; 1 append failed; 2 usage)
+  ledger-migrate       rebuild the per-task ledger partitions; deferred while
+                       a wave is in flight (unmatched worktree_alloc)
+  worktree-alloc       allocate one git worktree + task/<N> branch for a
+                       parallel task, seed its workspace (plan.json + a
+                       ledger shard with only the branch gate entry), ledger
+                       worktree_alloc, print WORKTREE=/WS= (exit 0 allocated;
+                       1 already allocated - still prints the paths; 2 usage)
+  worktree-release     remove a task worktree + branch once the branch tip is
+                       merged into the integration HEAD; never removes on
+                       failure (exit 0 released; 1 not merged/not found;
+                       2 usage)
+  task-run             per-task lifecycle extracted from run-pipeline: loops
+                       orchestrator and owns the REVIEW/CORRECTIVE/ARBITRATE
+                       branches until the task is APPROVED or blocked; runs
+                       in the serial root or inside a wave worktree (exit 0
+                       complete; 1 blocked/escalated; 2 usage)
+  integrate            script-owned serial integration gate: per task, merge
+                       task/<N> (ascending id), run the FULL suite after each
+                       merge, commit on green, ledger integrated + merge the
+                       shard + release the worktree; on conflict/red abort
+                       only that merge and ledger integration_failed (exit 0
+                       all integrated; 1 >=1 integration_failed; 2 usage)
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
@@ -310,6 +347,30 @@ sole independent semantic guarantee of test-vs-acceptance fit.
 Routing is scripted too: after every ledgered outcome Script CEO runs
 `route-next` and executes the action it emits - the LLM never decides
 "review passed -> next task" or "failed -> corrective" by reasoning.
+
+PARALLEL TASK EXECUTION
+-----------------------
+
+run-pipeline can run mutually independent tasks concurrently without changing
+the founding rule (LLMs reason; scripts decide). Pass `--max-parallel N`:
+
+  - The plan's `depends_on` and `touches` are scheduling-authoritative. A
+    "wave" is the ready tasks (all depends_on done, not yet complete) whose
+    `touches` are pairwise disjoint, capped at N. `wave-next` computes it;
+    the LLM never infers it (ADR-0010).
+  - Each wave task gets its own git worktree + `task/<N>` branch and its own
+    ledger shard (`worktree-alloc`); `task-run` drives it inside that
+    worktree, so a task's files and its session never contend with a sibling.
+  - `integrate` folds the wave back in ascending id order, running the FULL
+    suite after EACH individual merge and aborting only the failing merge, so
+    the integration branch is never left red. The task's shard is then merged
+    into the integration ledger (ADR-0011/0012).
+  - Default is `--max-parallel 2`. `--max-parallel 1` reproduces the exact
+    pre-wave serial flow (no worktrees, no integration) - the regression
+    contract.
+  - Integration failure is a bounded blocker: one re-attempt in the task's
+    existing worktree, then a human block. It never self-heals in a loop; a
+    true in-place corrective is deferred.
 
 KEEPING THE HARNESS IN SYNC
 ---------------------------

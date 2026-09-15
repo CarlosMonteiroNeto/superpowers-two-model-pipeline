@@ -80,6 +80,28 @@ Persistence — architectural path only).
   (`two-model-coder-{python,node,rust,go}`) whose bash allowlist can run that
   ecosystem's tests; used by both red-gates, coder-gate, and the corrective path.
 
+## Parallel task execution (2026-09-15)
+
+- **wave** — a maximal set of ready tasks with pairwise-disjoint `touches`,
+  capped by `--max-parallel` (default 2). Computed by `wave-next` from
+  `plan.json` + the merged ledger; never inferred by an LLM (ADR-0010). A task
+  is **ready** when every id in `depends_on` is complete and it is not itself
+  complete; **complete** means a `task_complete` (or `integrated`) entry with no
+  newer `integration_failed`.
+- **ledger shard** — the per-worktree workspace ledger
+  (`<worktree>/.superpowers/two-model/<slug>/ledger.jsonl`). A worktree has its
+  own toplevel, so `pipeline-workspace` gives it its own workspace; the shard is
+  seeded with only the branch `gate` entry. On wave close `ledger-merge` folds it
+  into the integration ledger through `ledger-append` (ADR-0011).
+- **integration branch** — the branch `run-pipeline` runs on; task branches
+  (`task/<N>`) are merged into it one at a time by `integrate`. It is never left
+  red: a conflict/red/commit failure aborts only the failing merge and ledgers
+  `integration_failed` (ADR-0012).
+- **task worktree** — one git worktree under
+  `.superpowers/two-model/worktrees/task-<N>` on branch `task/<N>`, allocated by
+  `worktree-alloc` from the integration HEAD and released by `worktree-release`
+  only once the branch tip is proven merged (ADR-0011).
+
 ## Context and cost rules
 
 - **Context retention:** operador and revisor keep their sessions until the
@@ -138,3 +160,20 @@ pub.dev dependency-research target in Phase 2a.
 - Holistic review stays artifact-driven (plan + spec + diff + ledger); the fix
   for missing holism is a stronger spec, not reopening the brainstorming session.
 - ADR-0008 records this and supersedes ADR-0006 (amends ADR-0001/0007).
+
+## Decision points locked during brainstorming (2026-09-15)
+
+- Parallel tasks: `depends_on` + `touches` are scheduling-authoritative; waves
+  are computed by `wave-next`, never inferred by an LLM (ADR-0010).
+- Isolation: one git worktree + `task/<N>` branch per task, with a per-worktree
+  ledger shard merged by the integrator (ADR-0011).
+- Integration: `integrate` is a script-owned serial merge gate, full suite after
+  each merge, aborting only the failing merge (ADR-0012).
+- Defaults: `--max-parallel 2`; `--max-parallel 1` reproduces the exact serial
+  flow (no worktrees, no `integrate`).
+- Integration failure is a bounded blocker that does not self-heal: exactly one
+  re-attempt per failed task in its existing worktree, then a human block. A
+  true in-place corrective (re-opening a `task_complete` task) is **deferred** —
+  `route-next`'s `has_complete` rule fires before `SEND_BACK`, so an injected
+  episode would be inert; changing that order means changing the reviewed router
+  and is out of scope.
