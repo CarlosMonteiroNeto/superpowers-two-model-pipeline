@@ -141,6 +141,7 @@ exit 0
             """
 ws=$1; task=$2
 append="${LEDGER_APPEND_BIN:?}"
+[ -n "${STUB_PLAN_LOG:-}" ] && printf '%s\\n' "${PLAN:-}" >> "$STUB_PLAN_LOG"
 mkdir -p wave
 printf 'task %s\\n' "$task" > "wave/task-$task.txt"
 git add "wave/task-$task.txt"
@@ -610,6 +611,42 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         leftovers = sorted(p.name for p in wt_root.iterdir()) \
             if wt_root.exists() else []
         self.assertEqual(leftovers, [])
+
+    def test_wave_task_run_receives_worktree_tracked_plan(self):
+        """Item 2: the wave task-run must be handed the WORKTREE's tracked
+        plan path, not the worktree's gitignored workspace plan.json. Only
+        then does a diretor corrective/arbitration edit land in a tracked file
+        the task's gate chain can commit (the workspace copy is disposable)."""
+        tasks = [
+            {"id": 1, "title": "A", "summary": "Add a.", "spec_refs": ["s1"],
+             "touches": ["lib/a.go"], "depends_on": [],
+             "acceptance": ["a works"]},
+            {"id": 2, "title": "B", "summary": "Add b.", "spec_refs": ["s1"],
+             "touches": ["lib/b.go"], "depends_on": [],
+             "acceptance": ["b works"]},
+        ]
+        self.write_plan(tasks)
+        self.write_gate()
+        plan_log = self._tmp / "task-run-plan.log"
+        r = self.run_pipeline(
+            "--no-push", "--max-parallel", "2",
+            RED_GATE_BIN=self.fake_red_gate_committing(),
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            STUB_PLAN_LOG=str(plan_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        plans = [p.strip() for p in plan_log.read_text(
+                     encoding="utf-8").splitlines() if p.strip()]
+        self.assertEqual(len(plans), 2, plans)
+        ws_plan = str(self.ws() / "plan.json").replace("\\", "/")
+        for p in plans:
+            norm = p.replace("\\", "/")
+            self.assertIn("/worktrees/task-", norm, p)
+            self.assertTrue(norm.endswith("docs/superpowers/plans/plan.json"),
+                            p)
+            self.assertNotEqual(norm, ws_plan, p)
 
     def test_integration_failure_recovery_is_bounded_and_blocks(self):
         """Critical: a failed integrate must not loop forever. The driver

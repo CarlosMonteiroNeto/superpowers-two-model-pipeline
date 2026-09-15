@@ -365,9 +365,10 @@ the founding rule (LLMs reason; scripts decide). Pass `--max-parallel N`:
     suite after EACH individual merge and aborting only the failing merge, so
     the integration branch is never left red. The task's shard is then merged
     into the integration ledger (ADR-0011/0012).
-  - Default is `--max-parallel 2`. `--max-parallel 1` reproduces the exact
-    pre-wave serial flow (no worktrees, no integration) - the regression
-    contract.
+  - Default is `--max-parallel 2`. `--max-parallel 1` is the serial path,
+    behavior-preserving (advances via `route-next` instead of `first_incomplete`;
+    the ledger sequence is asserted by a regression test) - no worktrees, no
+    integration - the regression contract.
   - Integration failure is a bounded blocker: one re-attempt in the task's
     existing worktree, then a human block. It never self-heals in a loop; a
     true in-place corrective is deferred.

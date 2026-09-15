@@ -204,9 +204,10 @@ run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]
 ```
 
 - `N` default `2`.
-- **`N == 1`**: the existing serial loop, unchanged (task-run in the repo root, no
-  worktrees, no `integrate`). This is the explicit regression contract: today's exact
-  flow stays reachable.
+- **`N == 1`**: the serial path is behavior-preserving (advances via `route-next`
+  instead of `first_incomplete`; the ledger sequence is asserted by a regression test) —
+  task-run in the repo root, no worktrees, no `integrate`. This is the explicit
+  regression contract: the serial flow stays reachable.
 - **`N > 1`**: wave loop
   ```
   loop:
@@ -266,7 +267,9 @@ plan.json ──> wave-next ──> RUN 3 / RUN 5
 ### 3.4 Error handling
 
 - **Merge conflict** → `merge --abort`, `integration_failed N conflict`; the task stays
-  un-integrated, goes to a serial corrective, re-runs in its own worktree, re-integrates.
+  un-integrated and is a bounded, non-self-healing blocker: exactly one re-integrate
+  attempt in its existing worktree (meaningful for an un-approved task; a no-op for a
+  conflict on an approved one), then a human block (§3.2).
 - **Post-merge gate red** → `merge --abort`, `integration_failed N gates`; same path.
 - **Dispatch interrupted** (`rc=124`) → already terminal via `dispatch_interrupted`
   (`red-gate:64-74`); `task-run` returns non-zero and the task is not integrated.
@@ -293,8 +296,9 @@ Standard `unittest` suites in `skills/two-model-sdd-pipeline/tests/` (run by
   `integration_failed conflict`; gate-red → abort + `integration_failed gates`; the
   suite runs **after each merge** (assert via a fake gate that fails on the 2nd merge).
 - `task-run`: single-task behavior identical to today's inline loop.
-- `run-pipeline --max-parallel 1`: regression — same ledger sequence and commits as the
-  pre-change serial flow.
+- `run-pipeline --max-parallel 1`: regression — the serial path is behavior-preserving
+  (advances via `route-next` instead of `first_incomplete`; the ledger sequence is
+  asserted by a regression test).
 - `final-gate`: each new blocker fires, and none false-positives on a clean serial run.
 
 ### 3.6 Script conventions (binding — `write-script`)
@@ -401,7 +405,9 @@ Each wave leaves the tree green and the serial path intact.
 2. **Ledger shards** — `ledger-merge` + tests; `ledger-migrate` concurrency guard.
 3. **Worktrees** — `worktree-alloc` / `worktree-release` + tests.
 4. **Scheduler** — `wave-next` + tests.
-5. **Extraction** — `task-run` (pure refactor; serial behavior byte-identical).
+5. **Extraction** — `task-run` (pure refactor; the serial path is behavior-preserving —
+   advances via `route-next` instead of `first_incomplete`; the ledger sequence is
+   asserted by a regression test).
 6. **Integrator** — `integrate` + `final-gate` additions + tests.
 7. **Driver** — `run-pipeline` wave loop + `--max-parallel` (default 2), with the
    `--max-parallel 1` regression test.

@@ -8,9 +8,13 @@
 # Wave:   wave-next emits the next ready, touches-disjoint wave -> each task is
 #   isolated by worktree-alloc and run by task-run inside its worktree ->
 #   integrate folds the wave's branches into HEAD (per-merge full suite, per
-#   task ledger shard). A failed integration gets ONE bounded corrective
-#   attempt in the task's existing worktree, then re-integrates; a second
-#   failure blocks for a human (never an unbounded re-emit loop).
+#   task ledger shard). Integrate only merges an approved task (its shard
+#   holds `task_complete`); an un-approved sibling is skipped and left for the
+#   recovery. A failed integration gets ONE bounded re-integrate attempt in
+#   the task's existing worktree - meaningful for an un-approved task (its
+#   gate chain can still approve it), a no-op for a conflict/gate failure on
+#   an approved one - then a second failure blocks for a human (never an
+#   unbounded re-emit loop).
 # Both paths converge on closing -> push+PR.
 # No Agente estratégico in the loop: briefs are scaffolded, tasks come from
 # Agente diretor, gates decide, revisor judges. Resumable: re-running on the
@@ -23,8 +27,9 @@
 #                 corrective tasks appended mid-run are counted automatically)
 #   --no-push     stop after the closing assessment (no push/PR) - also for tests
 #   --max-parallel N  max tasks per wave (integer >= 1; default 2). N == 1 is
-#                 the pre-wave serial path (no worktrees, no integrate) - the
-#                 explicit regression contract.
+#                 the serial path (behavior-preserving: advances via
+#                 route-next instead of first_incomplete, ledger sequence
+#                 asserted by a regression test; no worktrees, no integrate).
 #
 # Env:
 #   TASK_RUN_BIN  override the per-task loop (default: this dir's task-run)
@@ -70,6 +75,18 @@ ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "RUN-PIPELINE: not i
 # relative PLAN would dangle afterwards.
 PLAN=$(python3 -c "import os,sys; print(os.path.abspath(sys.argv[1]))" "$PLAN")
 cd "$ROOT" || { echo "RUN-PIPELINE: cannot cd to $ROOT" >&2; exit 2; }
+# The tracked plan relative to the integration root. The wave path hands
+# task-run the WORKTREE's copy of this tracked plan (see wave_plan), so a
+# diretor corrective/arbitration edit lands in a tracked file instead of the
+# worktree's gitignored workspace plan.json. `realpath` resolves both sides to
+# the same spelling first: git prints `C:/Users/...` while native Python may
+# print an 8.3 short name (`C:\Users\CARLOS~1\...`), and a raw prefix strip
+# would silently miss.
+PLAN_REL=$(python3 -c "import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))" "$PLAN" "$ROOT" 2>/dev/null || true)
+PLAN_REL=${PLAN_REL//\\//}
+case "$PLAN_REL" in
+  ""|..*|/*) PLAN_REL="" ;;
+esac
 WS=$("$SCRIPT_DIR/pipeline-workspace" "$PLAN") || exit 2
 # pipeline-workspace prints pwd in POSIX form (/c/...) on Git Bash, which
 # native Windows Python cannot open - normalize once, here, for every
@@ -207,6 +224,19 @@ for t in out:
 " "$LEDGER" "$WS/plan.json" | tr -d '\r'
 }
 
+wave_plan() {
+  # wave_plan WORKTREE ; print the worktree-resident tracked plan path. The
+  # diretor edits the plan path it is given, so a corrective/arbitration must
+  # be pointed at the WORKTREE's tracked copy (committed by that task's gate
+  # chain) rather than the worktree's gitignored workspace plan.json, whose
+  # edits are lost. Falls back to $PLAN when it is not under the root.
+  if [ -n "$PLAN_REL" ]; then
+    printf '%s/%s' "$1" "$PLAN_REL"
+  else
+    printf '%s' "$PLAN"
+  fi
+}
+
 # --- toolchain gate entry (once per branch) ---
 if ! grep -qE '"type": *"gate"' "$LEDGER" 2>/dev/null; then
   say "no gate entry - resolving toolchain"
@@ -226,11 +256,15 @@ tasks_usable || block "plan has no usable tasks (every task needs acceptance) - 
 # same plan resumes correctly; no worktrees, no integrate.
 # Wave (MAX_PARALLEL > 1): wave-next computes the next ready, touches-disjoint
 # wave from plan + ledger; each task runs in its own worktree in parallel;
-# integrate merges the wave and the loop re-derives. A non-zero integrate
-# gets ONE bounded corrective attempt per failed task in that task's existing
-# worktree, then re-integrates it alone; a second failure is a human blocker
-# (a re-emitted failed task cannot self-heal - its worktree ledger already
-# holds task_complete, so task-run would no-op).
+# integrate merges the wave and the loop re-derives. Integrate skips a task
+# whose shard lacks `task_complete` (`integration_failed not approved`), so a
+# committed-but-unapproved sibling never lands. A non-zero integrate gets ONE
+# bounded re-integrate attempt per failed task in that task's existing
+# worktree, then re-integrates it alone; a second failure is a human blocker.
+# The attempt is meaningful for the un-approved case (its gate chain can still
+# approve it); for a conflict/gate failure on an approved task, task-run
+# no-ops (the worktree ledger already holds task_complete), so the blocker is
+# the outcome - a re-emitted failed task cannot self-heal.
 if [ "$MAX_PARALLEL" -eq 1 ]; then
   task=$(first_incomplete)
   while true; do
@@ -281,20 +315,41 @@ else
     done
     for n in $ids; do
       total=$(total_now)
-      ( cd "${wt_of[$n]}" && "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
-          >"$WS/task-$n-run.log" 2>&1 ) &
+      plan_task=$(wave_plan "${wt_of[$n]}")
+      # Capture each background task-run's exit code: a bare `wait` returns 0
+      # even when a background job failed, so without this a committed-but-
+      # unapproved task is invisible until integrate skips it. The rc is only
+      # reported; integrate (and the bounded recovery below) owns the verdict.
+      (
+        rc=0
+        cd "${wt_of[$n]}" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+          PLAN="$plan_task" "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
+            >"$WS/task-$n-run.log" 2>&1 || rc=$?
+        fi
+        printf '%s\n' "$rc" >"$WS/task-$n-run.rc"
+      ) &
     done
     wait
+    for n in $ids; do
+      rc=$(cat "$WS/task-$n-run.rc" 2>/dev/null || true)
+      rc=$(printf '%s' "$rc" | tr -cd '0-9')
+      [ -n "$rc" ] || rc=0
+      [ "$rc" -eq 0 ] || say "task $n task-run exited rc=$rc"
+    done
     int_rc=0
     "$INTEGRATE_BIN" "$WS" $ids || int_rc=$?
     if [ "$int_rc" -ne 0 ]; then
-      # Bounded integration-failure recovery (see the brief): one corrective
-      # attempt per failed task in its existing worktree, then re-integrate
-      # that task alone. A second failure blocks - never an unbounded loop.
+      # Bounded integration-failure recovery: a single re-integrate attempt per
+      # failed task in its existing worktree. It is meaningful for an
+      # un-approved task (its gate chain can still approve it and then the
+      # re-merge can land); for a conflict/gate failure on an approved task
+      # task-run no-ops (route-next's has_complete wins), so a second failure
+      # is a bounded human blocker - never an unbounded loop.
       failed=$(failed_ids) || true
       [ -n "$failed" ] \
         || block "integrate rc=$int_rc but no task has an integration_failed entry"
-      say "integration failed for: $failed - one corrective attempt each"
+      say "integration failed for: $failed - one re-integrate attempt each"
       for n in $failed; do
         rc=0
         out=$("$SCRIPT_DIR/worktree-alloc" "$WS" "$n") || rc=$?
@@ -313,10 +368,11 @@ else
         # into the global ledger and poison final-gate ("last review
         # unresolved: SEND_BACK"). The task's real history stays untouched.
         total=$(total_now)
+        plan_task=$(wave_plan "$wt")
         rc=0
-        ( cd "$wt" && "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \
+        ( cd "$wt" && PLAN="$plan_task" "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \
           >"$WS/task-$n-recovery.log" 2>&1 || rc=$?
-        [ "$rc" -eq 0 ] || block "task $n corrective task-run exit $rc"
+        [ "$rc" -eq 0 ] || block "task $n recovery task-run exit $rc"
         rc=0
         "$INTEGRATE_BIN" "$WS" "$n" || rc=$?
         [ "$rc" -eq 0 ] \

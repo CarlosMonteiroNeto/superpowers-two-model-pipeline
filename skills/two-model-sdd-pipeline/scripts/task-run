@@ -28,10 +28,11 @@
 #             1 = blocked / escalated / unresolved arbitration;
 #             2 = usage.
 #
-# Resource profile: no direct dispatch - LLM work happens inside the
-# orchestrator (RED/CODER/REVIEW) and the task-generator on corrective/
-# arbitrate; ledger writes go through ledger-append; git is delegated to the
-# gates.
+# Resource profile: this script dispatches LLMs itself - the operador through
+# `dispatch` on the corrective path (resuming its own per-agent session) and
+# Agente diretor (the task-generator) via `dispatch` on corrective/arbitrate;
+# the orchestrator owns the RED/CODER/REVIEW dispatches it drives; ledger
+# writes go through ledger-append; git is delegated to the gates.
 set -euo pipefail
 
 # B6: force UTF-8 pipes so a latin-1 byte never poisons the ledger/logs.

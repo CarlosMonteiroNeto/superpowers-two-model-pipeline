@@ -141,7 +141,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `worktree-alloc WORKSPACE TASK` (two-model) | Allocates `<repo>/.superpowers/two-model/worktrees/task-<N>` + branch `task/<N>` from the integration HEAD, seeds the worktree workspace (`plan.json` + a ledger shard holding only the branch `gate` entry), records `base=<sha>`, ledgers `worktree_alloc`, prints `WORKTREE=`/`WS=` | exit 0 allocated; 1 already allocated (still prints `WORKTREE=`/`WS=` for reuse); 2 usage |
 | `worktree-release WORKSPACE TASK` (two-model) | Removes a task worktree + its `task/<N>` branch only after the branch tip (differing from its allocation base) is an ancestor of the integration HEAD; ledgers `worktree_release`; never removes on failure | exit 0 released; 1 not merged / branch not found; 2 usage |
 | `task-run WORKSPACE TASK TOTAL` (two-model) | The per-task lifecycle extracted from `run-pipeline`, shared by the serial path and each wave worktree: loops `orchestrator` and owns the LLM branches (REVIEW parse, CORRECTIVE, ARBITRATE) until the task is APPROVED or blocked. Operates on whatever working tree its cwd resolves to | exit 0 task complete (APPROVED); 1 blocked / escalated / unresolved arbitration; 2 usage |
-| `integrate WORKSPACE TASK [TASK...]` (two-model) | Script-owned serial integration gate: per task in ascending id order, `git merge --no-commit --no-ff task/<N>`, run the FULL gate after each merge (`green-gate --no-commit` for `lang=flutter`, else `run-gates`), commit on green, ledger `integrated`, merge the task shard (`ledger-merge`), release the worktree; on conflict/red/commit failure `git merge --abort` and ledger `integration_failed`, continuing with the rest | exit 0 every task integrated; 1 ≥1 `integration_failed`; 2 usage |
+| `integrate WORKSPACE TASK [TASK...]` (two-model) | Script-owned serial integration gate: per task in ascending id order, require the task's worktree shard to hold `task_complete` (a committed-but-unapproved shard is `integration_failed not approved`, never merged or released), then `git merge --no-commit --no-ff task/<N>`, run the FULL gate after each merge (`green-gate --no-commit` for `lang=flutter`, else `run-gates`), commit on green, ledger `integrated`, merge the task shard (`ledger-merge`), release the worktree; on conflict/red/commit failure `git merge --abort` and ledger `integration_failed`, continuing with the rest | exit 0 every task integrated; 1 ≥1 `integration_failed`; 2 usage |
 | `brief-scaffold WORKSPACE TASK` (two-model) | Scaffold the task brief mechanically from the plan (statement, acceptance, spec_refs, reason-declaration and machine-readable RED instructions). Rejects test-like `touches` (test files are defined as changed minus `touches`, so a test path inside `touches` can never prove RED). No LLM | exit 0 wrote; 1 plan unreadable; 2 usage/missing fields/test-like touches |
 | `coder-agent-for LANG` (two-model) | Maps a `resolve-toolchain` lang to the operador definition whose bash allowlist can run that ecosystem's tests (`two-model-coder-{python,node,rust,go}`; flutter/unknown → base). Shared by both red-gates, `coder-gate`, and the corrective path | agent name on stdout; 0 |
 | `run-gates WS TEST ANALYZE` (two-model) | Generic green approval: full suite + analysis through `cmd` (language-agnostic mirror of green-gate) | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
@@ -210,10 +210,13 @@ run with `run-tests.sh` (`python3 -m unittest discover`).
   `task-run` drives the task inside that worktree, and `integrate` folds the
   wave back in ascending id order running the **full suite after each individual
   merge** (aborting only the failing merge), then `ledger-merge` folds the shard.
-  `--max-parallel` defaults to 2; `--max-parallel 1` reproduces the exact serial
-  flow (no worktrees, no `integrate`). Integration failure is a **bounded
-  blocker**: exactly one re-attempt in the task's existing worktree, then a
-  human block — never an unbounded self-heal loop.
+  `--max-parallel` defaults to 2; `--max-parallel 1` is the serial path,
+  behavior-preserving (advances via `route-next` instead of `first_incomplete`;
+  the ledger sequence is asserted by a regression test) — no worktrees, no
+  `integrate`. Integration failure is a **bounded blocker**: exactly one
+  re-attempt in the task's existing worktree (meaningful for an un-approved
+  task; a no-op for a conflict on an approved one), then a human block — never
+  an unbounded self-heal loop.
 - **Operador owns the RED/GREEN loop (ADR-0007, superseding ADR-0002):** it
   authors RED tests, runs them saving the machine-readable output, declares and
   confirms the expected reason, then implements and runs them green. It may run

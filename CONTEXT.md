@@ -169,8 +169,10 @@ pub.dev dependency-research target in Phase 2a.
   ledger shard merged by the integrator (ADR-0011).
 - Integration: `integrate` is a script-owned serial merge gate, full suite after
   each merge, aborting only the failing merge (ADR-0012).
-- Defaults: `--max-parallel 2`; `--max-parallel 1` reproduces the exact serial
-  flow (no worktrees, no `integrate`).
+- Defaults: `--max-parallel 2`; `--max-parallel 1` is the serial path,
+  behavior-preserving (advances via `route-next` instead of `first_incomplete`;
+  the ledger sequence is asserted by a regression test) - no worktrees, no
+  `integrate`.
 - Integration failure is a bounded blocker that does not self-heal: exactly one
   re-attempt per failed task in its existing worktree, then a human block. A
   true in-place corrective (re-opening a `task_complete` task) is **deferred** —
