@@ -2,16 +2,15 @@
 
 Use this template when dispatching an implementer subagent.
 
-**New paradigm (aligned with two-model-sdd-pipeline):** RED tests are
-written by the controller (you) at brief-creation time, not by the
-implementer subagent. Before dispatching, materialize the brief's RED
-tests into the working tree and confirm they fail for the expected
-reason — mirroring `red-gate`'s check (`EXPECTED-RED:` text must appear
-in the failure output) even when this skill's own `scripts/` don't
-include a dedicated gate script. A brief whose RED tests pass before
-implementation, or fail for the wrong reason, is defective — fix the
-brief yourself before dispatching; never hand a defective RED test to
-the subagent and let it improvise.
+**New paradigm:** RED tests are written by the controller (you) at
+brief-creation time, not by the implementer subagent. Before dispatching,
+materialize the brief's RED tests into the working tree and confirm they fail
+for the expected reason. (On a two-model pipeline branch this skill is
+superseded: the Agente operador authors and runs the RED tests, and `coder-gate`
+validates the saved form with `red-form-check` — there is no `expected_red`
+substring to match.) A brief whose RED tests pass before implementation, or fail
+for the wrong reason, is defective — fix the brief yourself before dispatching;
+never hand a defective RED test to the subagent and let it improvise.
 
 ```
 Subagent (general-purpose):

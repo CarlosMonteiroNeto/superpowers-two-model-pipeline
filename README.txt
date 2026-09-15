@@ -291,6 +291,10 @@ output ever enters an LLM context window. Deterministic gates keep reading
 full files - nothing a verdict depends on (red-form-check's machine-readable
 evidence, escalation packages) is ever compressed.
 
+Skill/integration docs track the implemented behavior: there is no
+`expected_red` step (ADR-0007) and no green-gate format check (M8); stale
+claims are corrected in the same change as the code.
+
 Dispatch is script-owned too: red-gate dispatches Agente operador on a
 scaffolded brief (then coder-gate retries it until green, validates the RED
 form);
