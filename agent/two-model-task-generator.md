@@ -1,7 +1,7 @@
 ---
-description: Strategic tier of the two-model pipeline (Muse Spark 1.3). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
+description: Strategic tier of the two-model pipeline (DeepSeek v4.1 Flash). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
 mode: all
-model: opencode-go/muse-spark-1.3-contributor
+model: opencode-go/deepseek-v4.1-flash
 permission:
   edit: allow
   read: allow

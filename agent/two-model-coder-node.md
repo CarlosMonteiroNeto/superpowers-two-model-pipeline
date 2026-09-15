@@ -1,7 +1,7 @@
 ---
 description: Operational tier of the two-model pipeline (Node/JavaScript). Owns the RED/GREEN loop - authors RED tests, runs them to save the runner's machine-readable evidence, declares and confirms the reason before implementing; may run test/analyze/format, never git.
 mode: all
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/deepseek-v4.1-flash
 permission:
   edit: allow
   read: allow

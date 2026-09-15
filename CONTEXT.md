@@ -25,13 +25,13 @@ Persistence — architectural path only).
   spec_refs), resuming only within the same episode; closing is a one-shot
   curated package (plan + spec + consolidated diff + ledger). No EXPAND, no
   cross-branch persistent session.
-- **Agente operador** — Operational tier (`opencode-go/deepseek-v4-flash`). Owns the RED/GREEN loop:
+- **Agente operador** — Operational tier (`opencode-go/deepseek-v4.1-flash`). Owns the RED/GREEN loop:
   receives the scaffolded brief, authors RED tests, RUNS them and saves the machine-readable output
   (form-checked by the script), DECLARES and confirms the expected reason before implementing (a
   self-check, not a guarantee), then writes implementation code and runs the tests green. May run
   test/analyze/format, never git; Script CEO verifies the RED form and decides the authoritative
   gate. Context is zeroed per task; retries resume the same session within a task.
-- **Agente revisor** — Strategic tier (`opencode-go/muse-spark-1.3-contributor`). Reviews
+- **Agente revisor** — Strategic tier (`opencode-go/deepseek-v4.1-flash`). Reviews
   only compiler-approved code (tests + syntax already green). Evaluates design,
   architecture, spec compliance (incl. spec-refs alignment), interface
   discipline, and test-vs-acceptance fit. Returns a structured JSON
@@ -138,8 +138,8 @@ pub.dev dependency-research target in Phase 2a.
 - Strategic Coder tier removed — confirmed by developer.
 - C owns its RED/GREEN loop (runs its own tests, ADR-0007); the authoritative test/analyze decisions still live inside the script — confirmed.
 - Loop: unbounded retries until green, no failure counting — confirmed.
-- Operational tier model: `opencode-go/deepseek-v4-flash` (C). Strategic tier:
-  `opencode-go/muse-spark-1.3-contributor` (D and B-side judgment). The README-LLM variant
+- Operational tier model: `opencode-go/deepseek-v4.1-flash` (C). Strategic tier:
+  `opencode-go/deepseek-v4.1-flash` (D and B-side judgment). The README-LLM variant
   table is stale and will be corrected (no `variants` block exists in opencode.jsonc).
 - Final review via `/new` + clean context — confirmed.
 - Subagent headers: fixed templates + deterministically-resolved per-task values.

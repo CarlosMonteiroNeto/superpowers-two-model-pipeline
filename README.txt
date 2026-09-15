@@ -404,9 +404,8 @@ or take it as the first argument):
 The agent runs check-superpowers at session start and, if behind or not
 installed, syncs/installs and asks you to restart OpenCode. Tier models
 (mirrored under `agent/`, both `mode: all` so they can be dispatched
-headlessly): Strategic (Agente diretor / Agente revisor) =
-opencode-go/muse-spark-1.3-contributor; Operational (Agente operador) =
-opencode-go/deepseek-v4-flash.
+headlessly): Strategic (Agente diretor / Agente revisor) and Operational
+(Agente operador) = opencode-go/deepseek-v4.1-flash.
 
 TESTS
 -----
