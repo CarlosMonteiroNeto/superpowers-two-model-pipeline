@@ -75,6 +75,29 @@ class WorktreeTest(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
 
+    def test_release_after_merge_removes_branch_and_tree(self):
+        self.run_it("worktree-alloc", 3)
+        wt = self.repo / ".superpowers" / "two-model" / "worktrees" / "task-3"
+        (wt / "lib" / "a.go").write_text("package a // x\n", encoding="utf-8")
+        git(wt, "add", "-A")
+        git(wt, "commit", "-qm", "task3")
+        git(self.repo, "merge", "--no-ff", "-m", "merge 3", "task/3")
+        r = self.run_it("worktree-release", 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(wt.exists())
+        branches = subprocess.run(["git", "-C", str(self.repo), "branch"],
+                                  capture_output=True, text=True).stdout
+        self.assertNotIn("task/3", branches)
+        self.assertIn("worktree_release",
+                      (self.ws / "ledger.jsonl").read_text(encoding="utf-8"))
+
+    def test_release_unmerged_is_one_and_keeps_tree(self):
+        self.run_it("worktree-alloc", 3)
+        r = self.run_it("worktree-release", 3)
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue((self.repo / ".superpowers" / "two-model" / "worktrees"
+                         / "task-3").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
