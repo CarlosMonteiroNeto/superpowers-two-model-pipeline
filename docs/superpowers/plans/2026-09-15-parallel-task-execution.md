@@ -1370,9 +1370,8 @@ Fill the serial branch with Task 9's exact loop.
 - Capture `int_rc` (`|| int_rc=$?`); on `= 0` continue the wave loop.
 - On non-zero, compute the failed ids (those whose newest `integration_failed` postdates their newest completion) and, for each in ascending order:
   1. `worktree-alloc "$WS" "$n"`; accept exit `0` **or** `1` (already allocated) and parse `WORKTREE=`/`WS=` from either.
-  2. Open a corrective episode deterministically: append `review_outcome "$n" "SEND_BACK" findings=1` to the **worktree** ledger and write `<wt_ws>/task-$n-review.json` containing a minimal `{"verdict":"SEND_BACK","findings":[{"severity":"Important","message":"integration failed"}]}` (the shape `task-run`'s CORRECTIVE branch reads).
-  3. `( cd "$wt" && task-run "$wt_ws" "$n" "$(total_now)" )` — alone (max-parallel 1); ledger a fresh commit via the normal gate chain.
-  4. `integrate "$WS" "$n"` again. If it still fails, `block "task $n still fails integration after one corrective"` — a human blocker beats an unbounded loop.
+  2. `( cd "$wt" && task-run "$wt_ws" "$n" "$(total_now)" )` — alone (max-parallel 1). **No episode is injected.** `route-next`'s `has_complete` rule fires before its `SEND_BACK` rule, so an injected episode would be inert; worse, after a successful re-integrate it would be folded into the global ledger and poison `final-gate` (its "last review unresolved: SEND_BACK" blocker). Leaving the task's real history untouched is the correct behavior.
+  3. `"$INTEGRATE_BIN" "$WS" "$n"` again. If it still fails, `block "task $n still fails integration after one corrective"`.
 - The recovery is **bounded**: one corrective attempt per failed task per run; it never loops. It **does not self-heal** in place, and that is accepted (controller ruling): a task that already has `task_complete` cannot be re-opened because `route-next`'s `has_complete` rule fires before its `SEND_BACK` rule, so the injected episode is inert and the run ends in a human blocker with an actionable message. Making it truly self-healing requires changing the already-reviewed router (`route-next`) — out of scope.
 
 - [ ] **Step 4: Run and watch them pass**
