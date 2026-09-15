@@ -870,7 +870,7 @@ git commit -m "feat(pipeline): worktree-release after a merged task"
 
 **Readiness rules (exact):**
 - **done task**: has a `task_complete` or `integrated` entry, and the newest of `{task_complete, integrated, integration_failed}` is not `integration_failed`. `depends_on` entries are satisfied by done tasks.
-- **pending episode**: newest `review_outcome` is `SEND_BACK` or `ESCALATE` with no later `task_complete`/`arbitrate_resolved` → the task must run alone.
+- **pending episode**: newest `review_outcome` is `SEND_BACK` or `ESCALATE` with no later `APPROVED` / `arbitrate_resolved` / completion → the task must run alone. A **done** task is never in an episode (completion clears it), so this can never conflict with a later `task_complete`.
 - **ready**: not done, all `depends_on` done, and not in a pending episode.
 - If any ready task is a corrective (`corrects`) or in a pending episode → emit only the lowest-id such task.
 - Otherwise greedily add ready tasks in ascending id order, each disjoint from the selected set (`touches-overlap`), up to `MAX_PARALLEL`.
@@ -927,7 +927,7 @@ class WaveNextTest(unittest.TestCase):
         self.assertIn("FINAL_REVIEW", r.stdout)
 
     def test_blocked_when_depends_on_unsatisfied(self):
-        self.write(self.tasks((1, ["a"], []), (2, ["b"], [1])), [])
+        self.write(self.tasks((1, ["a"], [2]), (2, ["b"], [1])), [])
         r = self.run_it()
         self.assertEqual(r.returncode, 1)
         self.assertIn("WAVE_EMPTY", r.stderr)
@@ -949,8 +949,12 @@ class WaveNextTest(unittest.TestCase):
         self.assertEqual(r.stdout.split(), ["RUN", "2"])
 
     def test_corrective_runs_alone(self):
-        self.write(self.tasks((1, ["a"], []), (2, ["b"], []), (3, ["c"], [])),
-                   [{"ts": "t", "type": "corrective", "task": "3", "summary": "corrective for 1"}])
+        tasks = [
+            {"id": 1, "touches": ["a"], "depends_on": []},
+            {"id": 2, "touches": ["b"], "depends_on": []},
+            {"id": 3, "touches": ["c"], "depends_on": [], "corrects": 1},
+        ]
+        self.write(tasks, [])
         r = self.run_it(2)
         self.assertEqual(r.stdout.split(), ["RUN", "3"])
 
