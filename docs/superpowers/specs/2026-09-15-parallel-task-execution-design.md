@@ -133,8 +133,9 @@ existing env-override convention where relevant.
   (write-script §2) — parsing the source JSON and replaying its
   `type`/`task`/`summary`/extras, so JSON escaping and the partition mirror stay in one
   place. It never `echo … >>` a ledger by hand.
-- Skips `gate` entries (branch-level, already present) and exact duplicate entries
-  (idempotent re-runs — write-script §5: re-derive, don't accumulate).
+- Skips `gate` entries (branch-level, already present) and content-identical entries
+  (identity = the entry minus `ts`, since `ledger-append` restamps it — idempotent
+  re-runs, write-script §5: re-derive, don't accumulate).
 - Rebuilds partitions via `ledger-migrate` after the merge.
 - Exit `0` merged; `2` usage.
 

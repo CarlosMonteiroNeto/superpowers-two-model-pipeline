@@ -439,6 +439,31 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KEEP = ("ts", "type", "task", "summary")
 
 
+def key_of(entry):
+    """Identity of an entry, ignoring the append timestamp.
+
+    `ledger-append` restamps `ts` on every write, so a raw-line comparison
+    would never match a re-emitted entry and re-runs would duplicate the
+    whole shard. Identity is the entry's content minus `ts`.
+    """
+    return json.dumps({k: v for k, v in entry.items() if k != "ts"}, sort_keys=True)
+
+
+def load_seen(path):
+    seen = set()
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    seen.add(key_of(json.loads(raw)))
+                except ValueError:
+                    pass
+    return seen
+
+
 def main():
     if len(sys.argv) < 3:
         print("usage: ledger-merge INTEGRATION_WS SOURCE_LEDGER [SOURCE_LEDGER...]",
@@ -446,10 +471,7 @@ def main():
         return 2
     ws, sources = sys.argv[1], sys.argv[2:]
     dest = os.path.join(ws, "ledger.jsonl")
-    seen = set()
-    if os.path.isfile(dest):
-        with open(dest, encoding="utf-8", errors="replace") as fh:
-            seen = {ln.strip() for ln in fh if ln.strip()}
+    seen = load_seen(dest)
     appended = 0
     for src in sources:
         if not os.path.isfile(src):
@@ -457,13 +479,16 @@ def main():
         with open(src, encoding="utf-8", errors="replace") as fh:
             for raw in fh:
                 line = raw.strip()
-                if not line or line in seen:
+                if not line:
                     continue
                 try:
                     entry = json.loads(line)
                 except ValueError:
                     continue
                 if entry.get("type") == "gate":
+                    continue
+                key = key_of(entry)
+                if key in seen:
                     continue
                 args = ["bash", os.path.join(HERE, "ledger-append"), dest,
                         str(entry.get("type", "")), str(entry.get("task", "-")),
@@ -474,7 +499,7 @@ def main():
                     args.append("{}={}".format(k, v))
                 rc = subprocess.run(args, capture_output=True, text=True).returncode
                 if rc == 0:
-                    seen.add(line)
+                    seen.add(key)
                     appended += 1
     subprocess.run(["bash", os.path.join(HERE, "ledger-migrate"), ws],
                    capture_output=True)
