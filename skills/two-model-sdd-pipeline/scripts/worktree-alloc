@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Allocate one git worktree (branch task/<N>) for a parallel task and seed its
+# workspace. Prints WORKTREE=<path> and WS=<path>.
+#
+# Usage: worktree-alloc WORKSPACE TASK
+# Exit codes: 0 = allocated, 1 = already allocated, 2 = usage.
+#
+# Resource profile: dispatch none; stdout not LLM-facing; ledger I/O writes
+# the integration global ledger; subprocess: git worktree add + one ledger-append;
+# wall-clock trivial; git writes (worktree + branch task/<N> from HEAD).
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+  echo "usage: worktree-alloc WORKSPACE TASK" >&2
+  exit 2
+fi
+ws=$1
+task=$2
+script_dir=$(cd "$(dirname "$0")" && pwd)
+root=$(git rev-parse --show-toplevel)
+wt="$root/.superpowers/two-model/worktrees/task-$task"
+
+if git worktree list --porcelain | grep -qx "worktree $wt"; then
+  echo "WORKTREE-ALLOC: task $task already allocated at $wt" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "$wt")"
+git worktree add -q "$wt" -b "task/$task" HEAD
+
+# Seed the worktree workspace. The worktree is a fresh checkout: the
+# integration tree's self-ignoring .superpowers/.gitignore is untracked and
+# does NOT travel, so recreate it or the gate's `git add -A` would commit
+# the workspace into the task branch.
+wt_ws="$wt/.superpowers/two-model/$(basename "$ws")"
+mkdir -p "$wt_ws"
+printf '*\n' > "$wt/.superpowers/two-model/.gitignore"
+cp -f "$ws/plan.json" "$wt_ws/plan.json"
+grep -m1 '"type": *"gate"' "$ws/ledger.jsonl" > "$wt_ws/ledger.jsonl" || : > "$wt_ws/ledger.jsonl"
+
+"$script_dir/ledger-append" "$ws/ledger.jsonl" worktree_alloc "$task" \
+  "allocated task/$task" worktree="$wt"
+
+echo "WORKTREE=$wt"
+echo "WS=$wt_ws"
