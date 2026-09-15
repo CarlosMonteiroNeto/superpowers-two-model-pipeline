@@ -419,6 +419,44 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         )
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
 
+    def test_task_run_completes_one_task(self):
+        """Task 9: task-run drives exactly one task to APPROVED (exit 0) and
+        ledgers task_complete for it - the extracted per-task contract."""
+        self.write_plan([dict(FULL_TASK)])
+        subprocess.run(
+            [BASH, str(SCRIPTS / "pipeline-workspace"), str(self.plan)],
+            cwd=str(self.repo), check=True, capture_output=True,
+        )
+        self.write_gate()
+        env = dict(os.environ)
+        env.update(
+            RED_GATE_BIN=self.fake_red_gate(),
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        out = self._tmp / "task-run.out"
+        err = self._tmp / "task-run.err"
+        with open(out, "w", encoding="utf-8") as fo, \
+                open(err, "w", encoding="utf-8") as fe:
+            proc = subprocess.run(
+                [BASH, str(SCRIPTS / "task-run"), str(self.ws()), "1", "1"],
+                stdout=fo, stderr=fe, cwd=str(self.repo), env=env,
+            )
+        stdout = out.read_text(encoding="utf-8", errors="replace")
+        stderr = err.read_text(encoding="utf-8", errors="replace")
+        self.assertEqual(proc.returncode, 0, stdout + stderr)
+        entries = [
+            json.loads(line)
+            for line in (self.ws() / "ledger.jsonl").read_text(
+                encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        completes = [e for e in entries
+                     if e.get("type") == "task_complete"
+                     and str(e.get("task")) == "1"]
+        self.assertEqual(len(completes), 1, entries)
+
 
 if __name__ == "__main__":
     unittest.main()
