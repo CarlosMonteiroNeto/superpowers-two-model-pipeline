@@ -195,6 +195,55 @@ class IntegrateTest(unittest.TestCase):
         self.assertNotIn("integrated", [e["type"] for e in self.ledger()])
         self.assertIn("task/1", self.branches())
         self.assertTrue(self.wt(1).exists())
+        # the aborted merge must leave no half-merged state behind
+        self.assertEqual(git(self.repo, "status", "--porcelain").stdout.strip(), "")
+        self.assertFalse((self.repo / ".git" / "MERGE_HEAD").exists())
+
+    def test_commit_failure_signals_and_aborts_merge(self):
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        head_before = self.head()
+        hook = self.repo / ".git" / "hooks" / "pre-commit"
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        subprocess.run([BASH, "-c", "chmod +x '{}'".format(hook)],
+                       capture_output=True)
+        r = self.run_integrate(1, RUN_GATES_BIN=self.gate_ok())
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        fails = self.entries("integration_failed")
+        self.assertEqual(len(fails), 1, fails)
+        self.assertIn("commit", fails[0]["summary"])
+        self.assertIn("rc=", fails[0]["summary"])
+        self.assertEqual(self.head(), head_before)
+        self.assertNotIn("integrated", [e["type"] for e in self.ledger()])
+        # the failed commit must not leave the merge staged (MERGE_HEAD/clean)
+        self.assertEqual(git(self.repo, "status", "--porcelain").stdout.strip(), "")
+        self.assertFalse((self.repo / ".git" / "MERGE_HEAD").exists())
+        self.assertIn("task/1", self.branches())
+        self.assertTrue(self.wt(1).exists())
+
+    def test_flutter_lang_runs_green_gate_argv(self):
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        gate = {"ts": "t", "type": "gate", "task": "-", "summary": "go",
+                "lang": "flutter", "test_cmd": "flutter test",
+                "analyze_cmd": "flutter analyze"}
+        # replace just the first gate line; keep worktree_alloc (base=) intact
+        rest = [line for line in (self.ws / "ledger.jsonl").read_text(
+                    encoding="utf-8").splitlines()
+                if line.strip() and not json.loads(line).get("type") == "gate"]
+        (self.ws / "ledger.jsonl").write_text(
+            json.dumps(gate) + "\n" + "\n".join(rest) + "\n", encoding="utf-8")
+        argv_log = self._tmp / "green-gate-argv"
+        stub = write_stub(
+            self.stub_dir, "green-gate",
+            "printf '%%s\\n' \"$*\" >> \"%s\"\nexit 0\n" % (argv_log,))
+        r = self.run_integrate(1, GREEN_GATE_BIN=stub,
+                               RUN_GATES_BIN=self.gate_fail())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(argv_log.read_text(encoding="utf-8").strip(),
+                         "--no-commit -w %s -t 1" % self.ws)
+        self.assertEqual(len(self.entries("integrated")), 1, self.ledger())
 
     def test_gate_runs_after_each_merge(self):
         self.alloc(1)

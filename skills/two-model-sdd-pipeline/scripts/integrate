@@ -71,9 +71,16 @@ for n in $(printf '%s\n' "$@" | sort -n); do
     continue
   fi
 
-  git commit --no-edit >/dev/null 2>&1
+  commit_rc=0
+  git commit --no-edit >/dev/null 2>&1 || commit_rc=$?
+  if [ "$commit_rc" -ne 0 ]; then
+    git merge --abort 2>/dev/null || true
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "commit (rc=$commit_rc)"
+    failed=1
+    continue
+  fi
   sha=$(git rev-parse --short HEAD)
-  "$script_dir/ledger-append" "$ledger" integrated "$n" "merged $sha" "commits=$sha"
+  "$script_dir/ledger-append" "$ledger" integrated "$n" "merged $sha" "commits=$sha" "sha=$sha"
 
   shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/$(basename "$ws")/ledger.jsonl"
   merge_rc=0
@@ -81,6 +88,9 @@ for n in $(printf '%s\n' "$@" | sort -n); do
   if [ "$merge_rc" -ne 0 ]; then
     echo "INTEGRATE: ledger-merge failed for task $n" >&2
     failed=1
+    # Do NOT release: the worktree holds the only copy of the lost shard
+    # (gitignored/untracked), so removing it would destroy the recovery data.
+    continue
   fi
 
   rel_rc=0
