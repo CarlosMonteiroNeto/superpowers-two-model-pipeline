@@ -195,7 +195,8 @@ paths (the H2 lesson: never two copies of the routing logic).
 failure. This design keeps the *wave* intact but rolls back the *individual* failing
 merge (`--no-commit` + `--abort`), so the integration branch is never left red. A red
 integration branch would poison every subsequent task in the wave and force a global
-re-run — strictly worse. The failed task is routed to a corrective (below).
+re-run — strictly worse. The failed task is ledgered `integration_failed` and handled by
+the bounded recovery below (it is not routed to a diretor corrective).
 
 #### `run-pipeline` (changed)
 
@@ -217,8 +218,8 @@ run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]
     run task-run per worktree in parallel (bounded by N); wait
     integrate WS w...           # merge + per-merge full suite
     for each task the integrator failed or that ended un-approved:
-      diretor corrective/arbitrate, then task-run that task ALONE (max-parallel 1)
-      integrate that task again
+      reuse its worktree, run task-run that task ALONE (max-parallel 1)
+      integrate that task again; a second failure BLOCKS (bounded, no loop)
   ```
 - Excess ready tasks beyond `N` are simply deferred: `wave-next` never emits more than
   `N`, so the next loop iteration picks them up.
@@ -259,7 +260,7 @@ plan.json ──> wave-next ──> RUN 3 / RUN 5
                               merge task/5 → gates → conflict/red -> abort + integration_failed
                               ledger-merge → integration ledger
                                        │
-                          (failed 5) diretor corrective, task-run 5 alone, integrate 5
+                          (failed 5) reuse worktree, task-run 5 alone, integrate 5 again (bounded)
                                        ▼
                               next wave / FINAL_REVIEW
 ```
