@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Merge per-worktree ledger shards into the integration ledger.
+
+Parallel tasks write their own workspace ledger (a worktree has its own
+`.superpowers/two-model/<slug>/`). On wave close the integrator folds those
+shards into the integration ledger. To keep `ledger-append` the sole writer
+(and thus keep escaping + the partition mirror in one place) every entry is
+re-emitted through `ledger-append`, never appended by hand.
+
+Usage: ledger-merge INTEGRATION_WS SOURCE_LEDGER [SOURCE_LEDGER...]
+Exit codes: 0 = merged (idempotent), 2 = usage.
+
+Resource profile: dispatch none; stdout not LLM-facing; ledger I/O global +
+per-task rebuild; one Python pass + one ledger-append per new entry; git none.
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+KEEP = ("ts", "type", "task", "summary")
+
+
+def key_of(entry):
+    """Identity of an entry, ignoring the append timestamp.
+
+    `ledger-append` restamps `ts` on every write, so a raw-line comparison
+    would never match a re-emitted entry and re-runs would duplicate the
+    whole shard. Identity is the entry's content minus `ts`.
+    """
+    return json.dumps({k: v for k, v in entry.items() if k != "ts"}, sort_keys=True)
+
+
+def load_seen(path):
+    seen = set()
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    seen.add(key_of(json.loads(raw)))
+                except ValueError:
+                    pass
+    return seen
+
+
+def main():
+    if len(sys.argv) < 3:
+        print("usage: ledger-merge INTEGRATION_WS SOURCE_LEDGER [SOURCE_LEDGER...]",
+              file=sys.stderr)
+        return 2
+    ws, sources = sys.argv[1], sys.argv[2:]
+    dest = os.path.join(ws, "ledger.jsonl")
+    seen = load_seen(dest)
+    appended = 0
+    for src in sources:
+        if not os.path.isfile(src):
+            continue
+        with open(src, encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if entry.get("type") == "gate":
+                    continue
+                key = key_of(entry)
+                if key in seen:
+                    continue
+                args = ["bash", os.path.join(HERE, "ledger-append"), dest,
+                        str(entry.get("type", "")), str(entry.get("task", "-")),
+                        str(entry.get("summary", ""))]
+                for k, v in entry.items():
+                    if k in KEEP:
+                        continue
+                    args.append("{}={}".format(k, v))
+                rc = subprocess.run(args, capture_output=True, text=True).returncode
+                if rc == 0:
+                    seen.add(key)
+                    appended += 1
+    subprocess.run(["bash", os.path.join(HERE, "ledger-migrate"), ws],
+                   capture_output=True)
+    print("LEDGER-MERGE: merged {} entry(ies) into {}".format(appended, ws))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
