@@ -1,0 +1,84 @@
+{
+  "feature": "Offline-first favorites list with local persistence and last-write-wins sync",
+  "spec_doc": "docs/superpowers/specs/2026-09-10-favorites-offline-sync-spec.md",
+  "global_constraints": [
+    "Flutter/Dart; flutter test + flutter analyze green per task",
+    "TDD: RED test first then minimal GREEN implementation",
+    "English-only internal artifacts",
+    "One commit per task with the listed message"
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Favorite item model",
+      "summary": "Immutable FavoriteItem with id and favoritedAt, JSON round-trip and value equality.",
+      "spec_refs": ["§3"],
+      "touches": ["lib/models/favorite_item.dart"],
+      "depends_on": []
+    },
+    {
+      "id": 2,
+      "title": "Repository interface plus in-memory implementation",
+      "summary": "Abstract FavoritesRepository with add/remove/list; in-memory LocalFavoritesRepository.",
+      "spec_refs": ["§4"],
+      "touches": ["lib/repositories/favorites_repository.dart", "lib/repositories/local_favorites_repository.dart"],
+      "depends_on": [1]
+    },
+    {
+      "id": 3,
+      "title": "Favorite toggle button",
+      "summary": "Stateless FavoriteButton with Icons.favorite / favorite_border, isFavorite plus onToggle.",
+      "spec_refs": ["§5"],
+      "touches": ["lib/widgets/favorite_button.dart"],
+      "depends_on": []
+    },
+    {
+      "id": 4,
+      "title": "Local persistence for the repository",
+      "summary": "Inject KeyValueStore into LocalFavoritesRepository and persist on every add/remove.",
+      "spec_refs": ["§6"],
+      "touches": ["lib/repositories/local_favorites_repository.dart"],
+      "depends_on": [2]
+    },
+    {
+      "id": 5,
+      "title": "Favorites screen with loading/error/data states",
+      "summary": "Stateful screen driving spinner, error message, and list off repository list().",
+      "spec_refs": ["§7"],
+      "touches": ["lib/screens/favorites_screen.dart"],
+      "depends_on": [2, 3]
+    },
+    {
+      "id": 6,
+      "title": "Offline queue for toggle actions",
+      "summary": "FIFO OfflineQueue of ToggleAction with enqueue and ordered drain.",
+      "spec_refs": ["§8"],
+      "touches": ["lib/services/offline_queue.dart"],
+      "depends_on": []
+    },
+    {
+      "id": 7,
+      "title": "Wire offline queue into the repository",
+      "summary": "Offline writes apply locally and enqueue ToggleAction; straightforward both-actions-queue version, flag the collapse gap.",
+      "spec_refs": ["§9"],
+      "touches": ["lib/repositories/local_favorites_repository.dart", "lib/services/offline_queue.dart"],
+      "depends_on": [4, 6]
+    },
+    {
+      "id": 8,
+      "title": "Remote sync service with last-write-wins",
+      "summary": "FavoritesSyncService drains the queue, pushes to a mocked remote client, newer favoritedAt wins.",
+      "spec_refs": ["§10"],
+      "touches": ["lib/services/favorites_sync_service.dart"],
+      "depends_on": [6, 7]
+    },
+    {
+      "id": 9,
+      "title": "Integration: screen plus repository plus queue plus sync",
+      "summary": "Screen listens for connectivity changes, calls sync() on reconnect, then refreshes the list.",
+      "spec_refs": ["§11"],
+      "touches": ["lib/screens/favorites_screen.dart"],
+      "depends_on": [5, 8]
+    }
+  ]
+}

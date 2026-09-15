@@ -1,0 +1,112 @@
+{
+  "feature": "Offline-first favorites list with local persistence and last-write-wins sync (10-task benchmark)",
+  "spec_doc": "docs/superpowers/specs/2026-09-10-favorites-offline-sync-10t-spec.md",
+  "global_constraints": [
+    "Flutter/Dart; flutter test + flutter analyze green per task",
+    "TDD: RED test first then minimal GREEN implementation",
+    "English-only internal artifacts",
+    "One commit per task with the listed message"
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Favorite item model",
+      "summary": "Immutable FavoriteItem with id and favoritedAt, JSON round-trip and value equality.",
+      "spec_refs": ["§3"],
+      "touches": ["lib/models/favorite_item.dart", "test/models/favorite_item_test.dart"],
+      "depends_on": [],
+      "acceptance": ["FavoriteItem round-trips through JSON", "value equality and hashCode hold"],
+      "expected_red": "FavoriteItem isn't defined or fromJson is missing"
+    },
+    {
+      "id": 2,
+      "title": "Repository interface plus in-memory implementation",
+      "summary": "Abstract FavoritesRepository with add/remove/list; in-memory LocalFavoritesRepository.",
+      "spec_refs": ["§4"],
+      "touches": ["lib/repositories/favorites_repository.dart", "lib/repositories/local_favorites_repository.dart", "test/repositories/local_favorites_repository_test.dart"],
+      "depends_on": [1],
+      "acceptance": ["add then list returns the item", "remove deletes the item"],
+      "expected_red": "LocalFavoritesRepository isn't defined"
+    },
+    {
+      "id": 3,
+      "title": "Favorite toggle button",
+      "summary": "Stateless FavoriteButton with Icons.favorite / favorite_border, isFavorite plus onToggle.",
+      "spec_refs": ["§5"],
+      "touches": ["lib/widgets/favorite_button.dart", "test/widgets/favorite_button_test.dart"],
+      "depends_on": [],
+      "acceptance": ["tapping toggles icon between outline and filled"],
+      "expected_red": "FavoriteButton isn't defined"
+    },
+    {
+      "id": 4,
+      "title": "Local persistence for the repository",
+      "summary": "Inject KeyValueStore into LocalFavoritesRepository and persist on every add/remove.",
+      "spec_refs": ["§6"],
+      "touches": ["lib/repositories/local_favorites_repository.dart", "test/repositories/local_favorites_repository_test.dart"],
+      "depends_on": [2],
+      "acceptance": ["items survive repository re-creation via fake store"],
+      "expected_red": "LocalFavoritesRepository has no constructor parameter 'store'"
+    },
+    {
+      "id": 5,
+      "title": "Favorites screen with loading/error/data states",
+      "summary": "Stateful screen driving spinner, error message, and list off repository list().",
+      "spec_refs": ["§7"],
+      "touches": ["lib/screens/favorites_screen.dart", "test/screens/favorites_screen_test.dart"],
+      "depends_on": [2, 3],
+      "acceptance": ["shows spinner while loading then list", "shows error message when list() throws"],
+      "expected_red": "FavoritesScreen isn't defined"
+    },
+    {
+      "id": 6,
+      "title": "Offline queue for toggle actions",
+      "summary": "FIFO OfflineQueue of ToggleAction with enqueue and ordered drain.",
+      "spec_refs": ["§8"],
+      "touches": ["lib/services/offline_queue.dart", "test/services/offline_queue_test.dart"],
+      "depends_on": [],
+      "acceptance": ["enqueue then drain replays actions in order and clears"],
+      "expected_red": "OfflineQueue isn't defined"
+    },
+    {
+      "id": 7,
+      "title": "Wire offline queue into the repository",
+      "summary": "Offline writes apply locally and enqueue ToggleAction; straightforward both-actions-queue version, flag the collapse gap.",
+      "spec_refs": ["§9"],
+      "touches": ["lib/repositories/local_favorites_repository.dart", "lib/services/offline_queue.dart", "test/repositories/local_favorites_repository_test.dart"],
+      "depends_on": [4, 6],
+      "acceptance": ["toggling while offline enqueues instead of syncing immediately", "both toggles queue in order with gap flagged in notes"],
+      "expected_red": "pendingActionsCount isn't defined"
+    },
+    {
+      "id": 8,
+      "title": "Remote sync service with last-write-wins",
+      "summary": "FavoritesSyncService drains the queue, pushes to a mocked remote client, newer favoritedAt wins.",
+      "spec_refs": ["§10"],
+      "touches": ["lib/services/favorites_sync_service.dart", "test/services/favorites_sync_service_test.dart"],
+      "depends_on": [6, 7],
+      "acceptance": ["local wins when newer", "remote wins when newer", "sync drains queue and clears on success"],
+      "expected_red": "FavoritesSyncService isn't defined"
+    },
+    {
+      "id": 9,
+      "title": "Integration: screen plus repository plus queue plus sync",
+      "summary": "Screen listens for connectivity changes, calls sync() on reconnect, then refreshes the list.",
+      "spec_refs": ["§11"],
+      "touches": ["lib/screens/favorites_screen.dart", "test/screens/favorites_screen_test.dart"],
+      "depends_on": [5, 8],
+      "acceptance": ["going online triggers sync and updates the list", "full suite green"],
+      "expected_red": "onConnectivityChanged isn't wired"
+    },
+    {
+      "id": 10,
+      "title": "Empty-state plus clear-all plus full regression gate",
+      "summary": "Empty-state message when list is empty; clearAll removes persisted items and locally queued toggles for deleted ids; full suite green.",
+      "spec_refs": ["§12"],
+      "touches": ["lib/screens/favorites_screen.dart", "lib/repositories/local_favorites_repository.dart", "test/screens/favorites_screen_test.dart"],
+      "depends_on": [5, 9],
+      "acceptance": ["empty list shows empty-state after load", "clearAll empties persisted store", "flutter test and flutter analyze green"],
+      "expected_red": "clearAll isn't defined"
+    }
+  ]
+}
