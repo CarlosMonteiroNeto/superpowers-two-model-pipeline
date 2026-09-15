@@ -70,6 +70,28 @@ class WorktreeTest(unittest.TestCase):
         self.run_it("worktree-alloc", 3)
         self.assertEqual(self.run_it("worktree-alloc", 3).returncode, 1)
 
+    def test_second_alloc_prints_reuse_paths(self):
+        # The already-allocated path (exit 1) must still report the live
+        # worktree and workspace: the bounded integration-failure recovery
+        # parses them to reuse that worktree.
+        self.run_it("worktree-alloc", 3)
+        r = self.run_it("worktree-alloc", 3)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        fields = dict(
+            line.split("=", 1) for line in r.stdout.splitlines() if "=" in line
+        )
+        wt_expected = (self.repo / ".superpowers" / "two-model" / "worktrees"
+                       / "task-3")
+        ws_expected = wt_expected / ".superpowers" / "two-model" / "plan"
+        self.assertEqual(
+            pathlib.Path(fields.get("WORKTREE", "")).resolve(),
+            wt_expected.resolve(),
+        )
+        self.assertEqual(
+            pathlib.Path(fields.get("WS", "")).resolve(),
+            ws_expected.resolve(),
+        )
+
     def test_usage(self):
         r = subprocess.run([BASH, str(SCRIPTS / "worktree-alloc")],
                            capture_output=True, text=True)

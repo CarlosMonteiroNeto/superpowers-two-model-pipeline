@@ -8,7 +8,9 @@
 # Wave:   wave-next emits the next ready, touches-disjoint wave -> each task is
 #   isolated by worktree-alloc and run by task-run inside its worktree ->
 #   integrate folds the wave's branches into HEAD (per-merge full suite, per
-#   task ledger shard), a failed task is re-emitted alone on the next wave.
+#   task ledger shard). A failed integration gets ONE bounded corrective
+#   attempt in the task's existing worktree, then re-integrates; a second
+#   failure blocks for a human (never an unbounded re-emit loop).
 # Both paths converge on closing -> push+PR.
 # No Agente estratégico in the loop: briefs are scaffolded, tasks come from
 # Agente diretor, gates decide, revisor judges. Resumable: re-running on the
@@ -81,6 +83,7 @@ DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 # single CODER_GATE_BIN name.
 CODER_GATE_BIN="${CODER_GATE_BIN:-${CODER_GATE:-$SCRIPT_DIR/coder-gate}}"
 FINAL_GATE_BIN="${FINAL_GATE_BIN:-$SCRIPT_DIR/final-gate}"
+INTEGRATE_BIN="${INTEGRATE_BIN:-$SCRIPT_DIR/integrate}"
 # RED_GATE_BIN is resolved by the orchestrator (env override wins, else
 # lang-based from the ledger's `gate.lang`). Never initialize it empty here.
 
@@ -154,6 +157,56 @@ sys.exit(0 if ok else 1)
 "
 }
 
+failed_ids() {
+  # Emit (ascending) every task whose newest `integration_failed` postdates
+  # its newest completion (`task_complete`/`integrated`), or that has a
+  # failure and no completion at all. These are exactly the tasks the bounded
+  # recovery must re-open after a non-zero integrate.
+  # NOTE: `python3 -c` (not a heredoc): this never feeds a pipe, but the
+  # codebase rule for git-bash Windows is to avoid stdin-owning heredocs.
+  python3 -c "
+import json, sys
+ledger_path, plan_path = sys.argv[1], sys.argv[2]
+try:
+    with open(plan_path, encoding='utf-8', errors='replace') as fh:
+        order = [str(t.get('id')) for t in json.load(fh).get('tasks', [])]
+except Exception:
+    order = []
+last_close, last_fail = {}, {}
+try:
+    with open(ledger_path, encoding='utf-8', errors='replace') as fh:
+        for i, line in enumerate(fh):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            t = str(e.get('task'))
+            ty = e.get('type')
+            if ty in ('task_complete', 'integrated'):
+                last_close[t] = i
+            elif ty == 'integration_failed':
+                last_fail[t] = i
+except OSError:
+    pass
+failed = [t for t in order
+          if t in last_fail and last_fail[t] > last_close.get(t, -1)]
+failed += [t for t in last_fail if t not in order]
+seen, out = set(), []
+for t in failed:
+    if t not in seen:
+        seen.add(t)
+        out.append(t)
+def key(x):
+    return (int(x) if x.lstrip('-').isdigit() else 0, x)
+out.sort(key=key)
+for t in out:
+    print(t)
+" "$LEDGER" "$WS/plan.json" | tr -d '\r'
+}
+
 # --- toolchain gate entry (once per branch) ---
 if ! grep -qE '"type": *"gate"' "$LEDGER" 2>/dev/null; then
   say "no gate entry - resolving toolchain"
@@ -173,9 +226,11 @@ tasks_usable || block "plan has no usable tasks (every task needs acceptance) - 
 # same plan resumes correctly; no worktrees, no integrate.
 # Wave (MAX_PARALLEL > 1): wave-next computes the next ready, touches-disjoint
 # wave from plan + ledger; each task runs in its own worktree in parallel;
-# integrate merges the wave and the loop re-derives. A failed integration is
-# ledgered integration_failed and simply re-emitted alone by the next
-# wave-next (corrective) - never special-cased here.
+# integrate merges the wave and the loop re-derives. A non-zero integrate
+# gets ONE bounded corrective attempt per failed task in that task's existing
+# worktree, then re-integrates it alone; a second failure is a human blocker
+# (a re-emitted failed task cannot self-heal - its worktree ledger already
+# holds task_complete, so task-run would no-op).
 if [ "$MAX_PARALLEL" -eq 1 ]; then
   task=$(first_incomplete)
   while true; do
@@ -230,7 +285,49 @@ else
           >"$WS/task-$n-run.log" 2>&1 ) &
     done
     wait
-    "$SCRIPT_DIR/integrate" "$WS" $ids || true
+    int_rc=0
+    "$INTEGRATE_BIN" "$WS" $ids || int_rc=$?
+    if [ "$int_rc" -ne 0 ]; then
+      # Bounded integration-failure recovery (see the brief): one corrective
+      # attempt per failed task in its existing worktree, then re-integrate
+      # that task alone. A second failure blocks - never an unbounded loop.
+      failed=$(failed_ids) || true
+      [ -n "$failed" ] \
+        || block "integrate rc=$int_rc but no task has an integration_failed entry"
+      say "integration failed for: $failed - one corrective attempt each"
+      for n in $failed; do
+        rc=0
+        out=$("$SCRIPT_DIR/worktree-alloc" "$WS" "$n") || rc=$?
+        # 0 = fresh, 1 = reuse the worktree integrate kept (it never releases
+        # on failure); anything else is a real blocker.
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+          block "worktree-alloc task $n (rc=$rc) during recovery"
+        fi
+        wt=$(printf '%s\n' "$out" | sed -n 's/^WORKTREE=//p')
+        wt_ws=$(printf '%s\n' "$out" | sed -n 's/^WS=//p')
+        [ -n "$wt" ] && [ -n "$wt_ws" ] \
+          || block "worktree-alloc task $n printed no WORKTREE=/WS= (recovery)"
+        # Re-open the corrective episode deterministically: a SEND_BACK review
+        # in the worktree ledger plus the review.json task-run's CORRECTIVE
+        # branch reads. Without it the stale task_complete makes route-next
+        # no-op and integrate fails deterministically forever.
+        "$SCRIPT_DIR/ledger-append" "$wt_ws/ledger.jsonl" review_outcome "$n" \
+          "SEND_BACK" "findings=1" \
+          || block "failed to inject SEND_BACK for task $n"
+        printf '%s\n' '{"verdict":"SEND_BACK","findings":[{"severity":"Important","message":"integration failed"}]}' \
+          > "$wt_ws/task-$n-review.json"
+        total=$(total_now)
+        rc=0
+        ( cd "$wt" && "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \
+          >"$WS/task-$n-recovery.log" 2>&1 || rc=$?
+        [ "$rc" -eq 0 ] || block "task $n corrective task-run exit $rc"
+        rc=0
+        "$INTEGRATE_BIN" "$WS" "$n" || rc=$?
+        [ "$rc" -eq 0 ] \
+          || block "task $n still fails integration after one corrective"
+        say "task $n recovered and integrated"
+      done
+    fi
   done
 fi
 

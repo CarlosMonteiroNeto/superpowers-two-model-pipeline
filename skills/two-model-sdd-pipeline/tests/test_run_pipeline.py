@@ -156,6 +156,23 @@ exit 0
 """,
         )
 
+    def fake_integrate_fail(self):
+        # Stub integrator: ledgers integration_failed for every task it was
+        # handed (exactly what the real integrate does on conflict/gate-red/
+        # commit failure) and exits 1. The driver must then attempt bounded
+        # recovery, not re-emit the task forever.
+        return write_stub(
+            self.stub_dir, "integrate-fail",
+            """
+ws=$1; shift
+append="${LEDGER_APPEND_BIN:?}"
+for n in "$@"; do
+  "$append" "$ws/ledger.jsonl" integration_failed "$n" "stub failure"
+done
+exit 1
+""",
+        )
+
     def fake_red_gate_send_back(self):
         # Simulates task 1 going green then being SEND_BACK by the revisor:
         # commit + a SEND_BACK review_outcome (route-next reads the verdict
@@ -203,6 +220,10 @@ exit 0
             json.dumps(event) + "\n", encoding="utf-8")
 
     def run_pipeline(self, *args, **extra_env):
+        # `_timeout` is a test-only knob (not an env var): it guards against a
+        # regression that turns a failure path into an unbounded loop, which
+        # must fail as a TimeoutExpired error, never hang the suite.
+        timeout = extra_env.pop("_timeout", 30)
         env = dict(os.environ)
         env.update(extra_env)
         out = self._tmp / "run-pipeline.out"
@@ -214,7 +235,7 @@ exit 0
                 stdout=fo, stderr=fe, cwd=str(self.repo), env=env,
             )
             try:
-                proc.wait(timeout=30)
+                proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
@@ -589,6 +610,50 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         leftovers = sorted(p.name for p in wt_root.iterdir()) \
             if wt_root.exists() else []
         self.assertEqual(leftovers, [])
+
+    def test_integration_failure_recovery_is_bounded_and_blocks(self):
+        """Critical: a failed integrate must not loop forever. The driver
+        makes exactly ONE corrective attempt in the failed task's existing
+        worktree (reusing it - worktree-alloc exit 1 still reports the paths),
+        then blocks for a human. `_timeout` converts any regression to an
+        unbounded loop into a fast TimeoutExpired instead of a hung suite."""
+        tasks = [
+            {"id": 1, "title": "A", "summary": "Add a.", "spec_refs": ["s1"],
+             "touches": ["lib/a.go"], "depends_on": [],
+             "acceptance": ["a works"]},
+            {"id": 2, "title": "B", "summary": "Add b.", "spec_refs": ["s1"],
+             "touches": ["lib/b.go"], "depends_on": [],
+             "acceptance": ["b works"]},
+        ]
+        self.write_plan(tasks)
+        self.write_gate()
+        r = self.run_pipeline(
+            "--no-push", "--max-parallel", "2",
+            _timeout=60,
+            RED_GATE_BIN=self.fake_red_gate_committing(),
+            INTEGRATE_BIN=self.fake_integrate_fail(),
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("still fails integration after one corrective", r.stderr)
+        self.assertIn("task 1", r.stderr)
+        # The corrective episode was injected into the worktree ledger - and
+        # exactly once (recovery is bounded to one attempt per task per run).
+        wt_ws = (self.repo / ".superpowers" / "two-model" / "worktrees"
+                 / "task-1" / ".superpowers" / "two-model" / "plan")
+        entries = [
+            json.loads(line)
+            for line in (wt_ws / "ledger.jsonl").read_text(
+                encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        sends = [e for e in entries
+                 if e.get("type") == "review_outcome"
+                 and e.get("summary") == "SEND_BACK"]
+        self.assertEqual(len(sends), 1, entries)
+        self.assertTrue((wt_ws / "task-1-review.json").is_file())
 
 
 if __name__ == "__main__":
