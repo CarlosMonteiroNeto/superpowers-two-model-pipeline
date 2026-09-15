@@ -115,6 +115,21 @@ class LedgerMigrateTest(unittest.TestCase):
         self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
         self.assertEqual(len(p1.read_text(encoding="utf-8").strip().splitlines()), 2)
 
+    def test_defers_when_a_wave_is_in_flight(self):
+        ws = self.ws
+        lines = [
+            json.dumps({"ts": "t", "type": "gate", "task": "-", "summary": "go"}),
+            json.dumps({"ts": "t", "type": "worktree_alloc", "task": "1",
+                        "summary": "allocated"}),
+            json.dumps({"ts": "t", "type": "brief_ready", "task": "1", "summary": "b"}),
+        ]
+        (ws / "ledger.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        r = subprocess.run([BASH, str(SCRIPTS / "ledger-migrate"), str(ws)],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("in flight", r.stdout + r.stderr)
+        self.assertFalse((ws / "ledger-task-1.jsonl").exists())
+
 
 class RouteNextPartitionRegressionTest(unittest.TestCase):
     def setUp(self):

@@ -23,6 +23,16 @@ ws=$1
 cd "$ws"
 [ -f "ledger.jsonl" ] || { echo "LEDGER-MIGRATE: no ledger: $ws/ledger.jsonl" >&2; exit 2; }
 
+# Concurrency guard (write-script §7): never rm -f live partitions while a
+# wave's worktrees are running. An unmatched worktree_alloc means a wave is
+# in flight; defer and let the caller fall back to the global ledger.
+alloc=$(grep -c '"type": *"worktree_alloc"' ledger.jsonl || true)
+released=$(grep -c '"type": *"worktree_release"' ledger.jsonl || true)
+if [ "${alloc:-0}" -gt "${released:-0}" ]; then
+  echo "LEDGER-MIGRATE: wave in flight ($alloc alloc / $released release) - deferred"
+  exit 0
+fi
+
 # Rebuild semantics: the global file is the source of truth (ledger-append
 # always writes both), so clear stale partitions first - re-running stays
 # idempotent instead of duplicating lines via awk append redirection.
