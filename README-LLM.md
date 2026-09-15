@@ -154,7 +154,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-closing: all complete + no unresolved verdicts + no blocking parked + tests/analyze green (skipped when the tree is unchanged since the last green commit) | exit 0 ready; 1 blockers; 2 usage |
 | `doc-check [REPO]` | Deterministic gate: pipeline files changed → READMEs must also change | exit 0 OK; 1 violation; 2 usage |
-| `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the revisor's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after the log lands | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
+| `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the revisor's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after the log lands. Tolerant of the recurring revisor JSON defects — prose/fences, a trailing comma, invalid backslash escapes, and unescaped content quotes inside string values (repaired; regex fallback for the verdict) — so a malformed reply never blocks the run | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
 
 When a dispatch is interrupted — the hard `opencode-timed` CLI timeout kills a
 provider-stalled run and returns `rc=124` — `red-gate` ledgers a terminal

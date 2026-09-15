@@ -262,6 +262,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        reads JSONL event log, extracts structured verdict,
                        writes JSON file (exit 0 verdict written; 1 no
                        verdict / read error / write error; 2 usage).
+                       Tolerant of the revisor's recurring JSON defects
+                       (prose/fences, trailing comma, invalid backslash
+                       escapes, unescaped content quotes) so a malformed
+                       reply never blocks the run.
                        Run by Script CEO after the log lands.
 
 skills/brainstorming/scripts/:

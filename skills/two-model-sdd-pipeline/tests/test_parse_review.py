@@ -80,6 +80,28 @@ class TestExtractVerdict(unittest.TestCase):
         text = "No structured verdict here, just prose."
         self.assertIsNone(extract_verdict(text))
 
+    def test_recovers_verdict_with_unescaped_content_quotes(self):
+        # Reviewer defect observed in the wild: unescaped double quotes
+        # inside a string value make the JSON invalid.
+        malformed = (
+            "```json\n{\n"
+            '  "verdict": "SEND_BACK",\n'
+            '  "findings": [\n'
+            '    {"severity": "Major", '
+            '"issue": "the cashier loses the "how overdue" cue"}\n'
+            "  ],\n"
+            '  "summary": "needs work"\n'
+            "}\n```"
+        )
+        result = extract_verdict(malformed)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["verdict"], "SEND_BACK")
+        self.assertEqual(len(result.get("findings", [])), 1)
+
+    def test_unescaped_quotes_still_oracle_on_clean_json(self):
+        # The repair must not corrupt already-valid JSON.
+        self.assertEqual(extract_verdict(VERDICT_JSON), json.loads(VERDICT_JSON))
+
 
 class TestExtractFromLog(unittest.TestCase):
     def test_finds_verdict_in_text_event(self):
