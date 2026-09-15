@@ -34,7 +34,9 @@ Return EXACTLY one JSON object, nothing else, no prose outside it:
     {"severity": "Critical|Important|Minor", "file": "path", "line": 0,
      "issue": "what and why", "fix": "how"}
   ],
-  "minors": ["deferred notes, no code change required"],
+  "minors": [
+    {"severity": "Minor", "note": "deferred note, no code change required"}
+  ],
   "summary": "one-paragraph overall assessment"
 }
 ```
@@ -42,7 +44,9 @@ Return EXACTLY one JSON object, nothing else, no prose outside it:
 - APPROVED: spec met, quality sound, interfaces intact, tests encode acceptance.
 - SEND_BACK: fixable within this task's scope; list findings with file:line (includes weak/vacuous tests).
 - ESCALATE: wrong approach, unsatisfiable acceptance, or structural problem.
-- Minor findings are PARKED (closing triages them) — never a fix loop.
+- Minor findings are PARKED (closing triages them) — never a fix loop. Each
+  parked minor carries an explicit `severity` of Minor; Critical/Important are
+  findings (SEND_BACK), never parked.
 
 Read the attached review package (diff) and the task brief. Do not crawl the codebase; inspect code outside
 the diff only to evaluate a named risk.

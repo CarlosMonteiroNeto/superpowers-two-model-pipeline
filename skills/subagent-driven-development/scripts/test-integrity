@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Deterministic test-tamper check (mirrors two-model-sdd-pipeline's
-# red-integrity, adapted to this skill's git-range workflow): confirms the
+# Upstream superpowers: subagent-driven-development's own script (off-pipeline
+# workflow). Independent of the two-model pipeline.
+#
+# Deterministic test-tamper check (this skill's own git-range workflow): confirms the
 # implementer's diff left every RED test file byte-identical to what the
 # controller verified failing before dispatch. This is a script decision,
 # not a reviewer's manual read of the diff - "did C touch a test file" is

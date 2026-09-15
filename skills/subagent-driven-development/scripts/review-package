@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Upstream superpowers: subagent-driven-development's own script (used by that
+# skill's off-pipeline workflow). Not a duplicate of the two-model pipeline's
+# review-package; leave both.
+#
 # Generate a review package: commit list, stat summary, and the net
 # diff with extended context, written to a file the reviewer reads in one
 # call. Using the recorded per-task BASE (not HEAD~1) keeps multi-commit

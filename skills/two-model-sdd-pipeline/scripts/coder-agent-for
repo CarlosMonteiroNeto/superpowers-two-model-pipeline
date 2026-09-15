@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Map a resolve-toolchain `lang` to the operador agent definition that may
+# execute that ecosystem's test/analyze/format commands.
+#
+# Why this exists (C3): the generic operador's bash allowlist only covers
+# flutter/dart. On a Go/Rust/Python/Node branch the operador could not run its
+# own RED tests, so it could never produce valid RED evidence, red-form-check
+# would fail every round, and coder-gate's unbounded loop would spin at
+# operational-tier cost with no terminal state. Each supported ecosystem has a
+# variant definition with the matching allowlist; this is the single mapping
+# the gates, the runner, and the corrective path share.
+#
+# Usage: coder-agent-for LANG   -> prints the agent definition name on stdout.
+# Exit codes: 0 = mapped (unknown/empty falls back to the flutter/dart base).
+set -euo pipefail
+
+lang=${1:-}
+case "$lang" in
+  python|node|rust|go) printf 'two-model-coder-%s\n' "$lang" ;;
+  *) printf 'two-model-coder\n' ;;
+esac

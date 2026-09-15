@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Upstream superpowers: subagent-driven-development's own script (off-pipeline
+# workflow). Separate from the two-model pipeline's brief-scaffold.
+#
 # Extract one task's full text from an implementation plan into a file the
 # implementer reads in one call, so the task text never has to be pasted
 # through the controller's context.

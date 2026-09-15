@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Top-level Script CEO driver: invokable anywhere with a tracked plan file.
-# Loops route-next -> execute until FINAL_REVIEW -> closing -> push+PR.
+# Loops orchestrator (the single dispatch table, which executes the
+# script-owned BRIEF/RED/CODER actions) -> handle the LLM-owned outcomes
+# (REVIEW/CORRECTIVE/ARBITRATE) until FINAL_REVIEW -> closing -> push+PR.
 # No Agente estratégico in the loop: briefs are scaffolded, tasks come from
 # Agente diretor, gates decide, revisor judges. Resumable: re-running on the
 # same plan continues from the ledger (route-next reads state, never memory).
@@ -52,10 +54,12 @@ if command -v cygpath >/dev/null 2>&1; then
 fi
 LEDGER="$WS/ledger.jsonl"
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
-CODER_GATE_BIN="${CODER_GATE_BIN:-$SCRIPT_DIR/coder-gate}"
+# CODER_GATE is a legacy alias; the orchestrator and this script now share the
+# single CODER_GATE_BIN name.
+CODER_GATE_BIN="${CODER_GATE_BIN:-${CODER_GATE:-$SCRIPT_DIR/coder-gate}}"
 FINAL_GATE_BIN="${FINAL_GATE_BIN:-$SCRIPT_DIR/final-gate}"
-# RED_GATE_BIN intentionally has no default here: red_gate_for() resolves it
-# (env override wins, else lang-based). Never initialize it empty.
+# RED_GATE_BIN is resolved by the orchestrator (env override wins, else
+# lang-based from the ledger's `gate.lang`). Never initialize it empty here.
 
 say() { echo "RUN-PIPELINE: $1"; }
 block() { echo "RUN-PIPELINE: BLOCKED - $1" >&2; exit 1; }
@@ -71,6 +75,10 @@ PY
 
 task_ids() {
   plan_json | python3 -c "import json,sys; [print(t.get('id')) for t in json.load(sys.stdin).get('tasks', [])]"
+}
+
+plan_sha() {
+  python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest()[:12])" "$WS/plan.json" 2>/dev/null || echo unknown
 }
 
 total_now() {
@@ -112,15 +120,6 @@ else:
 gate_lang() {
   grep -E '"type": *"gate"' "$LEDGER" 2>/dev/null | tail -1 \
     | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p'
-}
-
-red_gate_for() {
-  if [ -n "${RED_GATE_BIN:-}" ]; then printf '%s' "$RED_GATE_BIN"; return; fi
-  if [ "$(gate_lang)" = "flutter" ]; then
-    printf '%s' "$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate"
-  else
-    printf '%s' "$SCRIPT_DIR/red-gate"
-  fi
 }
 
 dispatch_task_generator() {
@@ -165,13 +164,13 @@ reconcile_parents() {
   # a task_complete, record an APPROVED review (superseding its SEND_BACK) and
   # task_complete. Without this the parent's partition keeps its unresolved
   # SEND_BACK, so route-next re-emits CORRECTIVE forever and final-gate blocks.
-  local child=$1 parent done
+  local child=$1 parent completed
   while :; do
     parent=$(corrects_of "$child")
     [ -n "$parent" ] || break
-    done=$(grep -E '"type": *"task_complete"' "$LEDGER" 2>/dev/null \
+    completed=$(grep -E '"type": *"task_complete"' "$LEDGER" 2>/dev/null \
       | grep -cE "\"task\": *\"$parent\"" || true)
-    if [ "$done" -eq 0 ]; then
+    if [ "$completed" -eq 0 ]; then
       ledger review_outcome "$parent" "APPROVED" "superseded_by=corrective-$child"
       ledger task_complete "$parent" "APPROVED" "RECONCILED_BY=$child"
     fi
@@ -199,14 +198,23 @@ fi
 tasks_usable || block "plan has no usable tasks (every task needs acceptance) - complete it before running"
 
 # --- main loop ---
+# Script-owned actions (BRIEF/RED/CODER) live in exactly one place: the
+# orchestrator. run-pipeline delegates every iteration and owns only the
+# LLM-touching branches (REVIEW parse, CORRECTIVE, ARBITRATE) and closing, so
+# the dispatch table cannot drift across two copies. The orchestrator streams
+# its output (live dispatch digest) while the OUTCOME line is captured.
 task=$(first_incomplete)
 prev_action=""
 prev_lines=0
 stuck=0
+outfile="$WS/.orchestrator-outcome.log"
 while true; do
   total=$(total_now)
-  action=$("$SCRIPT_DIR/route-next" "$WS" "$task" "$total") \
-    || block "route-next failed for task $task"
+  if ! "$SCRIPT_DIR/orchestrator" "$WS" "$task" "$total" | tee "$outfile"; then
+    block "orchestrator failed for task $task"
+  fi
+  action=$(sed -n 's/^OUTCOME: //p' "$outfile" | tail -1)
+  [ -n "$action" ] || block "orchestrator produced no OUTCOME for task $task"
   lines=$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ' || echo 0)
   if [ "$action" = "$prev_action" ] && [ "$lines" = "$prev_lines" ]; then
     stuck=$((stuck + 1))
@@ -221,29 +229,6 @@ while true; do
   set -- $action
   act=$1
   case "$act" in
-    BRIEF)
-      n=$2
-      "$SCRIPT_DIR/brief-scaffold" "$WS" "$n" \
-        || block "brief-scaffold failed for task $n (malformed task?)"
-      ledger brief_ready "$n" "brief scaffolded from plan"
-      ;;
-    RED)
-      n=$2
-      "$(red_gate_for)" "$WS" "$n"
-      rc=$?
-      case "$rc" in
-        0|2) ;; # green (loops inside) or TEST_DEFECT (ARBITRATE next)
-        *) block "red-gate exit $rc on task $n - inspect logs" ;;
-      esac
-      ;;
-    CODER)
-      "$CODER_GATE_BIN" "$WS" "$2"
-      rc=$?
-      case "$rc" in
-        0|2) ;;
-        *) block "coder-gate exit $rc - inspect logs" ;;
-      esac
-      ;;
     REVIEW)
       n=$2
       "$SCRIPT_DIR/parse-review" "$WS/task-$n-reviewer.log" "$WS/task-$n-review.json" \
@@ -262,16 +247,36 @@ PY
 )
       ledger review_outcome "$n" "$verdict" "findings=$findings"
       if [ "$verdict" = "APPROVED" ]; then
+        # M7: parked findings carry a structured severity, so final-gate
+        # compares a field instead of grepping prose ("not important, cosmetic
+        # only" must not block the branch). Minor strings are notes -> none.
         minors=$(python3 - "$WS/task-$n-review.json" <<'PY'
 import json, sys
 v = json.load(open(sys.argv[1], encoding="utf-8", errors="replace"))
-print("; ".join(v.get("minors", []) or []))
+notes = []
+for m in v.get("minors", []) or []:
+    if isinstance(m, dict):
+        notes.append(str(m.get("note") or m.get("issue") or ""))
+    else:
+        notes.append(str(m))
+print("; ".join(t for t in notes if t))
+PY
+)
+        parked_sev=$(python3 - "$WS/task-$n-review.json" <<'PY'
+import json, sys
+v = json.load(open(sys.argv[1], encoding="utf-8", errors="replace"))
+rank = {"Minor": 1, "Important": 2, "Critical": 3}
+best = 0
+for m in v.get("minors", []) or []:
+    if isinstance(m, dict):
+        best = max(best, rank.get(m.get("severity", ""), 0))
+print({0: "none", 1: "Minor", 2: "Important", 3: "Critical"}[best])
 PY
 )
         if [ -n "$minors" ]; then
-          ledger task_complete "$n" "APPROVED" "PARKED=$minors"
+          ledger task_complete "$n" "APPROVED" "PARKED=$minors" "PARKED_SEVERITY=$parked_sev"
         else
-          ledger task_complete "$n" "APPROVED"
+          ledger task_complete "$n" "APPROVED" "PARKED_SEVERITY=$parked_sev"
         fi
         # An approved corrective also resolves the task(s) it corrects, then
         # the loop resumes at the first task still lacking task_complete (a
@@ -311,14 +316,18 @@ print(max(cands) if cands else '')
         || block "brief-scaffold failed for corrective task $m"
       ledger brief_ready "$m" "corrective brief scaffolded" "corrects=$n"
       ledger corrective "$m" "corrective task for $n"
-      orig_session=$(cat "$WS/task-$n-session.txt" 2>/dev/null || true)
+      # Resume the OPERADOR's own per-agent session (never a generic record:
+      # after the revisor dispatch the generic one points at the REVIEWER).
+      # The agent variant is derived from the branch's toolchain lang (C3).
+      coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$(gate_lang)")
+      orig_session=$(cat "$WS/task-$n-$coder_agent-session.txt" 2>/dev/null || true)
       if [ -n "$orig_session" ]; then
-        "$DISPATCH_BIN" --agent two-model-coder --task "$m" \
+        "$DISPATCH_BIN" --agent "$coder_agent" --task "$m" \
           --continue "$orig_session" --prompt-file "$WS/task-$m-brief.md" \
           --log "$WS/task-$m-coder.log" \
           || block "operador dispatch failed for corrective task $m"
       else
-        "$DISPATCH_BIN" --agent two-model-coder --task "$m" \
+        "$DISPATCH_BIN" --agent "$coder_agent" --task "$m" \
           --prompt-file "$WS/task-$m-brief.md" \
           --log "$WS/task-$m-coder.log" \
           || block "operador dispatch failed for corrective task $m"
@@ -352,13 +361,21 @@ print(max(cands) if cands else '')
         "$WS/task-generator-arbitrate-$n.log" \
         || block "diretor dispatch failed"
       refresh_plan
-      ledger arbitrate "$n" "diretor ruled"
+      # Observable resolution (C1): route-next must see that the ruling
+      # happened, or it re-emits ARBITRATE on every iteration. The plan hash
+      # records whether the diretor actually changed the tracked plan.
+      ledger arbitrate_resolved "$n" "diretor ruled" plan_sha="$(plan_sha)"
       ;;
     NEXT)
       task=$2
       ;;
     FINAL_REVIEW)
       break
+      ;;
+    BRIEF|RED|CODER)
+      # The orchestrator executed a script-owned step (or advanced toward one)
+      # and the re-routed action is still script-owned - loop and let it run
+      # the next step. The stuck detector above bounds a genuine no-op.
       ;;
     *)
       block "unknown action: $action"

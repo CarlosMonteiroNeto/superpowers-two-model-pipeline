@@ -11,8 +11,8 @@ Persistence — architectural path only).
   per-task flow: gates, test/analyze decisions, subagent dispatch, routing, and
   commits. A thin driver script (`orchestrator`, topped by `run-pipeline` for
   full-branch runs) plus specialized sub-scripts (red-gate, green-gate,
-  brief-scaffold, dispatch, cmd, token-kill, route-next, review-package,
-  ledger-append). Script CEO is never an
+  brief-scaffold, coder-gate, coder-agent-for, dispatch, cmd, route-next,
+  keep-discard, interface-check, review-package, ledger-append). Script CEO is never an
   LLM; its verdicts are exit codes and its outputs are files.
 - **Agente estratégico** — the interactive OpenCode session the developer
   opened for brainstorming. Produces the design spec and a COMPLETE `plan.json`
@@ -57,11 +57,17 @@ Persistence — architectural path only).
   revisor directly (item 3).
 - **coder-gate** — unbounded retries until green; verifies the operador's saved
   RED evidence by FORM via `red-form-check` (suite loaded, ≥1 test executed,
-  failed as assertion/runtime — never a compile/load red); red-integrity
-  pre-commit when a snapshot exists. Only TEST_DEFECT leaves the loop.
+  failed as assertion/runtime — never a compile/load red); the keep-discard
+  scope gate runs before commit (out-of-scope → scope_violation → ARBITRATE),
+  and interface-check is wired post-commit as an advisory ledger entry. Only
+  TEST_DEFECT leaves the loop.
 - **route-next** — deterministic router; Script CEO executes its emitted action.
   Actions: BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE /
   NEXT / FINAL_REVIEW. `STRATEGIC` action removed (Strategic Coder removed).
+  `arbitrate_resolved` newer than the last escalation re-emits BRIEF; a
+  re-escalation after a ruling is exit 1 (arbitration did not resolve);
+  `scope_violation` escalates like `escalated`; the task count is read from
+  JSON, never an `"id"` grep.
 - **dispatch** — NEW script. Headless subagent launcher: `opencode run --agent
   <coder|reviewer|task-generator> --dir <worktree> --file <brief> --format json --prompt <filled>`.
   Fix/correction rounds append `--continue --session <id>`. Full JSON event stream
@@ -70,8 +76,9 @@ Persistence — architectural path only).
 - **cmd** — command runner; RTK-compressed LLM-facing stdout, full output to files.
   RTK filter map extended: `flutter test` → `rtk test`, `flutter analyze` → `rtk err`,
   git diff → `rtk diff`, JSON → `rtk json`.
-- **token-kill** — NEW script. RTK-based minification: error-log minification,
-  comment/whitespace stripping from source fed to operador/revisor, report trimming.
+- **coder-agent-for** — maps a resolve-toolchain lang to the operador variant
+  (`two-model-coder-{python,node,rust,go}`) whose bash allowlist can run that
+  ecosystem's tests; used by both red-gates, coder-gate, and the corrective path.
 
 ## Context and cost rules
 
@@ -85,7 +92,7 @@ Persistence — architectural path only).
   live dispatch digest plus workspace log files (teed by `dispatch`);
   headless subagent sessions never pollute the main session's
   history.
-- **RTK = Token Killer:** every command an LLM could see runs through `cmd`/`token-kill`;
+- **RTK compression:** every command an LLM could see runs through `cmd`;
   RTK is the pipeline's context-compression layer, not an optional extra.
 
 ## Category Skeleton

@@ -57,7 +57,9 @@ class RunPipelineTestBase(unittest.TestCase):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
     def ws(self):
-        return self.repo / ".superpowers" / "two-model" / "plan.json"
+        # L3: pipeline-workspace strips the plan's extension, so a
+        # `plan.json` plan yields the `plan` workspace directory.
+        return self.repo / ".superpowers" / "two-model" / "plan"
 
     def write_plan(self, tasks):
         self.plan.write_text(json.dumps({"feature": "t", "tasks": tasks}),
@@ -324,6 +326,72 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         """Acceptance: an arbitrate dispatch passes the plan path and the
         target task (with its spec_refs), fresh - no session reuse."""
         self._assert_punctual_dispatch("ESCALATE")
+
+    def test_arbitrate_resolves_once_then_blocks(self):
+        """C1: the ARBITRATE branch must ledger an observable resolution and
+        terminate - never re-dispatch the task-generator on every iteration."""
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate(
+            {"ts": "x", "type": "commit", "task": "1", "summary": "green",
+             "commits": "deadbeef"},
+            {"ts": "x", "type": "review_outcome", "task": "1",
+             "summary": "ESCALATE", "findings": "1"},
+        )
+        self.write_reviewer_log(1, "ESCALATE")
+        r = self.run_pipeline(
+            "--no-push",
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("did not resolve task 1", r.stderr)
+        entries = [
+            json.loads(line)
+            for line in (self.ws() / "ledger.jsonl").read_text(
+                encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        resolved = [e for e in entries if e["type"] == "arbitrate_resolved"]
+        self.assertEqual(len(resolved), 1, entries)
+        self.assertIn("plan_sha", resolved[0])
+        dcalls = self.dispatch_log.read_text(encoding="utf-8")
+        self.assertEqual(dcalls.count("two-model-task-generator"), 1, dcalls)
+
+    def test_corrective_resumes_operador_session_not_generic(self):
+        """L5: the corrective round must resume the operador's own session;
+        the generic record points at the reviewer after review."""
+        corrective = {
+            "id": 2, "title": "Fix task 1", "summary": "Corrective for 1.",
+            "spec_refs": ["§9.7"], "touches": ["lib/b.go"], "depends_on": [1],
+            "acceptance": ["thing fixed"], "corrects": 1,
+        }
+        self.write_plan([dict(FULL_TASK), corrective])
+        self.write_gate(
+            {"ts": "x", "type": "commit", "task": "1", "summary": "green",
+             "commits": "deadbeef"},
+            {"ts": "x", "type": "review_outcome", "task": "1",
+             "summary": "SEND_BACK", "findings": "1"},
+        )
+        (self.ws() / "task-1-review.json").write_text(
+            json.dumps({"verdict": "SEND_BACK", "findings": ["weak"]}),
+            encoding="utf-8")
+        (self.ws() / "task-1-session.txt").write_text(
+            "GENERIC-REVIEWER-SESSION\n", encoding="utf-8")
+        (self.ws() / "task-1-two-model-coder-go-session.txt").write_text(
+            "OPERADOR-SESSION\n", encoding="utf-8")
+        self.write_reviewer_log(2, "APPROVED")
+        r = self.run_pipeline(
+            "--no-push",
+            DISPATCH_BIN=self.fake_dispatch(),
+            CODER_GATE_BIN=self.fake_coder_gate_committed(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        dcalls = self.dispatch_log.read_text(encoding="utf-8")
+        self.assertIn("--continue OPERADOR-SESSION", dcalls)
+        self.assertNotIn("GENERIC-REVIEWER-SESSION", dcalls)
 
     def test_missing_plan_is_usage(self):
         r = subprocess.run(

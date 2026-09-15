@@ -52,10 +52,12 @@ class FinalGateBase(unittest.TestCase):
     def review(self, task, verdict):
         return {"ts": "t", "type": "review_outcome", "task": str(task), "summary": verdict}
 
-    def complete(self, task, parked=None):
+    def complete(self, task, parked=None, severity=None):
         e = {"ts": "t", "type": "task_complete", "task": str(task), "summary": "ok"}
         if parked:
             e["PARKED"] = parked
+        if severity:
+            e["PARKED_SEVERITY"] = severity
         return e
 
     def run_it(self, total="3"):
@@ -98,7 +100,8 @@ class TestFinalGate(FinalGateBase):
     def test_parked_critical_blocks(self):
         self.write_ledger([
             self.gate_entry(),
-            self.review(1, "APPROVED"), self.complete(1, parked="sev=Critical"),
+            self.review(1, "APPROVED"),
+            self.complete(1, parked="sev=Critical", severity="Critical"),
         ])
         r = self.run_it()
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
@@ -106,7 +109,31 @@ class TestFinalGate(FinalGateBase):
     def test_parked_minor_does_not_block(self):
         self.write_ledger([
             self.gate_entry(),
-            self.review(1, "APPROVED"), self.complete(1, parked="sev=Minor"),
+            self.review(1, "APPROVED"),
+            self.complete(1, parked="sev=Minor", severity="Minor"),
+        ])
+        r = self.run_it(total="1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_parked_prose_mentioning_important_does_not_block(self):
+        """M7: severity is a field, not a substring - a parked Minor whose
+        note says 'not important, cosmetic only' must not block the branch."""
+        self.write_ledger([
+            self.gate_entry(),
+            self.review(1, "APPROVED"),
+            self.complete(1, parked="not important, cosmetic only",
+                          severity="Minor"),
+        ])
+        r = self.run_it(total="1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_legacy_prose_parked_does_not_block(self):
+        """M7: a legacy task_complete with only free-text PARKED (no severity
+        field) is not a structured blocking finding."""
+        self.write_ledger([
+            self.gate_entry(),
+            self.review(1, "APPROVED"),
+            self.complete(1, parked="Critical-looking prose, no field"),
         ])
         r = self.run_it(total="1")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

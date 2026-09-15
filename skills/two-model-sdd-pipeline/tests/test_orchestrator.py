@@ -62,14 +62,22 @@ class OrchestratorTestBase(unittest.TestCase):
 
 
 class TestOrchestratorHandoff(OrchestratorTestBase):
-    def test_empty_ledger_hands_off_brief(self):
+    def test_brief_is_scaffolded_then_hands_off_red(self):
+        plan = {"feature": "t", "tasks": [
+            {"id": 3, "title": "Add widget", "summary": "x",
+             "spec_refs": ["s1"], "touches": ["lib/a.go"], "depends_on": [],
+             "acceptance": ["works"]}]}
+        (self.ws / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
         self.ledger([])
         r = run_script(
             "orchestrator", [str(self.ws), "3", "5"],
             cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("OUTCOME: BRIEF 3", r.stdout)
+        self.assertIn("OUTCOME: RED 3", r.stdout)
+        self.assertTrue((self.ws / "task-3-brief.md").exists())
+        self.assertIn("brief_ready",
+                      (self.ws / "ledger.jsonl").read_text(encoding="utf-8"))
 
     def test_send_back_hands_off_corrective(self):
         self.ledger([

@@ -137,7 +137,7 @@ owned by scripts):
 | `cmd --full-file FILE -- CMD` (two-model) | AI seeing raw command output in context (saves FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code; flutter test/analyze via rtk test/err wrappers) |
 | `dispatch --agent NAME --task N [--continue SESSION] ...` (two-model) | AI launching subagents from the session (headless `opencode run`; JSON stream teed to a workspace log; session id recorded for resume) |
 | `orchestrator WS TASK [TOTAL]` (two-model) | AI deciding the per-task transition (executes route-next actions, hands `OUTCOME:` back to the runner) |
-| `token-kill err\|src\|json FILE` (two-model) | AI reading raw logs/source/reports into context (RTK minification, lossless) |
+| `coder-agent-for LANG` (two-model) | AI/dispatch guessing which operador variant can run an ecosystem's tests (maps lang → `two-model-coder-{python,node,rust,go}`) |
 | `run-gates WS TEST ANALYZE` (two-model) | AI running/reading the gate-recorded test + analyze commands in the generic engine |
 | `route-next WORKSPACE TASK [TOTAL]` (two-model) | AI deciding "review passed → next task / failed → corrective / escalate → arbitrate" — the router emits the next action deterministically |
 

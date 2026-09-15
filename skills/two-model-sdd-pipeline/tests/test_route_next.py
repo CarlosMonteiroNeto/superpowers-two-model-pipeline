@@ -187,6 +187,89 @@ class TestRouteNextFixAndEscalation(RouteNextTestBase):
         self.assert_action(r, "CODER 3")
 
 
+class TestRouteNextArbitrationResolution(RouteNextTestBase):
+    """An arbitration that resolves must be observable to the router, or the
+    ARBITRATE action loops forever at Strategic-tier cost."""
+
+    def test_escalation_after_resolution_emits_brief(self):
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("red_check", 3, "RED"),
+            entry("escalated", 3, "TEST_DEFECT"),
+            entry("arbitrate_resolved", 3, "diretor ruled", plan_sha="abc"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assert_action(r, "BRIEF 3")
+
+    def test_review_escalate_after_resolution_emits_brief(self):
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("red_check", 3, "RED"),
+            entry("commit", 3, "Task", commits="a1b2c3"),
+            entry("review_outcome", 3, "ESCALATE"),
+            entry("arbitrate_resolved", 3, "diretor ruled"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assert_action(r, "BRIEF 3")
+
+    def test_brief_rescaffolded_after_resolution_falls_through(self):
+        """Once the brief is re-scaffolded the pre-ruling escalation is
+        consumed: normal flow resumes (no BRIEF loop)."""
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("red_check", 3, "RED"),
+            entry("escalated", 3, "TEST_DEFECT"),
+            entry("arbitrate_resolved", 3, "diretor ruled"),
+            entry("brief_ready", 3, "rescaffolded"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assert_action(r, "CODER 3")
+
+    def test_second_escalation_after_resolution_is_human_blocker(self):
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("escalated", 3, "TEST_DEFECT"),
+            entry("arbitrate_resolved", 3, "diretor ruled"),
+            entry("escalated", 3, "TEST_DEFECT again"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("did not resolve task 3", r.stderr)
+
+
+class TestRouteNextScopeViolation(RouteNextTestBase):
+    def test_scope_violation_emits_arbitrate(self):
+        """C2: an out-of-scope commit attempt escalates to the diretor, exactly
+        like TEST_DEFECT - never a silent commit."""
+        self.ledger([
+            entry("brief_ready", 3, "task"),
+            entry("red_check", 3, "RED"),
+            entry("scope_violation", 3, "out-of-scope changes"),
+        ])
+        r = run_route(self.ws, 3)
+        self.assert_action(r, "ARBITRATE 3")
+
+
+class TestRouteNextTaskCount(RouteNextTestBase):
+    def test_nested_id_fields_do_not_overcount_tasks(self):
+        """The plan task count must come from JSON, not a raw `"id"` grep:
+        nested id fields would inflate the count and FINAL_REVIEW would never
+        be emitted."""
+        plan = {"tasks": [
+            {"id": 1, "acceptance": {"id": "inner"}},
+            {"id": 2, "acceptance": "done"},
+        ]}
+        (self.ws / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        self.ledger([
+            entry("brief_ready", 2, "task"),
+            entry("commit", 2, "Task", commits="a1b2c3"),
+            entry("review_outcome", 2, "APPROVED"),
+            entry("task_complete", 2, "Task"),
+        ])
+        r = run_route(self.ws, 2)
+        self.assert_action(r, "FINAL_REVIEW")
+
+
 class TestRouteNextUsage(RouteNextTestBase):
     def test_missing_workspace_is_usage_error(self):
         r = run_route(pathlib.Path(self._tmp) / "nonexistent", 3)

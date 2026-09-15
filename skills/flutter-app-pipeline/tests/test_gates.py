@@ -182,16 +182,18 @@ class TestGreenGate(GateTestBase):
         self.assertEqual(self._log(repo), before)
         self.assertTrue((repo / "green-gate-report.txt.analyze").exists())
 
-    def test_format_drift_reports_and_does_not_commit(self):
+    def test_formatting_is_not_a_gate(self):
+        """M8: coder-gate auto-applies the formatter before the gate, so a
+        format gate here could never fire. Drift must not block the commit."""
         repo = self._git_repo()
         before = self._log(repo)
         r = run_script(
-            "green-gate", ["-m", "should not commit"],
+            "green-gate", ["-m", "no-format-gate"],
             cwd=repo,
             env_extra={**self.env, "STUB_FORMAT_EXIT": "1"},
         )
-        self.assertNotEqual(r.returncode, 0)
-        self.assertEqual(self._log(repo), before)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotEqual(self._log(repo), before)  # committed normally
 
     def _ws_with_plan(self):
         ws = pathlib.Path(self._tmp) / "ws"
@@ -252,6 +254,13 @@ class TestRedGate(GateTestBase):
         self.ws.mkdir()
         (self.ws / "task-3-brief.md").write_text(
             "# Task 3 Brief (scaffolded)\n", encoding="utf-8")
+        # H4: the Flutter red-gate is a shim over the generic one, which reads
+        # test_cmd from the ledger's gate entry (resolve-toolchain's shape).
+        (self.ws / "ledger.jsonl").write_text(json.dumps({
+            "ts": "x", "type": "gate", "task": "-", "summary": "flutter",
+            "test_cmd": "flutter test", "analyze_cmd": "flutter analyze",
+            "detected": "auto", "lang": "flutter",
+        }) + "\n", encoding="utf-8")
 
     def _red_env(self, **extra):
         env = dict(self.env)
@@ -277,7 +286,6 @@ class TestRedGate(GateTestBase):
 
     def test_ledgers_red_check(self):
         ledger = self.ws / "ledger.jsonl"
-        ledger.write_text("", encoding="utf-8")
         dlog = pathlib.Path(self._tmp) / "dispatch.log"
         r = run_script(
             "red-gate", [str(self.ws), "3"],

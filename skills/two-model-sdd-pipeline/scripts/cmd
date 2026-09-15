@@ -9,8 +9,8 @@
 # This is the generic wrapper the pipeline uses for every LLM-invoked
 # command line, so no raw command output ever reaches an LLM context window
 # uncompressed. Deterministic gates keep reading full files, so nothing they
-# depend on (red-gate's EXPECTED-RED substring, escalation packages,
-# red-integrity byte-compare) is ever compressed.
+# depend on (red-form-check's machine-readable evidence, escalation packages)
+# is ever compressed.
 #
 # Usage: cmd --full-file FILE -- COMMAND [ARGS...]
 #   --full-file FILE   path to write the FULL unfiltered output
@@ -110,8 +110,13 @@ if [ "$use_rtk" = "1" ] && [ -n "$wrapper" ]; then
   rc=$?
   "$RTK_BIN" "$wrapper" -- cat "$full_file" 2>/dev/null || cat "$full_file"
 elif [ "$use_rtk" = "1" ] && [ -n "$filter" ]; then
-  "$@" 2>&1 | tee "$full_file" | "$RTK_BIN" pipe -f "$filter"
-  rc=${PIPESTATUS[0]}
+  # Run the raw command once for the verdict + full file, then derive the
+  # compressed view from the FILE (same contract as the wrapper branch below).
+  # Piping the raw run straight into `rtk pipe` lets a crashing RTK kill the
+  # upstream `tee` via SIGPIPE and lose the full output the gates read.
+  "$@" > "$full_file" 2>&1
+  rc=$?
+  "$RTK_BIN" pipe -f "$filter" < "$full_file" 2>/dev/null || cat "$full_file"
 else
   "$@" 2>&1 | tee "$full_file"
   rc=${PIPESTATUS[0]}

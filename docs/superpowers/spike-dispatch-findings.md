@@ -50,14 +50,27 @@ fix-round economics.
 
 ### 5. Confirmed command forms
 
+> **SUPERSEDED (2026-09-15, see ADR-0009).** The `--file` form below is WRONG
+> for this opencode version: it treats the positional message as a file path
+> whenever `--file` is present, which breaks every run. `dispatch` passes the
+> brief as the positional argument instead and does **not** use `--file`. Do not
+> "fix" `dispatch` back to this form.
+
 ```bash
-# fresh dispatch
+# fresh dispatch (SUPERSEDED - do not use --file)
 opencode run --agent <two-model-coder|two-model-reviewer> --format json \
   --file <prompt-file> "<prompt>"
 
-# resume (fix / correction round)
+# resume (fix / correction round) (SUPERSEDED - do not use --file)
 opencode run --agent <NAME> --continue --session <ID> --format json \
   --file <prompt-file> "<prompt>"
+```
+
+Current (working) form:
+
+```bash
+opencode run --agent <NAME> --format json <prompt-file> "<prompt>"
+opencode run --agent <NAME> --continue --session <ID> --format json <prompt-file> "<prompt>"
 ```
 
 ## Consequences for the implementation plan
@@ -66,8 +79,9 @@ opencode run --agent <NAME> --continue --session <ID> --format json \
 - `dispatch` script must tee the JSON stream to a workspace log (observability)
   and extract `sessionID` from the first event for the resume handle.
 - The reviewer agent (`two-model-reviewer`, `mode: all`) must be created (Task 10).
-- Model check: `two-model-coder` = `opencode-go/mimo-v2.5`; reviewer/strategic =
-  `opencode-go/deepseek-v4-flash`.
+- Model check (corrected 2026-09-15; the original entry was inverted):
+  operational tier `two-model-coder` = `opencode-go/deepseek-v4-flash`;
+  strategic tier (`two-model-reviewer`) = `opencode-go/muse-spark-1.3-contributor`.
 
 ## Cost note
 

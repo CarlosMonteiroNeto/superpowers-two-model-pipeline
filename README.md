@@ -9,7 +9,7 @@ Each of the 14 original skills was kept intact and given a **"Pipeline Integrati
 - **Structured verdicts, not prose** — review-related skills (`requesting-code-review`, `receiving-code-review`) now route on D's fixed JSON shape (APPROVED / SEND_BACK / ESCALATE) instead of free-text comments.
 - **State is external** — plan.json + git + JSONL ledger, never conversational memory; this is what makes every loop resumable after compaction.
 - **Cache-aware, logged dispatch** — all subagent calls go through `scripts/dispatch --agent NAME [--continue SESSION]`, never inline/ad-hoc prompts.
-- **RTK compression** — large outputs (logs, diffs, JSON reports) get minified via `token-kill`/`cmd` before hitting context; dependency context comes from diffs and gate reports, not manual grepping.
+- **RTK compression** — large outputs (logs, diffs, JSON reports) get minified via `cmd` before hitting context; dependency context comes from diffs and gate reports, not manual grepping.
 - **English-only artifacts** — specs, briefs, ADRs, ledger summaries, commit messages, skill files: English regardless of the developer's language. The only exception anywhere in the pipeline is user-facing UI copy.
 
 ## Update: closed the post-round-1 automation gap (two-model-sdd-pipeline)
@@ -55,7 +55,7 @@ correctly short-circuits to `escalated` with no further retries):
 Auditing the single-session skill against the new RED-at-brief-time paradigm surfaced three real gaps, now fixed:
 
 - **`SKILL.md` "Handle the report"** still said implementers report one of *four* statuses — `implementer-prompt.md` already reports five (added `TEST_DEFECT`). Added the missing **TEST_DEFECT** handling: correct the test or the brief yourself, re-verify RED, re-dispatch the same agent — never ask the implementer to fix its own test.
-- **No tamper check before review.** The reviewer had no deterministic signal that a RED test file was touched — it depended on manually noticing it mid-diff-read. Added **`scripts/test-integrity BASE HEAD TEST_FILE...`** (mirrors `two-model-sdd-pipeline`'s `red-integrity`): byte-compares the named RED test files across the implementer's commit range, exit 1 on any change. Wired into step 3 ("Review the task") before the reviewer is dispatched, and into the fix loop's re-review (a fix round can tamper a test as easily as round 1 can).
+- **No tamper check before review.** The reviewer had no deterministic signal that a RED test file was touched — it depended on manually noticing it mid-diff-read. Added **`scripts/test-integrity BASE HEAD TEST_FILE...`**: byte-compares the named RED test files across the implementer's commit range, exit 1 on any change. Wired into step 3 ("Review the task") before the reviewer is dispatched, and into the fix loop's re-review (a fix round can tamper a test as easily as round 1 can).
 - Confirmed clean: `implementer-prompt.md`'s five template placeholders (`[MODEL]`, `[BRIEF_FILE]`, `[RED_TEST_PATHS]`, `[REPORT_FILE]`, `[directory]`) all match what `SKILL.md`'s dispatch section fills in; `task-reviewer-prompt.md`/`re-review-prompt.md` make no test-authorship assumptions that needed correcting; `scripts/task-brief`/`review-package`/`sdd-workspace` needed no changes — they're already brief/diff plumbing, agnostic to who wrote which file.
 
 ## Update: script-decided routing (no LLM approval for scriptable checks)
@@ -70,7 +70,7 @@ New principle, stated explicitly in `README-LLM.md`: **if a check can be scripte
 ## Update: real pipeline skills + RED-test paradigm fix
 
 - **`skills/two-model-sdd-pipeline/`** and **`skills/flutter-app-pipeline/`** are included verbatim (SKILL.md, `scripts/`, `tests/`) from [`CarlosMonteiroNeto/superpowers-two-model-pipeline`](https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline), so the "Pipeline Integration" notes in the other 14 skills point at scripts that actually exist in this package.
-- **`agent/`** carries the four tier definitions (`flutter-pipeline`, `two-model-coder`, `two-model-controller`, `two-model-reviewer`) those scripts dispatch against.
+- **`agent/`** carries the tier definitions (`flutter-pipeline`, `two-model-task-generator`, `two-model-reviewer`, and the operador: `two-model-coder` plus the per-ecosystem `two-model-coder-{python,node,rust,go}` variants) those scripts dispatch against.
 - **`subagent-driven-development/implementer-prompt.md` was rewritten**: in this paradigm, RED tests are written by the controller/B *at brief-creation time*, verified failing for the expected reason, and only then handed to the implementer/C as read-only input. The subagent no longer writes, edits, or "adjusts" any test file — it implements against tests it did not author, and reports **TEST_DEFECT** (instead of silently fixing the test) if one looks wrong. `SKILL.md`'s dispatch checklist and process diagram were updated to match; `coder-prompt.md` in `two-model-sdd-pipeline/` already encoded this rule and was left as-is.
 
 ## What did NOT change

@@ -1,6 +1,13 @@
+# This file: keep LF so the rules are stable across checkouts.
+.gitattributes text eol=lf
+
 # Ensure shell scripts always have LF line endings
 *.sh text eol=lf
 skills/*/scripts/* text eol=lf
+# Extensionless repo-root scripts (check-/install-/sync-superpowers) are bash
+# too; without this attribute autocrlf checks them out CRLF and shellcheck
+# fails the whole file with SC1017.
+scripts/* text eol=lf
 hooks/session-start text eol=lf
 
 # Ensure the polyglot wrapper keeps LF (it's parsed by both cmd and bash)

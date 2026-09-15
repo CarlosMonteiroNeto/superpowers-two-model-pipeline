@@ -1,48 +1,12 @@
 #!/usr/bin/env bash
-# Per-task kickoff: the brief is scaffolded from the plan (brief-scaffold),
-# never hand-written. This gate verifies the scaffold exists, ledgers the
-# red_check entry, dispatches Agente operador headlessly (Item 4), and chains
-# straight into coder-gate — which owns retries, the RED-evidence check (the
-# operador runs its own RED tests and saves the failing output; coder-gate
-# verifies it contains the expected reason), commit, and Revisor dispatch.
-# Agente operador authors the RED tests; no test is materialized here.
+# Flutter red-gate is now a thin shim (H4): the language-agnostic
+# two-model-sdd-pipeline/scripts/red-gate owns the logic - verify the brief,
+# dispatch the operador variant for the ledger's lang, ledger an interrupted
+# dispatch, then chain coder-gate. The Flutter file had drifted on exactly the
+# error handling the generic one fixed; a second copy is how that happened, so
+# exec the single implementation instead.
 #
-# Usage: red-gate WORKSPACE TASK
-# Exit codes: 0 = coder-gate's exit; 2 = usage / missing brief.
+# Usage: red-gate WORKSPACE TASK [TEST_CMD]   (forwards to the generic gate)
 set -euo pipefail
-
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-
-if [ $# -ne 2 ]; then
-  echo "usage: red-gate WORKSPACE TASK" >&2
-  exit 2
-fi
-
-ws=$1
-task=$2
-brief="$ws/task-$task-brief.md"
-
-[ -f "$brief" ] || { echo "RED-GATE: no brief: $brief - run brief-scaffold first" >&2; exit 2; }
-
-TWO_MODEL_SCRIPTS="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts"
-
-if [ -x "$TWO_MODEL_SCRIPTS/ledger-append" ]; then
-  "$TWO_MODEL_SCRIPTS/ledger-append" "$ws/ledger.jsonl" red_check "$task" \
-    "brief scaffolded, dispatching operador" || true
-fi
-
-# Dispatch Agente operador headlessly (Item 4, ADR-0001): the scaffolded
-# brief is sound by construction; Script CEO launches the operador directly,
-# no main-agent intermediation. The operador writes code only; Script CEO
-# runs the gates (write-only operador, ADR-0002).
-DISPATCH_BIN="${DISPATCH_BIN:-$TWO_MODEL_SCRIPTS/dispatch}"
-"$DISPATCH_BIN" --agent two-model-coder --task "$task" \
-  --prompt-file "$brief" --log "$ws/task-$task-coder.log"
-
-# Close the loop here instead of stopping at "operador was dispatched": run
-# the gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
-# RED-proof, commit and dispatch the revisor on green - all without waiting.
-# See coder-gate's header for the full state machine.
-CODER_GATE="${CODER_GATE:-$TWO_MODEL_SCRIPTS/coder-gate}"
-"$CODER_GATE" "$ws" "$task"
-exit $?
+exec "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/red-gate" "$@"

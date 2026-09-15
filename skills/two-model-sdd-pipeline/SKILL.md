@@ -180,18 +180,26 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   (exit 3) when the targeted agent is not `mode: all`, so a silent fallback
   to the default agent can never break the tiers.
 - **`session-clean`** — manual session hygiene: deletes the opencode
-  sessions a task recorded (`task-N-*-session.txt`, per-agent and
-  generic). Never auto-run — the orchestrator and `run-pipeline` keep
-  sessions so corrective rounds and debugging can resume them.
-  Best-effort; `OPENCODE_BIN` overrides the binary.
+  sessions a task recorded (`task-N-*-session.txt`, per-agent only;
+  the generic record was removed as a trap). Never auto-run — the
+  orchestrator and `run-pipeline` keep sessions so corrective rounds and
+  debugging can resume them. Best-effort; `OPENCODE_BIN` overrides the
+  binary.
 - **`route-next`** — deterministic router (see Approval Policy).
 - **`cmd`** — generic command runner (RTK compression; flutter test → `rtk
   test`, flutter analyze → `rtk err` wrapper derivation, verdict from the
   raw run).
-- **`token-kill`** — RTK minification: error logs, source payloads to C/D,
-  JSON reports.
-- **`review-package` / `ledger-append` / `red-integrity` / `final-gate` /
-  `doc-check`** — as before.
+- **`coder-agent-for`** — maps a `resolve-toolchain` lang to the per-ecosystem
+  operador definition (`two-model-coder-{python,node,rust,go}`) whose bash
+  allowlist can run that ecosystem's tests; shared by both red-gates,
+  `coder-gate`, and the corrective path.
+- **`keep-discard`** — the C2 scope gate: run before any commit; a real
+  out-of-scope change ledgers `scope_violation` → `ARBITRATE`. Newly authored
+  test files are exempt (H3), modified committed tests are not.
+- **`interface-check`** — post-commit advisory: ledgers `interface_touched`
+  when the diff touches a file another task consumes.
+- **`review-package` / `ledger-append` / `final-gate` / `doc-check`** —
+  as before.
 - **`parse-review`** — deterministic parser: reads the Reviewer's JSONL event
   log, extracts the structured verdict, and writes it to a JSON file
   (`parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`). Run by
@@ -239,9 +247,8 @@ Script CEO never implements, reviews, or fixes anything itself.
   beside the evidence), then runs the tests green. May run test/analyze/format
   commands; never runs git commands (ADR-0007).
 - Never weakens a test after green. `coder-gate` validates the saved RED form
-  with `red-form-check` (a compile/load red does not count), and
-  `red-integrity` hash-compares test files whenever a snapshot exists. If a
-  test looks unsatisfiable: report `TEST_DEFECT`; Agente diretor rules.
+  with `red-form-check` (a compile/load red does not count). If a test looks
+  unsatisfiable: report `TEST_DEFECT`; Agente diretor rules.
 - Context zeroed per task; retries resume the same session
   (`--continue --session`). No round budget, no failure counting: the loop
   runs until the gate passes. Only `TEST_DEFECT` leaves the loop (→ Agente
@@ -446,8 +453,8 @@ For each task in order:
    acceptance, then returns a JSON verdict. Script CEO runs
    `parse-review <ws>/task-N-reviewer.log <ws>/task-N-review.json`
    after the revisor's log lands. The revisor never runs test/analyze
-   (Item 2). (`red-integrity` still hash-compares test files against a
-   snapshot when one exists — no post-green weakening.)
+   (Item 2). The revisor is the sole independent semantic guarantee that the
+   tests encode the acceptance; weak or vacuous tests are SEND_BACK findings.
 
  6. **Outcome.** Ledger `review_outcome`, then `route-next`:
    - `APPROVED` → ledger `task_complete`, minors PARKED, next task

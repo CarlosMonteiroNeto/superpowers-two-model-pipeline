@@ -31,7 +31,11 @@ fi
 plan=$1
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 
-slug=$(basename "$plan" .md)
+# Plans are .json (brainstorming authors plan.json); strip either extension so
+# the workspace is named `foo-plan`, not `foo-plan.json` (L3).
+slug=$(basename "$plan")
+slug=${slug%.json}
+slug=${slug%.md}
 [ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \
   || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
 

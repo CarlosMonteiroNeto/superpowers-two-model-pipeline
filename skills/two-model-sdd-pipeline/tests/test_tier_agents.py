@@ -118,5 +118,33 @@ class TestNoExpectedFailureTextInPrompts(unittest.TestCase):
         self.assert_no_expected_failure_text(CODER_PROMPT)
 
 
+class TestOperationalVariants(unittest.TestCase):
+    """C3: each detected ecosystem has an operador variant whose bash
+    allowlist can execute that ecosystem's test/analyze/format commands; the
+    per-agent session record and the write-only contract are preserved."""
+
+    VARIANTS = {
+        "two-model-coder-python.md": "pytest",
+        "two-model-coder-node.md": "npm",
+        "two-model-coder-rust.md": "cargo",
+        "two-model-coder-go.md": "go",
+    }
+
+    def test_each_variant_exists_and_is_primary(self):
+        for name, token in self.VARIANTS.items():
+            path = REPO / "agent" / name
+            self.assertTrue(path.exists(), "%s missing" % name)
+            text = read(path)
+            self.assertIn("mode: all", text)
+            self.assertIn(token, text)
+            self.assertIn("machine-readable", text.lower())
+
+    def test_variants_keep_the_write_only_contract(self):
+        for name in self.VARIANTS:
+            text = read(REPO / "agent" / name).lower()
+            self.assertIn("never run git", text)
+            self.assertIn("never weaken a test", text)
+
+
 if __name__ == "__main__":
     unittest.main()

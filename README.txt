@@ -124,18 +124,21 @@ INSTALL (OpenCode)
 
 Make OpenCode load this fork instead of the upstream superpowers package.
 
-In ~/.config/opencode/package.json:
+The plugin loads from a vendored git checkout
+(~/.config/opencode/vendor/superpowers), NOT from node_modules: the
+self-update scripts (check-superpowers / sync-superpowers) need a real git
+working copy to fetch/reset, which an npm tarball cannot provide. Clone it:
 
-    "dependencies": {
-      "superpowers": "github:CarlosMonteiroNeto/superpowers-two-model-pipeline"
-    }
+    scripts/install-superpowers          # clones the fork into the vendor dir
+    # or, if this fork is already checked out somewhere:
+    #   git clone <fork-url> ~/.config/opencode/vendor/superpowers
 
-Then, from ~/.config/opencode:
-
-    npm install
-
-The plugin stays registered as "~/.config/opencode/node_modules/superpowers"
-in opencode.json. Restart OpenCode after installing.
+Then register the plugin path "~/.config/opencode/vendor/superpowers" in
+~/.config/opencode/opencode.json and restart OpenCode. If you previously
+followed an npm install, remove that dependency and the
+node_modules/superpowers tree so there is only one copy - check-superpowers
+reports a node_modules install with a specific message instead of silently
+saying "not installed".
 
 To use the pipeline automatically in every session, set a default agent
 that runs the pipeline (see the harness doc for the agent prompt):
@@ -171,12 +174,13 @@ skills/flutter-app-pipeline/scripts/:
                        Flutter/Dart readiness, issue ratio, sustained interest,
                        license, README)
   pub-sync             download + lockfile + version-conflict report
-  red-gate             verify the scaffolded brief, dispatch Agente operador
-                       on success (then chains into coder-gate, which owns
-                       the retry loop: RED-form check (`red-form-check`) + commit
-                       + revisor dispatch)
-  green-gate           chain test + analyze + format + commit (RED form
-                         already verified), then review package + revisor dispatch.
+  red-gate             thin shim over the generic two-model red-gate (one
+                       implementation: dispatch the lang-selected operador,
+                       capture an interrupted dispatch, chain coder-gate)
+  green-gate           chain test + analyze (through cmd) + commit
+                         (no format gate: coder-gate auto-applies the
+                         formatter first), scope gate then review package +
+                         revisor dispatch.
                          On commit appends the ledger `commit` entry
                          (task from -t when given; ledger-append resolved
                          from the two-model scripts dir)
@@ -200,13 +204,15 @@ skills/two-model-sdd-pipeline/scripts/:
   ledger-append        append one structured JSONL ledger entry
   red-gate             per-task kickoff: verify the scaffolded brief,
                        dispatch Agente operador, chain coder-gate
-  coder-gate           owns every retry after the first dispatch: runs the gate
-                       check-only first (Flutter) + auto-format before the
-                       check, ledgers coder_round, builds the fix prompt
-                       (prior diff + gate/annex reports + brief) + resumes the
-                       operador's own session with --continue on failure;
-                       unbounded until green; validates the saved RED form with
-                       red-form-check before commit; stops on TEST_DEFECT ->
+  coder-gate           owns the retry loop after the first dispatch: validates
+                       the saved RED form with red-form-check, runs the gate
+                       (auto-format before the Flutter check), ledgers
+                       coder_round, builds the fix prompt (prior diff + gate/
+                       annex reports + brief) + resumes the operador's own
+                       lang-variant session with --continue on failure;
+                       unbounded until green; runs the keep-discard scope gate
+                       before commit (scope_violation -> ARBITRATE); wires
+                       interface-check post-commit; stops on TEST_DEFECT ->
                        ARBITRATE (Agente diretor rules)
   red-form-check       classify the operador's saved machine-readable RED
                        evidence (suite loaded, >=1 test executed, failed as
@@ -227,27 +233,33 @@ skills/two-model-sdd-pipeline/scripts/:
   session-clean        manual cleanup: deletes the opencode sessions a task
                        recorded (task-N-*-session.txt); never auto-run -
                        sessions are kept for resume/debugging
-  orchestrator         thin per-task driver: executes route-next actions,
-                       prints OUTCOME for the runner
-  token-kill           RTK minification of error logs / source / JSON
-                       reports (lossless fallback)
+  orchestrator         the single dispatch table: runs route-next, executes
+                       the script-owned action (scaffold BRIEF, lang-selected
+                       red-gate, coder-gate), prints OUTCOME for the runner
+  coder-agent-for      map a resolve-toolchain lang to the operador variant
+                       (two-model-coder-{python,node,rust,go}) that can run
+                       that ecosystem's tests; shared by the gates
   run-gates            generic green approval: full suite + analysis via cmd
   review-package       build a review bundle (commits + diff); with a TASK
                        arg, inlines the task brief so the
                        revisor gets it in the single package file
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
-                       CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW)
-  red-integrity        hash-compare tests vs a snapshot when one exists
-                       (exit 0 intact; 1 weakened; 2 usage)
-  keep-discard         escalation pre-gate: empty diff / out-of-scope
-                       files -> DISCARD; else KEEP (exit 0/1/2)
-  interface-check      diff touched a file another task consumes
+                       CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW).
+                       arbitrate_resolved re-scaffolds; a re-escalation is
+                       exit 1 "arbitration did not resolve"; scope_violation
+                       escalates; task count from JSON
+  keep-discard         the C2 scope gate: KEEP when partial work is in
+                       touches (newly authored tests exempt); out-of-scope
+                       or tampered -> DISCARD (exit 0/1/2/3)
+  interface-check      diff touched a file another task consumes; wired
+                       post-commit as the advisory interface_touched entry
                        (exit 0 clean; 1 interface changed; 2 usage)
   final-gate           pre-closing: all tasks complete + no unresolved
-                       verdicts + no blocking parked + tests/analyze green
-                       (skipped when the tree is unchanged since the last
-                       green commit; exit 0 ready; 1 blockers; 2 usage)
+                       verdicts + no blocking parked (structured
+                       PARKED_SEVERITY) + tests/analyze green (skipped when
+                       the tree is unchanged since the last green commit;
+                       exit 0 ready; 1 blockers; 2 usage)
   doc-check            pipeline files changed -> READMEs must change too
                        (exit 0 OK; 1 violation; 2 usage)
   parse-review         deterministic parser for the revisor's verdict:
@@ -264,7 +276,7 @@ skills/brainstorming/scripts/:
 Every LLM-invoked command line runs through scripts/cmd, so no raw command
 output ever enters an LLM context window. Deterministic gates keep reading
 full files - nothing a verdict depends on (red-form-check's machine-readable
-evidence, escalation packages, red-integrity byte-compare) is ever compressed.
+evidence, escalation packages) is ever compressed.
 
 Dispatch is script-owned too: red-gate dispatches Agente operador on a
 scaffolded brief (then coder-gate retries it until green, validates the RED

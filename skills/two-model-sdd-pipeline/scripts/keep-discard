@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Deterministic KEEP/DISCARD gate for escalated tasks.
+"""Deterministic KEEP/DISCARD gate for partial work (scope gate).
 
 Decides the fate of the Coder's partial work with exit codes, reserving
-approach-soundness judgment for the Strategic Coder when the gate says KEEP.
+approach-soundness judgment for Agente diretor when the gate says DISCARD.
 
 Mechanical DISCARD triggers (first match wins):
   1. No partial work since HEAD (empty diff, nothing staged, no untracked).
-  2. Any changed file outside this task's `touches` (plan.json) - scope
-     violation; tampered test files are out of scope and thus discarded.
+  2. Any changed file outside this task's `touches` (plan.json), EXCEPT a
+     test file that is newly authored (not present in HEAD). A modified
+     committed test file is tampering and stays a violation.
+
+The test exemption shares `is_test_path` with brief-scaffold: tests are
+defined as `changed - touches`, so every honest task writes files outside
+`touches`. Without the exemption the gate would DISCARD every task (H3).
 
 Usage: keep-discard WORKSPACE TASK     (run from the repository root)
-Exit codes: 0 = KEEP, 1 = DISCARD, 2 = usage / missing artifacts.
+Exit codes: 0 = KEEP, 1 = DISCARD (out of scope / tampered), 2 = usage /
+            missing artifacts, 3 = DISCARD (no partial work since HEAD).
 """
 
 import json
@@ -18,9 +24,21 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathclass import is_test_path  # noqa: E402
+
 
 def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True).stdout
+
+
+def in_head(path):
+    """True when `path` is tracked in HEAD (a modified committed file)."""
+    rc = subprocess.run(
+        ["git", "cat-file", "-e", "HEAD:" + path],
+        capture_output=True,
+    ).returncode
+    return rc == 0
 
 
 def main():
@@ -56,9 +74,17 @@ def main():
 
     if not changed:
         print("KEEP-DISCARD: DISCARD - no partial work since HEAD", file=sys.stderr)
-        return 1
+        return 3
 
-    out_of_scope = sorted(c for c in changed if c not in touches)
+    out_of_scope = []
+    for c in sorted(changed):
+        if c in touches:
+            continue
+        # A newly authored test file is expected (tests are changed - touches);
+        # a modified committed test file is tampering, not authoring.
+        if is_test_path(c) and not in_head(c):
+            continue
+        out_of_scope.append(c)
     if out_of_scope:
         print(
             "KEEP-DISCARD: DISCARD - out of scope: {}".format(", ".join(out_of_scope)),

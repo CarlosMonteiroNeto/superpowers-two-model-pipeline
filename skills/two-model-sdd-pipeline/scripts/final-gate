@@ -5,8 +5,8 @@
 # Checks:
 #   1. Every task 1..TOTAL has a `task_complete` ledger entry.
 #   2. No task's LAST review_outcome is an unresolved SEND_BACK / ESCALATE.
-#   3. No task_complete carries a blocking parked finding (PARKED containing
-#      "Critical" or "Important").
+#   3. No task_complete carries a blocking parked finding, judged by the
+#      structured PARKED_SEVERITY field (Critical/Important), never by prose.
 #   4. The test and analyze commands recorded in the `gate` ledger entry both
 #      succeed - SKIPPED when the tree is unchanged since the last green task
 #      commit (clean `git status` + HEAD == last ledger `commit` sha): the
@@ -75,10 +75,14 @@ for t in $(seq 1 "$total"); do
     SEND_BACK|ESCALATE) emit "task $t last review unresolved: $verdict" ;;
   esac
 
-  parked=$(printf '%s' "$entries" | grep -E '"type": *"task_complete"' | grep -i PARKED | grep -iE 'Critical|Important' || true)
-  if [ -n "$parked" ]; then
-    emit "task $t has blocking parked finding(s)"
-  fi
+  # M7: blocking parked findings are a structured severity field on the last
+  # task_complete, never a substring of free prose (a parked Minor reading
+  # "not important, cosmetic" must not block the branch).
+  parked_sev=$(printf '%s' "$entries" | grep -E '"type": *"task_complete"' | tail -1 \
+    | sed -n 's/.*"PARKED_SEVERITY": *"\([^"]*\)".*/\1/p' || true)
+  case "$parked_sev" in
+    Critical|Important) emit "task $t has a blocking parked finding ($parked_sev)" ;;
+  esac
 done
 
 skip_rerun=0

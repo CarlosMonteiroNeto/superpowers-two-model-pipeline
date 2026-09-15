@@ -16,7 +16,11 @@ Exit codes: 0 = scaffold written; 1 = plan unreadable;
                (title, summary, acceptance[]).
 """
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathclass import is_test_path  # noqa: E402
 
 
 def main(argv):
@@ -57,16 +61,7 @@ def main(argv):
     # B4 guard: RED-proof defines test files as `changed - touches`, so a
     # test path inside `touches` empties the set and fails every round.
     # Fail loudly here instead of looping downstream.
-    bad_touches = [
-        t for t in touches
-        if t == "test" or t == "tests"
-        or t.startswith("test/") or t.startswith("tests/")
-        or "/test/" in t or "/tests/" in t
-        or t.startswith("__tests__") or "/__tests__/" in t
-        or t.endswith("_test.dart") or t.endswith("_test.go")
-        or t.endswith("_test.py") or t.startswith("test_")
-        or ".test." in t or ".spec." in t
-    ]
+    bad_touches = [t for t in touches if is_test_path(t)]
     if bad_touches:
         print(
             "BRIEF-SCAFFOLD: task %s touches look like test files: %s "

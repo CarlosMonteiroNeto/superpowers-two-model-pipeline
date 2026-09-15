@@ -38,6 +38,12 @@ if [ -z "$test_cmd" ]; then
   [ -n "$test_cmd" ] || { echo "RED-GATE: no test_cmd in ledger - run resolve-toolchain first" >&2; exit 2; }
 fi
 
+# C3: dispatch the operador variant whose bash allowlist covers this
+# ecosystem's test runner (the base definition only allowlists flutter/dart).
+lang=$(grep -E '"type": *"gate"' "$ledger" 2>/dev/null | tail -1 \
+  | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$lang")
+
 echo "RED-GATE: brief scaffolded, dispatching operador"
 
 if [ -f "$ledger" ]; then
@@ -50,12 +56,26 @@ fi
 # operador directly, no intermediation, no LLM approval of a check the
 # exit code already decided.
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
-"$DISPATCH_BIN" --agent two-model-coder --task "$task" \
+set +e
+"$DISPATCH_BIN" --agent "$coder_agent" --task "$task" \
   --prompt-file "$brief" --log "$ws/task-$task-coder.log"
+dispatch_rc=$?
+set -e
+if [ "$dispatch_rc" -ne 0 ]; then
+  # An interrupted dispatch (provider timeout, rc=124, ...) is not a coder
+  # failure: ledger it and stop loudly instead of falling through to
+  # coder-gate with no operador context (the divergence H4 removed).
+  if [ -f "$ledger" ]; then
+    "$SCRIPT_DIR/ledger-append" "$ledger" dispatch_interrupted "$task" \
+      "operador dispatch exited $dispatch_rc" || true
+  fi
+  echo "RED-GATE: operador dispatch interrupted (exit $dispatch_rc) - not entering coder-gate" >&2
+  exit "$dispatch_rc"
+fi
 
 # Close the loop here instead of stopping at "operador was dispatched": run
 # the gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
 # RED-proof, commit and dispatch the revisor on green.
-CODER_GATE="${CODER_GATE:-$SCRIPT_DIR/coder-gate}"
-"$CODER_GATE" "$ws" "$task"
+CODER_GATE_BIN="${CODER_GATE_BIN:-${CODER_GATE:-$SCRIPT_DIR/coder-gate}}"
+"$CODER_GATE_BIN" "$ws" "$task"
 exit $?

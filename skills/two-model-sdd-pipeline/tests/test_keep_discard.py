@@ -62,12 +62,23 @@ class KeepDiscardBase(unittest.TestCase):
 
 
 class TestKeepDiscard(KeepDiscardBase):
-    def test_no_partial_work_discards(self):
+    def test_no_partial_work_discards_with_distinct_code(self):
+        """Empty work is DISCARD with its own code (3): the callers must be
+        able to tell 'nothing to commit' from a real scope violation."""
         r = self.run_it()
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
 
     def test_in_scope_work_keeps(self):
         (self.repo / "src" / "a.dart").write_text("void a() { x(); }\n", encoding="utf-8")
+        r = self.run_it()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_in_scope_impl_plus_new_test_keeps(self):
+        """H3: tests are `changed - touches`, so every honest task writes a
+        test file outside touches. A newly authored test must not DISCARD."""
+        (self.repo / "src" / "a.dart").write_text("void a() { x(); }\n", encoding="utf-8")
+        (self.repo / "test" / "task_3_extra_test.dart").write_text(
+            "test\n", encoding="utf-8")
         r = self.run_it()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 

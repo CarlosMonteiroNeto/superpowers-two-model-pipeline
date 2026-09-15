@@ -125,7 +125,9 @@ class TestDispatchFresh(DispatchTestBase):
         self.assertIn("primary agent", r.stdout + r.stderr)
         self.assertFalse((pathlib.Path(dlog).parent / "task-3-session.txt").exists())
 
-    def test_session_id_recorded_for_resume(self):
+    def test_session_id_recorded_per_agent_and_generic_removed(self):
+        """L4: only the per-agent session record is written; the generic
+        task-N-session.txt is a trap (it points at whoever dispatched last)."""
         brief = self.brief()
         argv_log = self.argv_log()
         dlog = self.dispatch_log()
@@ -137,9 +139,108 @@ class TestDispatchFresh(DispatchTestBase):
             env_extra={"OPENCODE_BIN": self.opencode, "STUB_ARGV": argv_log},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        sid = (pathlib.Path(dlog).parent / "task-3-session.txt").read_text(
+        sid = (pathlib.Path(dlog).parent
+               / "task-3-two-model-coder-session.txt").read_text(
             encoding="utf-8").strip()
         self.assertEqual(sid, "ses_fixed123")
+        self.assertFalse((pathlib.Path(dlog).parent / "task-3-session.txt").exists())
+
+    def test_session_id_extracted_despite_whitespace(self):
+        """M1: the id comes from the JSON filter, not a whitespace-sensitive
+        sed; a space after the colon must not silently lose the session."""
+        spaced = write_stub(
+            self.stub_dir, "spaced-opencode",
+            """
+echo '{ "type": "step_start", "sessionID": "ses_spaced42" }'
+echo '{"type":"text","part":{"type":"text","text":"DONE"}}'
+exit 0
+""",
+        )
+        brief = self.brief()
+        argv_log = self.argv_log()
+        dlog = self.dispatch_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", dlog],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": spaced, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        sid = (pathlib.Path(dlog).parent
+               / "task-3-two-model-coder-session.txt").read_text(
+            encoding="utf-8").strip()
+        self.assertEqual(sid, "ses_spaced42")
+
+    def test_missing_session_id_ledgers_session_lost(self):
+        """M1: a lost session is an ambient cost regression - ledger it."""
+        no_sid = write_stub(
+            self.stub_dir, "nosid-opencode",
+            """
+echo '{"type":"text","part":{"type":"text","text":"DONE"}}'
+exit 0
+""",
+        )
+        brief = self.brief()
+        argv_log = self.argv_log()
+        dlog = self.dispatch_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", dlog],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": no_sid, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        ledger = pathlib.Path(dlog).parent / "ledger.jsonl"
+        self.assertTrue(ledger.exists())
+        self.assertIn("session_lost", ledger.read_text(encoding="utf-8"))
+
+    def test_fallback_banner_detected_regardless_of_line_position(self):
+        """M2: stderr/stdout interleaving under buffering means the banner is
+        not reliably the first line; detect it among the non-JSON lines."""
+        late_banner = write_stub(
+            self.stub_dir, "late-banner-opencode",
+            """
+echo '{"type":"step_start","sessionID":"ses_x"}'
+echo '! agent "two-model-coder" is a subagent, not a primary agent. Falling back to default agent' >&2
+echo '{"type":"text","part":{"type":"text","text":"DONE"}}'
+exit 0
+""",
+        )
+        brief = self.brief()
+        argv_log = self.argv_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", self.dispatch_log()],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": late_banner, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("primary agent", r.stdout + r.stderr)
+
+    def test_fallback_phrase_inside_json_does_not_trip_guard(self):
+        """M2: the phrase embedded in a JSON event (e.g. tool output) is valid
+        JSON and must not be mistaken for the harness banner."""
+        embedded = write_stub(
+            self.stub_dir, "embedded-opencode",
+            """
+echo '{"type":"tool_use","part":{"type":"text","text":"is a subagent, not a primary agent"}}'
+echo '{"type":"text","part":{"type":"text","text":"DONE"}}'
+exit 0
+""",
+        )
+        brief = self.brief()
+        argv_log = self.argv_log()
+        r = run_script(
+            "dispatch",
+            ["--agent", "two-model-coder", "--task", "3",
+             "--prompt-file", str(brief), "--log", self.dispatch_log()],
+            cwd=self._tmp,
+            env_extra={"OPENCODE_BIN": embedded, "STUB_ARGV": argv_log},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_per_agent_session_record_written(self):
         brief = self.brief()

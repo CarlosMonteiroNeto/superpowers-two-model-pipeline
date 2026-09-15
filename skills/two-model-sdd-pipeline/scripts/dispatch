@@ -52,6 +52,13 @@ done
 [ -f "$prompt_file" ] || { echo "DISPATCH: no prompt file: $prompt_file" >&2; exit 2; }
 
 mkdir -p "$(dirname "$log")"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+# Session resume handle. Written by the digest filter (which already parses the
+# JSON stream) instead of a whitespace-sensitive sed, and per-agent only: the
+# generic task-N-session.txt pointed at whoever dispatched last (a trap when
+# the reviewer dispatched after the operador).
+sid_dir=$(dirname "$log")
+sid_file="$sid_dir/task-$task-$agent-session.txt"
 
 args=(run --agent "$agent" --format json)
 if [ -n "$cont" ]; then
@@ -70,7 +77,7 @@ set +e
 # Prints short progress lines to stdout; full stream still lands in $log
 # via tee. Never fails the dispatch: all errors swallowed, exit 0 always.
 DIGEST_FILTER='import json, sys
-agent, task = sys.argv[1], sys.argv[2]
+agent, task, sid_file = sys.argv[1], sys.argv[2], sys.argv[3]
 printed = 0
 session = None
 try:
@@ -88,6 +95,12 @@ try:
             sid = ev.get("sessionID")
             if sid:
                 session = sid
+                if sid_file:
+                    try:
+                        with open(sid_file, "w", encoding="utf-8") as fh:
+                            fh.write(sid + "\n")
+                    except Exception:
+                        pass
                 print("[%s:%s] session %s" % (agent, task, sid), flush=True)
         if ev.get("type") != "text":
             continue
@@ -106,13 +119,14 @@ stream_run() {
   # Verdict is opencode's (PIPESTATUS[0]); the filter always exits 0.
   "$OPENCODE_BIN" "${args[@]}" "$prompt_file" "$prompt" 2>&1 \
     | tee "$log" \
-    | python3 -c "$DIGEST_FILTER" "$agent" "$task"
+    | python3 -c "$DIGEST_FILTER" "$agent" "$task" "$sid_file"
   return "${PIPESTATUS[0]}"
 }
 if [ -n "$workdir" ]; then
   # The brief is passed as a positional so opencode auto-attaches it. --file
   # is deliberately NOT used: this opencode version treats the positional
-  # message as a file path whenever --file is present, which breaks every run.
+  # message as a file path whenever --file is present, which breaks every run
+  # (ADR-0009).
   (cd "$workdir" && stream_run)
 else
   stream_run
@@ -123,23 +137,44 @@ set -e
 # Refuse a silent fallback: if the requested agent is mode: subagent, opencode
 # warns and runs the default agent instead. Dispatching the wrong agent breaks
 # the two-tier contract, so fail loudly rather than continue wrongly.
-# Check only the first line — the fallback warning is opencode's own stderr
-# banner and never appears inside a JSON event (grepping the whole log would
-# false-positive on file content embedded in tool_use output).
-first=$(head -n 1 "$log" 2>/dev/null || true)
-if printf '%s\n' "$first" | grep -qE 'is a subagent, not a primary agent|Falling back to default agent'; then
+# Position is the wrong discriminator (stderr/stdout interleave under
+# buffering): scan the lines that fail json.loads - the banner is never valid
+# JSON, while file content embedded in a tool event always is, so this kills
+# both the false negative and the false positive.
+if python3 - "$log" <<'PY'
+import json, re, sys
+pat = re.compile(r'is a subagent, not a primary agent|Falling back to default agent')
+try:
+    with open(sys.argv[1], "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                json.loads(line)
+                continue
+            except Exception:
+                pass
+            if pat.search(line):
+                sys.exit(0)
+except OSError:
+    pass
+sys.exit(1)
+PY
+then
   echo "DISPATCH: agent \"$agent\" is not a primary agent (mode: all required). Refusing to continue with the wrong agent." >&2
+  rm -f "$sid_file"
   exit 3
 fi
 
-# Record the session id for resume (fix / correction rounds).
-sid=$(sed -n 's/.*"sessionID":"\([^"]*\)".*/\1/p' "$log" | head -1)
-if [ -n "$sid" ]; then
-  sid_dir=$(dirname "$log")
-  # Generic record (last writer, read by the runner) + per-agent record
-  # (manual session-clean / resume can target operador and revisor).
-  printf '%s\n' "$sid" > "$sid_dir/task-$task-session.txt"
-  printf '%s\n' "$sid" > "$sid_dir/task-$task-$agent-session.txt"
+# The digest filter wrote the per-agent session id for resume. When none was
+# recorded, ledger the regression: without it every retry pays full prompt cost
+# instead of a cache-billed prefix (ADR-0003), and nothing would show it.
+sid=""
+[ -f "$sid_file" ] && sid=$(cat "$sid_file" 2>/dev/null || true)
+if [ -z "$sid" ]; then
+  "$SCRIPT_DIR/ledger-append" "$sid_dir/ledger.jsonl" session_lost "$task" \
+    "no session id recorded by dispatch" >/dev/null 2>&1 || true
 fi
 
 exit "$rc"

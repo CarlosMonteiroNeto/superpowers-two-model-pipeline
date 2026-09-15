@@ -64,12 +64,14 @@ else
   exit 2
 fi
 
-# TOTAL_TASKS: explicit arg, else plan.json task count.
+# TOTAL_TASKS: explicit arg, else the JSON task count from plan.json. Never a
+# raw `"id"` grep - nested id fields would inflate the count and FINAL_REVIEW
+# would never be emitted.
 total=${3:-}
 if [ -z "$total" ]; then
   plan="$ws/plan.json"
   if [ -f "$plan" ]; then
-    total=$(grep -c '"id"' "$plan" || true)
+    total=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1], encoding='utf-8', errors='replace')).get('tasks', [])))" "$plan" 2>/dev/null || true)
   fi
 fi
 
@@ -86,12 +88,66 @@ fi
 has_brief=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"brief_ready"' || true)
 has_red=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"red_check"' || true)
 has_commit=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"commit"' || true)
-has_escalated=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"escalated"' || true)
+# `scope_violation` is an escalation too (C2): the Coder's partial work is out
+# of scope, so Agente diretor rules rather than committing it.
+has_escalated=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"(escalated|scope_violation)"' || true)
 has_complete=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"task_complete"' || true)
 
 # Last review outcome verdict, if any.
 last_review=$(printf '%s\n' "$task_entries" | grep -E '"type": *"review_outcome"' | tail -1 || true)
 review_verdict=$(printf '%s' "$last_review" | sed -n 's/.*"summary": *"\([^"]*\)".*/\1/p')
+
+# Arbitration resolution ordering (C1). A ruling the router cannot see loops
+# ARBITRATE forever at Strategic-tier cost. Position matters: esc_last is the
+# newest escalation marker (an `escalated` entry or a review_outcome ESCALATE),
+# res_last the newest `arbitrate_resolved`, brief_last the newest `brief_ready`.
+esc_last=-1
+res_last=-1
+brief_last=-1
+ordering=$(printf '%s\n' "$task_entries" | python3 -c '
+import json, sys
+esc_last = res_last = brief_last = -1
+for i, raw in enumerate(sys.stdin):
+    raw = raw.strip()
+    if not raw:
+        continue
+    try:
+        ev = json.loads(raw)
+    except Exception:
+        continue
+    if not isinstance(ev, dict):
+        continue
+    t = ev.get("type")
+    if t in ("escalated", "scope_violation"):
+        esc_last = i
+    elif t == "arbitrate_resolved":
+        res_last = i
+    elif t == "brief_ready":
+        brief_last = i
+    elif t == "review_outcome" and ev.get("summary") == "ESCALATE":
+        esc_last = i
+print(esc_last, res_last, brief_last)
+' 2>/dev/null || true)
+if [ -n "$ordering" ]; then
+  read -r esc_last res_last brief_last <<< "$ordering"
+fi
+
+# A ruling newer than the last escalation re-scaffolds the brief (the diretor
+# edited the tracked plan); once the brief is re-scaffolded that pre-ruling
+# escalation is consumed and normal flow resumes. A re-escalation after a
+# ruling is a human blocker - a silent Strategic-tier spend is worse.
+escalation_consumed=0
+if [ "$has_complete" -eq 0 ] && [ "$esc_last" -ge 0 ] && [ "$res_last" -gt "$esc_last" ]; then
+  if [ "$brief_last" -gt "$res_last" ]; then
+    escalation_consumed=1
+  else
+    echo "BRIEF $task"
+    exit 0
+  fi
+elif [ "$has_complete" -eq 0 ] && [ "$res_last" -ge 0 ] && [ "$esc_last" -gt "$res_last" ]; then
+  echo "ROUTE-NEXT: arbitration did not resolve task $task" >&2
+  exit 1
+fi
 
 next_task=$((task + 1))
 
@@ -108,7 +164,10 @@ if [ "$has_complete" -ge 1 ]; then
   exit 0
 fi
 
-if [ -n "$review_verdict" ]; then
+# A consumed escalation (raised, ruled on, brief re-scaffolded) is skipped so
+# the task resumes normal flow instead of emitting ARBITRATE again.
+if [ -n "$review_verdict" ] \
+    && ! { [ "$escalation_consumed" = "1" ] && [ "$review_verdict" = "ESCALATE" ]; }; then
   case "$review_verdict" in
     APPROVED)
       need_total
@@ -126,7 +185,7 @@ if [ -n "$review_verdict" ]; then
   esac
 fi
 
-if [ "$has_escalated" -ge 1 ] && [ "$has_commit" -eq 0 ]; then
+if [ "$has_escalated" -ge 1 ] && [ "$has_commit" -eq 0 ] && [ "$escalation_consumed" != "1" ]; then
   echo "ARBITRATE $task"
   exit 0
 fi

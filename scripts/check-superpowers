@@ -22,6 +22,17 @@ set -euo pipefail
 
 VENDOR_DIR="${1:-${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}}"
 
+# A node_modules/superpowers install is a different (npm) copy: the sync
+# scripts cannot `git fetch` a tarball, and editing it changes nothing the
+# plugin loads. Report it specifically instead of a misleading "not installed"
+# so the user does not end up with two diverging trees.
+NODE_MODULES_DIR="${SUPERPOWERS_NPM_DIR:-$HOME/.config/opencode/node_modules/superpowers}"
+if [[ ! -d "$VENDOR_DIR/.git" && -d "$NODE_MODULES_DIR" ]]; then
+  echo "CHECK-SUPERPOWERS: found an npm install at $NODE_MODULES_DIR, not a git checkout at $VENDOR_DIR" >&2
+  echo "CHECK-SUPERPOWERS: the pipeline self-update needs a git checkout - run scripts/install-superpowers" >&2
+  exit 2
+fi
+
 if [[ ! -d "$VENDOR_DIR/.git" ]]; then
   echo "CHECK-SUPERPOWERS: not installed (no git checkout at $VENDOR_DIR)" >&2
   exit 2

@@ -303,6 +303,9 @@ class TestRedFormEvidence(CoderGateTestBase):
     plan carries none, and legacy plan metadata is ignored."""
 
     def _plan(self, task):
+        # These tests exercise RED-form handling, not the scope gate (covered
+        # by TestScopeGate): keep the changed file inside touches.
+        task["touches"] = ["file.txt"]
         (self.ws / "plan.json").write_text(
             json.dumps({"feature": "t", "tasks": [task]}), encoding="utf-8")
 
@@ -454,6 +457,151 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.assertIn("Coder passed the gate", ledger_text)
 
 
+class TestCoderAgentSelection(CoderGateTestBase):
+    """C3: a non-Flutter branch must dispatch the operador variant whose bash
+    allowlist can actually run that ecosystem's tests, or RED evidence can
+    never be produced and the unbounded coder loop spins at cost."""
+
+    def test_lang_maps_to_variant(self):
+        cases = {
+            "go": "two-model-coder-go",
+            "rust": "two-model-coder-rust",
+            "python": "two-model-coder-python",
+            "node": "two-model-coder-node",
+            "flutter": "two-model-coder",
+            "": "two-model-coder",
+        }
+        for lang, agent in cases.items():
+            r = run_script("coder-agent-for", [lang], cwd=self._tmp, env_extra={})
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(r.stdout.strip(), agent)
+
+    def test_lang_selects_operador_variant_and_its_session(self):
+        self.brief()
+        # The go variant's own session record (per-agent), not a generic one.
+        (self.ws / "task-1-two-model-coder-go-session.txt").write_text(
+            "ses_go_variant\n", encoding="utf-8")
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        gate = write_stub(
+            self.stub_dir, "run-gates",
+            """
+n=$(cat "${STUB_COUNT_FILE:?}" 2>/dev/null || echo 0)
+n=$((n + 1)); echo "$n" > "$STUB_COUNT_FILE"
+if [ "$n" -lt 2 ]; then exit 1; fi
+exit 0
+""",
+        )
+        dispatch = write_stub(
+            self.stub_dir, "dispatch",
+            'echo "$*" >> "${STUB_DISPATCH_LOG:?}"\nexit 0\n',
+        )
+        count_file = self._tmp / "gate.count"
+        count_file.write_text("0", encoding="utf-8")
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
+        r = run_script(
+            "coder-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra={
+                "RUN_GATES_BIN": gate,
+                "DISPATCH_BIN": dispatch,
+                "GIT_BIN": "git",
+                "STUB_COUNT_FILE": str(count_file),
+                "STUB_DISPATCH_LOG": str(dispatch_log),
+            },
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        dcalls = dispatch_log.read_text(encoding="utf-8")
+        self.assertIn("--agent two-model-coder-go", dcalls)
+        self.assertIn("--continue ses_go_variant", dcalls)
+
+
+class TestScopeGate(CoderGateTestBase):
+    """C2: the generic engine must not `git add -A` the whole tree. Out-of-scope
+    files ledger a scope_violation and escalate (route-next -> ARBITRATE);
+    in-scope work plus a newly authored test still commits."""
+
+    def _plan(self):
+        (self.ws / "plan.json").write_text(json.dumps({
+            "feature": "t",
+            "tasks": [{"id": 1, "title": "t", "summary": "s",
+                       "touches": ["lib/app.go"], "acceptance": ["a"]}],
+        }), encoding="utf-8")
+
+    def _env(self, dlog):
+        gate = write_stub(self.stub_dir, "run-gates", "exit 0\n")
+        dispatch = write_stub(
+            self.stub_dir, "dispatch",
+            'echo "$*" >> "${STUB_DISPATCH_LOG:?}"\nexit 0\n')
+        return {
+            "RUN_GATES_BIN": gate, "DISPATCH_BIN": dispatch, "GIT_BIN": "git",
+            "STUB_DISPATCH_LOG": str(dlog),
+        }
+
+    def test_out_of_scope_file_blocks_commit_and_escalates(self):
+        self.brief()
+        self._plan()
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        dlog = self._tmp / "dispatch.log"
+        (self.repo / "stray.txt").write_text("junk\n", encoding="utf-8")
+        r = run_script("coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+                       env_extra=self._env(dlog))
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("scope_violation",
+                      self.ledger_path.read_text(encoding="utf-8"))
+        log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
+                             capture_output=True, text=True).stdout
+        self.assertEqual(log.count("\n"), 1, log)  # no new commit
+
+    def test_in_scope_work_plus_new_test_commits(self):
+        self.brief()
+        self._plan()
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        dlog = self._tmp / "dispatch.log"
+        (self.repo / "lib").mkdir()
+        (self.repo / "lib" / "app.go").write_text("package lib\n", encoding="utf-8")
+        (self.repo / "app_test.go").write_text("package lib\n", encoding="utf-8")
+        r = run_script("coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+                       env_extra=self._env(dlog))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
+                             capture_output=True, text=True).stdout
+        self.assertEqual(log.count("\n"), 2, log)  # base + green commit
+
+
+class TestInterfaceWiring(CoderGateTestBase):
+    """H1: interface-check is wired post-commit as an advisory ledger entry,
+    not left as dead code."""
+
+    def test_touched_consumed_interface_is_ledgered(self):
+        self.brief()
+        (self.ws / "plan.json").write_text(json.dumps({
+            "feature": "t",
+            "tasks": [
+                {"id": 1, "title": "t", "summary": "s",
+                 "touches": ["lib/app.go"], "acceptance": ["a"]},
+                {"id": 2, "title": "t2", "summary": "s2",
+                 "touches": ["lib/app.go"], "acceptance": ["b"]},
+            ],
+        }), encoding="utf-8")
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        dlog = self._tmp / "dispatch.log"
+        gate = write_stub(self.stub_dir, "run-gates", "exit 0\n")
+        dispatch = write_stub(
+            self.stub_dir, "dispatch",
+            'echo "$*" >> "${STUB_DISPATCH_LOG:?}"\nexit 0\n')
+        (self.repo / "lib").mkdir()
+        (self.repo / "lib" / "app.go").write_text("package lib\n", encoding="utf-8")
+        r = run_script("coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+                       env_extra={"RUN_GATES_BIN": gate, "DISPATCH_BIN": dispatch,
+                                  "GIT_BIN": "git",
+                                  "STUB_DISPATCH_LOG": str(dlog)})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("interface_touched",
+                      self.ledger_path.read_text(encoding="utf-8"))
+
+
 class TestGenericRedGate(CoderGateTestBase):
     def test_dispatches_coder_and_chains_coder_gate(self):
         """On a scaffolded brief, generic red-gate dispatches Agente
@@ -481,10 +629,28 @@ class TestGenericRedGate(CoderGateTestBase):
             },
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("two-model-coder", dispatch_log.read_text(encoding="utf-8"))
+        # lang=go in the ledger -> the go variant is dispatched (C3).
+        self.assertIn("--agent two-model-coder-go",
+                      dispatch_log.read_text(encoding="utf-8"))
         self.assertIn("coder-gate ran", r.stderr)
         self.assertIn(
             "red_check", self.ledger_path.read_text(encoding="utf-8"))
+
+    def test_interrupted_dispatch_is_ledgered_and_stops(self):
+        """H4: an interrupted operador dispatch (provider timeout, rc=124) is
+        neither a coder failure nor a silent fall-through into coder-gate; it
+        is ledgered and surfaced."""
+        (self.ws / "task-1-brief.md").write_text("# Task 1 Brief\n", encoding="utf-8")
+        dispatch_stub = write_stub(self.stub_dir, "dispatch", "exit 124\n")
+        r = run_script(
+            "red-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra={"DISPATCH_BIN": dispatch_stub, "RTK_ENABLED": "0"},
+        )
+        self.assertEqual(r.returncode, 124, r.stdout + r.stderr)
+        self.assertIn("dispatch_interrupted",
+                      self.ledger_path.read_text(encoding="utf-8"))
+        self.assertNotIn("CODER-GATE", r.stderr + r.stdout)
 
     def test_missing_test_cmd_and_no_ledger_is_usage(self):
         brief = self.ws / "task-1-brief.md"

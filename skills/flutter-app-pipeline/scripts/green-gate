@@ -15,16 +15,21 @@
 # --no-commit short-circuits before the commit and the reviewer dispatch.
 #
 # Exit codes: 0 = all gates passed (and committed unless --no-commit),
-#             1 = tests failed, 2 = analyze found issues, 3 = format drift.
-# Reports are written to ${GREEN_GATE_REPORT:-green-gate-report.txt}(.analyze|.format).
+#             1 = tests failed, 2 = analyze found issues, 4 = scope violation.
+# Reports are written to ${GREEN_GATE_REPORT:-green-gate-report.txt}(.analyze).
+# There is no format gate: formatting drift is auto-applied by coder-gate
+# before this gate (B7), so a drift check here could never fire (M8).
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
-DART_BIN="${DART_BIN:-dart}"
 GIT_BIN="${GIT_BIN:-git}"
 REPORT="${GREEN_GATE_REPORT:-green-gate-report.txt}"
+# M6: the RTK-compression invariant - every LLM-invoked command line runs
+# through scripts/cmd (full output to the report file, compressed view on
+# stdout, verdict always the raw command's exit code).
+CMD_BIN="${CMD_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/cmd}"
 
 no_commit=0
 message="green"
@@ -47,21 +52,15 @@ while [ $# -gt 0 ]; do
 done
 
 # 1. full test suite
-if ! "$FLUTTER_BIN" test > "$REPORT" 2>&1; then
+if ! "$CMD_BIN" --full-file "$REPORT" -- "$FLUTTER_BIN" test; then
   echo "GREEN-GATE: tests FAILED (see $REPORT)" >&2
   exit 1
 fi
 
 # 2. static analysis
-if ! "$FLUTTER_BIN" analyze > "$REPORT.analyze" 2>&1; then
+if ! "$CMD_BIN" --full-file "$REPORT.analyze" -- "$FLUTTER_BIN" analyze; then
   echo "GREEN-GATE: analyze found issues (see $REPORT.analyze)" >&2
   exit 2
-fi
-
-# 3. format check
-if ! "$DART_BIN" format --output=none --set-exit-if-changed . > "$REPORT.format" 2>&1; then
-  echo "GREEN-GATE: formatting drift (see $REPORT.format)" >&2
-  exit 3
 fi
 
 echo "GREEN-GATE: all gates passed"
@@ -69,6 +68,23 @@ echo "GREEN-GATE: all gates passed"
 if [ "$no_commit" = "1" ]; then
   echo "GREEN-GATE: --no-commit, not committing"
   exit 0
+fi
+
+# C2 scope gate (defence in depth; coder-gate already gates before calling
+# here): never commit out-of-scope files. keep-discard exempts newly authored
+# tests (H3). Skipped when the workspace/task/plan is not available so a
+# standalone invocation is unaffected. Exit 4 = scope violation.
+KEEP_DISCARD="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/keep-discard"
+if [ -n "$ws" ] && [ -n "$task" ] && [ -f "$ws/plan.json" ] && [ -x "$KEEP_DISCARD" ]; then
+  set +e
+  kd_out=$("$KEEP_DISCARD" "$ws" "$task" 2>&1)
+  kd_rc=$?
+  set -e
+  if [ "$kd_rc" -eq 1 ]; then
+    echo "GREEN-GATE: scope violation - refusing to commit" >&2
+    printf '%s\n' "$kd_out" >&2
+    exit 4
+  fi
 fi
 
 "$GIT_BIN" add -A
@@ -82,11 +98,22 @@ if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
     # dirname() resolution silently dropped the `commit` entry and made
     # route-next loop the round.
     task_field="${task:--}"
-    if [ -x "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append" ]; then
-      "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append" \
-        "$ledger" commit "$task_field" "green $sha" "commits=$sha"
-    elif [ -x "$(dirname "$ledger")/ledger-append" ]; then
-      "$(dirname "$ledger")/ledger-append" "$ledger" commit "$task_field" "green $sha" "commits=$sha"
+    LEDGER_APPEND="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append"
+    [ -x "$LEDGER_APPEND" ] || LEDGER_APPEND="$(dirname "$ledger")/ledger-append"
+    if [ -x "$LEDGER_APPEND" ]; then
+      "$LEDGER_APPEND" "$ledger" commit "$task_field" "green $sha" "commits=$sha"
+      # H1: advisory interface guard after the commit (flutter path).
+      if [ -n "$ws" ] && [ -n "$task" ]; then
+        IC="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/interface-check"
+        if [ -x "$IC" ]; then
+          ic_rc=0
+          "$IC" "$ws" "$task" "${base:-HEAD~1}" >/dev/null 2>&1 || ic_rc=$?
+          if [ "$ic_rc" -eq 1 ]; then
+            "$LEDGER_APPEND" "$ledger" interface_touched "$task" \
+              "diff touches an interface another task consumes" || true
+          fi
+        fi
+      fi
     fi
   fi
 else

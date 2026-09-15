@@ -19,15 +19,18 @@
 #   RED_GATE_BIN   override red-gate script (default: auto-selected from
 #                  the ledger's `gate.lang` - flutter-app-pipeline's for
 #                  lang=flutter, this skill's generic one otherwise)
-#   CODER_GATE_BIN override coder-gate (default: this skill's coder-gate)
+#   CODER_GATE_BIN override coder-gate (default: this skill's coder-gate).
+#                  CODER_GATE is accepted as a legacy alias; the runner and
+#                  this script now agree on the single CODER_GATE_BIN name.
 #
 # Toolchain detection is a one-time, pre-loop step: `resolve-toolchain`
 # writes the `gate` ledger entry (lang, test_cmd, analyze_cmd) before task 1
 # ever routes. This orchestrator only reads that entry - it never asks.
 #
-# Exit codes: 0 = handed control back (BRIEF/CORRECTIVE/ARBITRATE/NEXT/
-#             FINAL_REVIEW or a script-owned action completed);
-#             1 = inconsistent state / unknown action; 2 = usage.
+# Exit codes: 0 = handed control back (CORRECTIVE/ARBITRATE/REVIEW/NEXT/
+#             FINAL_REVIEW) after executing the script-owned action;
+#             1 = brief-scaffold failed / inconsistent state / unknown action;
+#             2 = usage.
 set -euo pipefail
 
 export PYTHONUTF8=1
@@ -54,8 +57,26 @@ route() {
 action=$(route)
 
 case "$action" in
-  BRIEF*|CORRECTIVE*|ARBITRATE*|NEXT*|FINAL_REVIEW*)
-    # These hand control back: the caller arranges the brief / arbitration.
+  BRIEF*)
+    # Script-owned, so the orchestrator executes it (not the caller): scaffold
+    # the brief mechanically from the plan, ledger that it is ready, then
+    # re-route. run-pipeline owns only the LLM branches, so this is the one
+    # place brief scaffolding happens.
+    n=${action#BRIEF }
+    n=${n%% *}
+    if "$SCRIPT_DIR/brief-scaffold" "$ws" "$n"; then
+      "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" brief_ready "$n" \
+        "brief scaffolded from plan" >/dev/null 2>&1 || true
+      action=$(route)
+    else
+      echo "ORCHESTRATOR: brief-scaffold failed for task $n" >&2
+      exit 1
+    fi
+    echo "OUTCOME: $action"
+    exit 0
+    ;;
+  CORRECTIVE*|ARBITRATE*|NEXT*|FINAL_REVIEW*)
+    # These hand control back: the caller arranges the corrective / arbitration.
     # The orchestrator just reports the outcome.
     echo "OUTCOME: $action"
     exit 0
@@ -92,8 +113,8 @@ case "$action" in
     # budget). Reaching CODER here means a resume after an interrupted
     # session (round N's dispatch happened, its gate check did not) - drive
     # it the same way red-gate would have.
-    CODER_GATE="${CODER_GATE:-$SCRIPT_DIR/coder-gate}"
-    "$CODER_GATE" "$ws" "$task" || true
+    CODER_GATE_BIN="${CODER_GATE_BIN:-${CODER_GATE:-$SCRIPT_DIR/coder-gate}}"
+    "$CODER_GATE_BIN" "$ws" "$task" || true
     action=$(route)
     echo "OUTCOME: $action"
     exit 0

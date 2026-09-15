@@ -11,7 +11,7 @@ description: Use when receiving code review feedback, before implementing sugges
 
 - **Feedback arrives as structured JSON, not prose.** The revisor role (`two-model-reviewer`) returns a verdict object — `APPROVED` / `SEND_BACK` / `ESCALATE` — never a free-text review to interpret. This skill's "read the reviewer's comments and decide how to respond" step is replaced by `route-next` reading that verdict directly.
 - **Routing is deterministic, not a judgment call.** `SEND_BACK` always routes to `CORRECTIVE` (Agente diretor appends a corrective task, same operador resumes within-session via `--continue`); `ESCALATE` always routes to `ARBITRATE` (Agente diretor decides, per the project's arbitration rules). There is no ad-hoc "let me just fix it myself" branch — the operador never receives review feedback directly; it only ever sees briefs and fix prompts from Script CEO.
-- **Integrity is checked where possible.** `red-integrity WORKSPACE TASK` hash-compares the committed tests against a snapshot when one exists before the revisor's verdict is acted on — a verdict on weakened tests is not actionable.
+- **Integrity is checked where possible.** The revisor is the sole independent semantic guarantee that the tests encode the acceptance — a verdict on weakened or vacuous tests is not actionable, so weak tests are SEND_BACK findings.
 
 
 Code review requires technical evaluation, not emotional performance.
