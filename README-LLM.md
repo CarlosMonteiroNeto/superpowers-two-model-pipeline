@@ -130,7 +130,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 |---|---|---|
 | `cmd --full-file FILE -- CMD...` (two-model) | Generic command runner: runs any LLM-invoked command, saves the FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code. `flutter test`/`flutter analyze` compress via `rtk test`/`rtk err` wrappers derived from the file (verdict from the raw run — wrappers mask child exit codes) | exit = command's exit code; 2 usage |
 | `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG (observability) plus a live progress digest on stdout, records the session id for resume. The brief is passed as a positional so opencode auto-attaches it (never `--file` — this opencode version misparses the message when `--file` is present). On `--continue` (corrective round) the prompt explicitly tells the resumed model the brief has CHANGED and to re-read it fully. Refuses (exit 3) when the targeted agent is not `mode: all` (fallback to the default agent would silently break the tiers) | exit = opencode's exit; 2 usage; 3 not a primary agent |
-| `session-clean WS TASK\|all` (two-model) | Manual session hygiene: deletes the opencode sessions a task recorded (`task-N-*-session.txt`). Never auto-run — the orchestrator and `run-pipeline` keep sessions for resume/debugging | exit 0 best-effort; 2 usage |
+| `session-clean WS TASK\|all` (two-model) | Session hygiene: deletes the opencode sessions a task recorded (`task-N-*-session.txt`). The per-task loop keeps sessions for resume/debugging during the run; a phase launcher runs `session-clean WS all` **after** `run-pipeline` returns, and a DB-maintenance tool (`~/.config/opencode/tools/db-maintenance.py prune-sessions`) prunes stragglers, so headless sessions cannot accumulate — they grew `opencode.db` to multi-GB and contributed to a 2026-09-14 freeze | exit 0 best-effort; 2 usage |
 | `orchestrator WS TASK [TOTAL]` (two-model) | Thin per-task driver: runs `route-next`, executes the emitted action, prints `OUTCOME:` for the runner | exit 0 handoff; 1 inconsistent; 2 usage |
 | `run-pipeline PLAN_FILE [TOTAL] [--no-push]` (two-model) | Top-level Script CEO driver, invokable anywhere: loops route-next → execute to FINAL_REVIEW → closing (final-gate + package + diretor assessment) → push+PR | exit 0 closed; 1 blocked (fix + re-run continues); 2 usage |
 | `brief-scaffold WORKSPACE TASK` (two-model) | Scaffold the task brief mechanically from the plan (statement, acceptance, spec_refs, reason-declaration and machine-readable RED instructions). Rejects test-like `touches` (test files are defined as changed minus `touches`, so a test path inside `touches` can never prove RED). No LLM | exit 0 wrote; 1 plan unreadable; 2 usage/missing fields/test-like touches |
@@ -155,6 +155,13 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-closing: all complete + no unresolved verdicts + no blocking parked + tests/analyze green (skipped when the tree is unchanged since the last green commit) | exit 0 ready; 1 blockers; 2 usage |
 | `doc-check [REPO]` | Deterministic gate: pipeline files changed → READMEs must also change | exit 0 OK; 1 violation; 2 usage |
 | `parse-review LOGFILE OUTFILE` (two-model) | Deterministic parser: reads the revisor's JSONL event log, extracts the structured verdict, writes it to a JSON file. Run after the log lands | exit 0 verdict written; 1 no verdict / read error / write error; 2 usage |
+
+When a dispatch is interrupted — the hard `opencode-timed` CLI timeout kills a
+provider-stalled run and returns `rc=124` — `red-gate` ledgers a terminal
+`dispatch_interrupted` entry instead of leaving only a `red_check` line, and
+`run-pipeline` captures the failing gate's exit code (`cmd || rc=$?`) so it
+reports `BLOCKED` rather than dying as a silent `EXIT`. A re-run resumes at the
+same task.
 
 All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `RTK_BIN`,
 `DISPATCH_BIN`, `OPENCODE_BIN` env overrides. `cmd` also respects `RTK_ENABLED=0`

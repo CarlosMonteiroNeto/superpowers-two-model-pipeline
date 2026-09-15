@@ -199,7 +199,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        manually)
   ledger-append        append one structured JSONL ledger entry
   red-gate             per-task kickoff: verify the scaffolded brief,
-                       dispatch Agente operador, chain coder-gate
+                       dispatch Agente operador, chain coder-gate. An
+                       interrupted dispatch (opencode-timed rc=124) ledgers a
+                       terminal dispatch_interrupted entry; run-pipeline
+                       reports BLOCKED instead of a silent EXIT, and a re-run
+                       resumes at the same task
   coder-gate           owns every retry after the first dispatch: runs the gate
                        check-only first (Flutter) + auto-format before the
                        check, ledgers coder_round, builds the fix prompt
@@ -224,9 +228,13 @@ skills/two-model-sdd-pipeline/scripts/:
                        tells the resumed model the brief has CHANGED and to
                        re-read it fully; exit 3 when the targeted agent is
                        not mode: all
-  session-clean        manual cleanup: deletes the opencode sessions a task
-                       recorded (task-N-*-session.txt); never auto-run -
-                       sessions are kept for resume/debugging
+  session-clean        session hygiene: deletes the opencode sessions a task
+                       recorded (task-N-*-session.txt). The per-task loop keeps
+                       sessions for resume/debugging; a phase launcher runs it
+                       with 'all' after run-pipeline returns, and a DB tool
+                       (~/.config/opencode/tools/db-maintenance.py
+                       prune-sessions) prunes stragglers, so headless sessions
+                       never accumulate (opencode.db bloat / freeze guard)
   orchestrator         thin per-task driver: executes route-next actions,
                        prints OUTCOME for the runner
   token-kill           RTK minification of error logs / source / JSON

@@ -229,16 +229,20 @@ while true; do
       ;;
     RED)
       n=$2
-      "$(red_gate_for)" "$WS" "$n"
-      rc=$?
+      # `|| rc=$?` (not `cmd; rc=$?`): under `set -e` a bare non-zero command
+      # aborts before the case can block with a message, so an interrupted
+      # dispatch (e.g. provider timeout -> rc=124) died as a silent EXIT with
+      # no ledger entry. Capture the code and block loudly instead.
+      rc=0
+      "$(red_gate_for)" "$WS" "$n" || rc=$?
       case "$rc" in
         0|2) ;; # green (loops inside) or TEST_DEFECT (ARBITRATE next)
         *) block "red-gate exit $rc on task $n - inspect logs" ;;
       esac
       ;;
     CODER)
-      "$CODER_GATE_BIN" "$WS" "$2"
-      rc=$?
+      rc=0
+      "$CODER_GATE_BIN" "$WS" "$2" || rc=$?
       case "$rc" in
         0|2) ;;
         *) block "coder-gate exit $rc - inspect logs" ;;
@@ -323,8 +327,8 @@ print(max(cands) if cands else '')
           --log "$WS/task-$m-coder.log" \
           || block "operador dispatch failed for corrective task $m"
       fi
-      "$CODER_GATE_BIN" "$WS" "$m"
-      rc=$?
+      rc=0
+      "$CODER_GATE_BIN" "$WS" "$m" || rc=$?
       case "$rc" in
         0|2) ;;
         *) block "coder-gate exit $rc on corrective task $m - inspect logs" ;;

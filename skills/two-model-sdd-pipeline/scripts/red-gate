@@ -50,8 +50,19 @@ fi
 # operador directly, no intermediation, no LLM approval of a check the
 # exit code already decided.
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+# An interrupted dispatch (e.g. the hard CLI timeout in `opencode-timed`
+# kills a provider-stalled run) returns non-zero. Record a terminal ledger
+# outcome so the task is never left with only a `red_check` line and no
+# reason, then stop - a re-run routes RED again and resumes cleanly.
+dispatch_rc=0
 "$DISPATCH_BIN" --agent two-model-coder --task "$task" \
-  --prompt-file "$brief" --log "$ws/task-$task-coder.log"
+  --prompt-file "$brief" --log "$ws/task-$task-coder.log" || dispatch_rc=$?
+if [ "$dispatch_rc" -ne 0 ]; then
+  "$SCRIPT_DIR/ledger-append" "$ledger" dispatch_interrupted "$task" \
+    "operador dispatch interrupted (rc=$dispatch_rc)" || true
+  echo "RED-GATE: operador dispatch interrupted (rc=$dispatch_rc) - inspect $ws/task-$task-coder.log" >&2
+  exit "$dispatch_rc"
+fi
 
 # Close the loop here instead of stopping at "operador was dispatched": run
 # the gate, decide PASS/FAIL/TEST_DEFECT, retry with --continue as needed,
