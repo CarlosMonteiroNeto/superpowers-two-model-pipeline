@@ -38,8 +38,8 @@ class InterfaceCheckBase(unittest.TestCase):
         self.plan = {
             "feature": "f",
             "tasks": [
-                {"id": 1, "touches": ["src/a.dart", "test/a_test.dart"], "depends_on": []},
-                {"id": 2, "touches": ["src/b.dart"], "depends_on": ["src/a.dart"]},
+                {"id": 1, "touches": ["src/a.dart"], "depends_on": []},
+                {"id": 2, "touches": ["src/a.dart", "src/b.dart"], "depends_on": [1]},
             ],
         }
         (self.ws / "plan.json").write_text(json.dumps(self.plan, indent=2), encoding="utf-8")
@@ -74,6 +74,20 @@ class TestInterfaceCheck(InterfaceCheckBase):
         (self.ws / "plan.json").unlink()
         r = self.run_it(1)
         self.assertEqual(r.returncode, 2)
+
+    def test_depends_on_path_like_entries_are_not_consumed(self):
+        # depends_on holds task ids; a path-like entry there must not be
+        # treated as a consumed interface.
+        plan = {"feature": "f", "tasks": [
+            {"id": 1, "touches": ["src/other.dart"], "depends_on": ["src/b.dart"]},
+            {"id": 3, "touches": ["src/b.dart"], "depends_on": []},
+        ]}
+        (self.ws / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        (self.repo / "src" / "b.dart").write_text("void b() { z(); }\n", encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "t3")
+        r = self.run_it(3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

@@ -2,9 +2,10 @@
 """Deterministic interface-change gate.
 
 Detects when a task's committed diff touches a file that a LATER task
-declares in its `touches` or `depends_on` (plan.json) - an interface another
-task consumes. The semantic "did it break the contract" question stays with
-the Reviewer; the mechanical "did it touch a consumed interface" is a script.
+declares in its `touches` (plan.json) - an interface another task consumes;
+`depends_on` holds task ids, not paths. The semantic "did it break the
+contract" question stays with the Reviewer; the mechanical "did it touch a
+consumed interface" is a script.
 
 Usage: interface-check WORKSPACE TASK [BASE]    (run from the repository root)
   BASE defaults to HEAD~1.
@@ -43,7 +44,7 @@ def main():
     for t in plan_data.get("tasks", []):
         if str(t.get("id")) == str(task):
             continue
-        for f in t.get("touches", []) + t.get("depends_on", []):
+        for f in t.get("touches", []):
             consumed.setdefault(f, []).append(str(t["id"]))
 
     hits = sorted(f for f in changed if f in consumed)
