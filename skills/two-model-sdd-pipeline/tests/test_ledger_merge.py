@@ -77,6 +77,28 @@ class LedgerMergeTest(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
 
+    def test_non_dict_destination_line_is_skipped(self):
+        (self.ws / "ledger.jsonl").write_text(
+            "5\n" + json.dumps(
+                entry(type="brief_ready", task="3", summary="scaffolded")) + "\n",
+            encoding="utf-8")
+        r = self.run_it(self.shard)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+        types = [(e["type"], e["task"]) for e in self.lines() if isinstance(e, dict)]
+        self.assertIn(("red_check", "3"), types)
+        self.assertIn(("task_complete", "3"), types)
+
+    def test_append_failure_reports_and_exits_one(self):
+        not_dir = self._tmp / "ws-as-file"
+        not_dir.write_text("not a directory\n", encoding="utf-8")
+        r = subprocess.run(
+            [PY, str(SCRIPTS / "ledger-merge"), str(not_dir), str(self.shard)],
+            capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("failed to append", r.stderr)
+        self.assertIn("LEDGER-MERGE: merged", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
