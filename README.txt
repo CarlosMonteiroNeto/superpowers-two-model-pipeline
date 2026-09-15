@@ -38,6 +38,11 @@ WHAT THIS FORK ADDS
    corrected pub.dev/GitHub Quality Score, deterministic Flutter scripts,
    and the RTK-compression ordering rule. It
    delegates the per-task implementation loop back to two-model-sdd-pipeline.
+   Interface design is governed by a vendored apple-design skill
+   (skills/apple-design/): every UI the pipeline designs or implements must
+   apply its principles (response, direct manipulation, interruptibility,
+   springs, momentum, materials, typography, reduced motion), and the revisor
+   checks them.
 
 PRINCIPLES
 ----------
@@ -319,6 +324,8 @@ docs/superpowers/     ADRs, specs, plans
 skills/               the skills (SKILL.md per skill)
   flutter-app-pipeline/   the Flutter layer + scripts + tests
   two-model-sdd-pipeline/ the generic two-tier engine + scripts
+  apple-design/           vendored Apple interface-design skill (MIT;
+                          https://github.com/emilkowalski/skills)
 
 LICENSE
 -------

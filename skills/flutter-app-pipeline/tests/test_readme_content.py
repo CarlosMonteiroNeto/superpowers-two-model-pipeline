@@ -30,6 +30,12 @@ class TestReadmeLlmReflectsTemplateStage(unittest.TestCase):
         text = self.readme.read_text(encoding="utf-8")
         self.assertIn("Category Skeleton", text)
 
+    def test_apple_design_skill_documented(self):
+        """README-LLM.md must document the vendored apple-design skill that
+        governs interface design."""
+        text = self.readme.read_text(encoding="utf-8")
+        self.assertIn("apple-design", text)
+
 
 class TestReadmeTxtReflectsTemplateStage(unittest.TestCase):
     def setUp(self):
@@ -44,6 +50,11 @@ class TestReadmeTxtReflectsTemplateStage(unittest.TestCase):
         text = self.readme.read_text(encoding="utf-8")
         self.assertIn("template-search", text)
         self.assertIn("template-score", text)
+
+    def test_apple_design_skill_listed(self):
+        """README.txt must list the vendored apple-design skill."""
+        text = self.readme.read_text(encoding="utf-8")
+        self.assertIn("apple-design", text)
 
 
 if __name__ == "__main__":

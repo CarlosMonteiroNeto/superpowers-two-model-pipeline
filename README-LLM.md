@@ -42,7 +42,12 @@ end to end.
 - **`flutter-app-pipeline`** (Flutter layer, on top): adds package research
   with a corrected Quality Score, the deterministic Flutter scripts, and the
   **RTK-compression** ordering rule. It delegates the
-  per-task implementation loop back to `two-model-sdd-pipeline`.
+  per-task implementation loop back to `two-model-sdd-pipeline`. Interface
+  design is governed by the vendored **`apple-design`** skill
+  (`skills/apple-design/SKILL.md`, MIT): Phase 1b/2 UI decisions and the
+  operador's UI code must apply its principles (response, direct manipulation,
+  interruptibility, springs, momentum, materials, typography, reduced motion),
+  and the revisor checks them.
 
 **Corollary — script-decided routing.** If a check can be performed by a
 script, the script performs it *and* routes straight to the next step,
@@ -60,7 +65,7 @@ recorded so it is never asked again for that branch.
 | Tool | Role |
 |---|---|
 | OpenCode | Harness (CLI + agent runtime); `opencode run --agent` is the headless dispatch mechanism |
-| Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline |
+| Superpowers (this fork) | Skills: brainstorming (grill-with-docs + Incremental Persistence), writing-plans, test-driven-development, two-model-sdd-pipeline, flutter-app-pipeline, apple-design (vendored interface-design principles; MIT) |
 | RTK (`rtk`) | CLI proxy that compresses command output before it reaches an LLM context window (60-90% token savings); also the "Token Killer" (`token-kill` script) |
 | Tavily | Programmatic web search for solution research |
 | pub.dev API | Package metadata, score, popularity, SDK constraints |
@@ -74,8 +79,11 @@ recorded so it is never asked again for that branch.
    Skeleton** — three fields (generic category, specific category, original
    implementations) that drive the template search and per-task dependency
    research downstream.
-   `1b` generic technical architecture. Resolved terms persist in `CONTEXT.md`
-   + ADRs (architectural path only).
+   `1b` generic technical architecture. `1c` interface design is governed by the
+   vendored `apple-design` skill: before any UI design decision (screens,
+   components, gestures, motion, materials, typography) the acting role invokes
+   it and encodes the resulting requirements into the plan tasks' `acceptance`.
+   Resolved terms persist in `CONTEXT.md` + ADRs (architectural path only).
 2. **Phase 2 — Research & Planning (per task).** `2a` search (Tavily + reference
    sources) and score candidates with `pkg-score`; then, at project level, run
    `template-search` against the Category Skeleton's specific category (stars

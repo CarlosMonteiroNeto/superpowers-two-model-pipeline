@@ -85,6 +85,22 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("EXPECTED-RED", text)
 
+    def test_apple_design_governs_interface_design(self):
+        """Every interface the pipeline designs is governed by the vendored
+        apple-design skill."""
+        text = self.skill.read_text(encoding="utf-8")
+        self.assertIn("apple-design", text)
+
+    def test_apple_design_mandate_covers_all_three_phases(self):
+        """The mandate must bind Phase 1/2 design, Phase 3 UI implementation,
+        and the Phase 4 review scope."""
+        text = self.skill.read_text(encoding="utf-8")
+        phase3 = text.index("## 3.")
+        phase4 = text.index("## 4.")
+        self.assertIn("apple-design", text[:phase3], "Phase 1/2 design missing")
+        self.assertIn("apple-design", text[phase3:phase4], "Phase 3 missing")
+        self.assertIn("apple-design", text[phase4:], "Phase 4 review missing")
+
 
 class TestTwoModelLayering(unittest.TestCase):
     def test_two_model_skill_cross_references_flutter_layer(self):

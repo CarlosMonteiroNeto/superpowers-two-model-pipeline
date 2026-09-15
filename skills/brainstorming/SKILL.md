@@ -38,6 +38,12 @@ the approval gate never does.
   complete when brainstorming ends: a separate clean session launches
   `run-pipeline PLAN_FILE`, and the script reads only the plan file and the
   ledger (never this session).
+- **Interface design is governed by `apple-design`.** When Phase 1 design touches
+  a user interface (screens, components, gestures, motion, materials,
+  typography), invoke the vendored `apple-design` skill
+  (`skills/apple-design/SKILL.md`) before making design decisions, and encode the
+  resulting requirements into the plan tasks' `acceptance` — not prose. This is
+  the concrete case of the `flutter-app-pipeline` §1c mandate.
 - **Artifacts are English-only.** The spec document, `CONTEXT.md`, and any
   ADRs this phase produces are written in English regardless of the
   developer's spoken language — the one exception anywhere in the pipeline is

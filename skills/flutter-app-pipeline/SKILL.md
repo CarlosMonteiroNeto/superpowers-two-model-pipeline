@@ -19,6 +19,20 @@ This is the Flutter/Dart specialization. It does **not** replace the generic eng
 - Architecture requirements at a generic level (patterns, constraints, non-functional needs).
 - Not tied to specific packages or templates — those resolve per task in Phase 2.
 
+### 1c. Interface design — governed by `apple-design`
+Every interface this pipeline designs is governed by the vendored `apple-design`
+skill (`skills/apple-design/SKILL.md`). Before any UI design decision in Phase 1b/2 —
+screens, components, gestures, motion, materials, typography — the acting role MUST
+invoke the `apple-design` skill and apply its principles (response/latency, direct
+1:1 manipulation, interruptibility, springs, momentum, spatial consistency,
+translucent materials, reduced motion).
+
+Encode the resulting decisions into the plan tasks' `acceptance` so the stateless
+Agente operador inherits them — e.g. "sheet dismissal tracks the drag 1:1 and hands
+off release velocity", "expand animation is critically damped (no overshoot)",
+"reduced-motion replaces the slide with a cross-fade". A UI task whose acceptance
+does not trace to an `apple-design` principle is underspecified.
+
 Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEXT.md` glossary + ADRs, architectural path only). The spec doc stays branch-specific.
 
 ## 2. Phase 2 — Research & Planning (project-level + per task)
@@ -101,11 +115,12 @@ owned by scripts):
 6. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. `flutter test` → `rtk test` and `flutter analyze` → `rtk err` wrapper derivation (verdict always from the raw run — RTK wrappers mask child exit codes). Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
 7. **No knowledge graph.** The pipeline runs with no graph stage: no script builds, updates, or queries a code graph. Briefs are scaffolded from plan tasks; the revisor reviews brief + diff only.
 8. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.
+9. **`apple-design` on UI tasks.** Any task that produces or changes an interface must apply the `apple-design` skill. The Agente operador implements to the design acceptance the brief carries (see §1c); the Agente revisor reviews the UI diff against the same principles — a missing or violated design principle is a SEND_BACK finding, on the same footing as its design/architecture review.
 
 ## 4. Phase 4 — Project-Wide Review
 
 - Revalidate the branch with `scripts/green-gate --no-commit` (full suite + analyze; report only, never commits).
-- Full codebase code review after all tasks are green.
+- Full codebase code review after all tasks are green, including the interface as a whole: verify the assembled UI against the `apple-design` principles (consistent motion, materials, typography, reduced-motion support), not only per-task diffs.
 - Any correction re-enters the Phase 3 loop (red → fix → green → review → commit).
 - **Repository documentation:** if this session changed the pipeline itself (scripts, skills, invariants, phases), update `README.txt` and `README-LLM.md` to reflect the changes and include them in the push. Run `scripts/doc-check` as a deterministic gate to verify before the merge — exit 1 means READMEs were not updated with pipeline changes; the Orchestrator must amend them.
 
