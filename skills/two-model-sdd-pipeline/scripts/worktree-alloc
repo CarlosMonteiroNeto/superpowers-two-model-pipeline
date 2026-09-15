@@ -5,6 +5,9 @@
 # Usage: worktree-alloc WORKSPACE TASK
 # Exit codes: 0 = allocated, 1 = already allocated, 2 = usage.
 #
+# Allocation records the base commit in the ledger (`base=<sha>`), which
+# worktree-release uses to tell a real task branch from a never-worked one.
+#
 # Resource profile: dispatch none; stdout not LLM-facing; ledger I/O writes
 # the integration global ledger; subprocess: git worktree add + one ledger-append;
 # wall-clock trivial; git writes (worktree + branch task/<N> from HEAD).
@@ -20,26 +23,33 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 root=$(git rev-parse --show-toplevel)
 wt="$root/.superpowers/two-model/worktrees/task-$task"
 
-if git worktree list --porcelain | grep -qx "worktree $wt"; then
+# Idempotency: a worktree OR an orphan branch for this task means "already
+# allocated". Checking only the worktree list would let `worktree add -b`
+# fatal (rc 255) on a leftover branch, breaking the 0/1/2 contract.
+if git worktree list --porcelain | grep -Fqx "worktree $wt" \
+   || git show-ref --verify --quiet "refs/heads/task/$task"; then
   echo "WORKTREE-ALLOC: task $task already allocated at $wt" >&2
   exit 1
 fi
+
+base=$(git rev-parse HEAD)
 
 mkdir -p "$(dirname "$wt")"
 git worktree add -q "$wt" -b "task/$task" HEAD
 
 # Seed the worktree workspace. The worktree is a fresh checkout: the
 # integration tree's self-ignoring .superpowers/.gitignore is untracked and
-# does NOT travel, so recreate it or the gate's `git add -A` would commit
-# the workspace into the task branch.
+# does NOT travel, so recreate it (root and worktree) or the gate's
+# `git add -A` would commit the workspace into the task branch.
 wt_ws="$wt/.superpowers/two-model/$(basename "$ws")"
 mkdir -p "$wt_ws"
+printf '*\n' > "$root/.superpowers/two-model/.gitignore"
 printf '*\n' > "$wt/.superpowers/two-model/.gitignore"
 cp -f "$ws/plan.json" "$wt_ws/plan.json"
-grep -m1 '"type": *"gate"' "$ws/ledger.jsonl" > "$wt_ws/ledger.jsonl" || : > "$wt_ws/ledger.jsonl"
+grep '"type": *"gate"' "$ws/ledger.jsonl" | tail -1 > "$wt_ws/ledger.jsonl" || : > "$wt_ws/ledger.jsonl"
 
 "$script_dir/ledger-append" "$ws/ledger.jsonl" worktree_alloc "$task" \
-  "allocated task/$task" worktree="$wt"
+  "allocated task/$task" worktree="$wt" base="$base"
 
 echo "WORKTREE=$wt"
 echo "WS=$wt_ws"

@@ -98,6 +98,26 @@ class WorktreeTest(unittest.TestCase):
         self.assertTrue((self.repo / ".superpowers" / "two-model" / "worktrees"
                          / "task-3").exists())
 
+    def test_release_never_worked_branch_after_head_advance_is_one(self):
+        self.run_it("worktree-alloc", 3)
+        (self.repo / "lib" / "b.go").write_text("package b\n", encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "advance")
+        r = self.run_it("worktree-release", 3)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertTrue((self.repo / ".superpowers" / "two-model" / "worktrees"
+                         / "task-3").exists())
+
+    def test_alloc_orphan_branch_is_one(self):
+        git(self.repo, "branch", "task/3")
+        r = self.run_it("worktree-alloc", 3)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+
+    def test_release_usage(self):
+        r = subprocess.run([BASH, str(SCRIPTS / "worktree-release")],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

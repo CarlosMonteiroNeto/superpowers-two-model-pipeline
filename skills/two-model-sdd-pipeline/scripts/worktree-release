@@ -5,6 +5,11 @@
 # Usage: worktree-release WORKSPACE TASK
 # Exit codes: 0 = released, 1 = not merged / not found, 2 = usage.
 #
+# "Merged" requires real work: the branch tip must differ from the allocation
+# base recorded by worktree-alloc (a never-worked branch tip equals its base and
+# merely becomes an ancestor once any later task advances HEAD) and must be an
+# ancestor of HEAD.
+#
 # Resource profile: dispatch none; stdout not LLM-facing; ledger I/O writes the
 # integration global ledger; subprocess: git worktree remove/prune + branch -d +
 # one ledger-append; wall-clock trivial; git removes a worktree and a branch.
@@ -21,24 +26,31 @@ root=$(git rev-parse --show-toplevel)
 wt="$root/.superpowers/two-model/worktrees/task-$task"
 
 branch="task/$task"
-if ! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
+tip=$(git rev-parse --verify --quiet "refs/heads/$branch") || true
+if [ -z "$tip" ]; then
   echo "WORKTREE-RELEASE: $branch not found - keeping worktree" >&2
   exit 1
 fi
-# Merged = the branch tip is an ancestor of HEAD *and* HEAD has moved past it.
-# A branch still sitting on HEAD (alloc with no committed work) is not merged:
-# integrate always merges with --no-ff, so a released task is a strict ancestor.
-if ! git merge-base --is-ancestor "$branch" HEAD \
-   || [ "$(git rev-parse "$branch")" = "$(git rev-parse HEAD)" ]; then
+
+base=$(grep '"type": *"worktree_alloc"' "$ws/ledger.jsonl" 2>/dev/null \
+  | grep "\"task\": *\"$task\"" | tail -1 \
+  | sed -n 's/.*"base": *"\([^"]*\)".*/\1/p' || true)
+
+if [ -z "$base" ] || [ "$tip" = "$base" ] \
+   || ! git merge-base --is-ancestor "$tip" HEAD; then
   echo "WORKTREE-RELEASE: $branch is not merged into HEAD - keeping worktree" >&2
   exit 1
 fi
 
-if git worktree list --porcelain | grep -qx "worktree $wt"; then
+if git worktree list --porcelain | grep -Fqx "worktree $wt"; then
   git worktree remove --force "$wt"
 fi
 git worktree prune
-git branch -d "task/$task" >/dev/null 2>&1 || true
+# Never swallow a failed delete: a false "released" hides a live branch.
+if ! git branch -d "$branch"; then
+  echo "WORKTREE-RELEASE: failed to delete $branch - not ledgering release" >&2
+  exit 1
+fi
 
 "$script_dir/ledger-append" "$ws/ledger.jsonl" worktree_release "$task" \
   "released task/$task"
