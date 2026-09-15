@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Script-owned serial integration gate: fold each parallel task branch into the
+# integration HEAD one at a time, running the FULL gate after every merge. The
+# verdict is an exit code, never LLM judgment. On conflict or a red gate the
+# merge is aborted and nothing of that task lands, so a bad task can never
+# poison the wave - the remaining tasks still integrate.
+#
+# Usage: integrate WORKSPACE TASK [TASK...]
+#   WORKSPACE  the integration pipeline workspace (holds ledger.jsonl + plan)
+#   TASK       one or more task ids (merged in ascending numeric order)
+#
+# Exit codes: 0 = every task integrated, 1 = at least one integration_failed,
+#             2 = usage.
+#
+# Reads `lang`/`test_cmd`/`analyze_cmd` from the first `gate` ledger entry
+# (same shape as final-gate). lang=flutter runs
+# `green-gate --no-commit -w WS -t N`; anything else runs
+# `run-gates WS TEST_CMD ANALYZE_CMD`. After a green commit the task's ledger
+# shard is folded in via ledger-merge (a non-zero result is NOT swallowed: a
+# lost shard entry is a silent loss) and the worktree/branch is released.
+#
+# Resource profile: dispatch none; git merges + commits on the integration
+# branch; ledger writes (integration global + per-task shard merge); subprocess:
+# run-gates (generic) or green-gate --no-commit (flutter) once per task, plus
+# ledger-merge and worktree-release per task; wall-clock = one full gate suite
+# per task, serialized.
+set -euo pipefail
+
+if [ $# -lt 2 ]; then
+  echo "usage: integrate WORKSPACE TASK [TASK...]" >&2
+  exit 2
+fi
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+root=$(git rev-parse --show-toplevel)
+ws=$1
+ledger="$ws/ledger.jsonl"
+shift
+
+RUN_GATES_BIN="${RUN_GATES_BIN:-$script_dir/run-gates}"
+GREEN_GATE_BIN="${GREEN_GATE_BIN:-$script_dir/../../flutter-app-pipeline/scripts/green-gate}"
+
+gate_line=$(grep -E '"type": *"gate"' "$ledger" | head -1 || true)
+test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
+[ -n "$test_cmd" ] || test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test": *"\([^"]*\)".*/\1/p')
+analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)".*/\1/p')
+[ -n "$analyze_cmd" ] || analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
+lang=$(printf '%s' "$gate_line" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+
+failed=0
+
+for n in $(printf '%s\n' "$@" | sort -n); do
+  if ! git merge --no-commit --no-ff "task/$n" >/dev/null 2>&1; then
+    git merge --abort 2>/dev/null || true
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "conflict"
+    failed=1
+    continue
+  fi
+
+  gate_rc=0
+  if [ "$lang" = "flutter" ]; then
+    "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "$n" || gate_rc=$?
+  else
+    "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd" || gate_rc=$?
+  fi
+
+  if [ "$gate_rc" -ne 0 ]; then
+    git merge --abort 2>/dev/null || true
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$gate_rc)"
+    failed=1
+    continue
+  fi
+
+  git commit --no-edit >/dev/null 2>&1
+  sha=$(git rev-parse --short HEAD)
+  "$script_dir/ledger-append" "$ledger" integrated "$n" "merged $sha" "commits=$sha"
+
+  shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/$(basename "$ws")/ledger.jsonl"
+  merge_rc=0
+  "$script_dir/ledger-merge" "$ws" "$shard" || merge_rc=$?
+  if [ "$merge_rc" -ne 0 ]; then
+    echo "INTEGRATE: ledger-merge failed for task $n" >&2
+    failed=1
+  fi
+
+  rel_rc=0
+  "$script_dir/worktree-release" "$ws" "$n" || rel_rc=$?
+  if [ "$rel_rc" -ne 0 ]; then
+    echo "INTEGRATE: worktree-release failed for task $n" >&2
+    failed=1
+  fi
+done
+
+[ "$failed" -eq 0 ] || exit 1
+echo "INTEGRATE: wave integrated"
+exit 0
