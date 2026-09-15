@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""Plan-derived wave scheduler (no LLM).
+
+Reads plan.json + the merged ledger and emits the next wave: the ready tasks
+(all depends_on done, not done, no open episode) whose declared `touches` are
+pairwise disjoint, capped at MAX_PARALLEL. Corrective/pending-episode tasks are
+emitted alone.
+
+Usage: wave-next WORKSPACE [MAX_PARALLEL]
+Exit codes: 0 = wave emitted (one `RUN <id>` per line) or FINAL_REVIEW,
+            1 = nothing runnable while tasks remain (WAVE_EMPTY), 2 = usage.
+
+Resource profile: dispatch none; stdout is Script-CEO-facing (RUN lines);
+ledger I/O reads the global ledger once; one Python pass + one subprocess per
+candidate pair (touches-overlap); git none.
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def load_ledger(path):
+    entries = []
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except ValueError:
+                    pass
+    return entries
+
+
+def task_of(entry):
+    return entry.get("task")
+
+
+def main():
+    if len(sys.argv) not in (2, 3):
+        print("usage: wave-next WORKSPACE [MAX_PARALLEL]", file=sys.stderr)
+        return 2
+    ws = sys.argv[1]
+    try:
+        cap = int(sys.argv[2]) if len(sys.argv) == 3 else 2
+    except ValueError:
+        return 2
+    plan_path = os.path.join(ws, "plan.json")
+    if not os.path.isfile(plan_path) or cap < 1:
+        return 2
+    with open(plan_path, encoding="utf-8", errors="replace") as fh:
+        tasks = json.load(fh).get("tasks", [])
+    ledger = load_ledger(os.path.join(ws, "ledger.jsonl"))
+
+    done_events = ("task_complete", "integrated")
+    state = {}      # id -> "done" | "failed" | None
+    episode = {}    # id -> True if newest review_outcome is SEND_BACK/ESCALATE
+    for t in tasks:
+        tid = str(t.get("id"))
+        last = None
+        for e in ledger:
+            if str(task_of(e)) != tid:
+                continue
+            if e.get("type") in done_events or e.get("type") == "integration_failed":
+                last = e.get("type")
+            if e.get("type") == "review_outcome":
+                verdict = e.get("summary")
+                episode[tid] = verdict in ("SEND_BACK", "ESCALATE")
+                if verdict == "APPROVED":
+                    episode[tid] = False
+            if e.get("type") == "arbitrate_resolved":
+                episode[tid] = False
+        state[tid] = "done" if last in done_events else ("failed" if last else None)
+
+    if all(state.get(str(t.get("id"))) == "done" for t in tasks) and tasks:
+        print("FINAL_REVIEW")
+        return 0
+
+    ready = []
+    for t in tasks:
+        tid = str(t.get("id"))
+        if state.get(tid) == "done":
+            continue
+        deps = [str(d) for d in (t.get("depends_on") or [])]
+        if any(state.get(d) != "done" for d in deps):
+            continue
+        ready.append(t)
+
+    if not ready:
+        print("WAVE_EMPTY: nothing runnable (blocked)", file=sys.stderr)
+        return 1
+
+    # Corrective work and open episodes run alone, lowest id first.
+    special = [t for t in ready if t.get("corrects") or episode.get(str(t.get("id")))]
+    if special:
+        print("RUN {}".format(min(int(t["id"]) for t in special)))
+        return 0
+
+    selected = []
+    for t in sorted(ready, key=lambda x: int(x["id"])):
+        if len(selected) >= cap:
+            break
+        candidate = selected + [t]
+        ids = [str(x["id"]) for x in candidate]
+        rc = subprocess.run([sys.executable, os.path.join(HERE, "touches-overlap"), ws, *ids],
+                            capture_output=True, text=True).returncode
+        if rc == 0:
+            selected = candidate
+    for t in selected:
+        print("RUN {}".format(t["id"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
