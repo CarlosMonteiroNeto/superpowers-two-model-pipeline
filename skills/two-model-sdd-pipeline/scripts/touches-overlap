@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Declared-`touches` pairwise disjointness decider (no LLM).
+
+Decides whether a candidate wave's tasks can run concurrently: two tasks may
+share a wave only if their declared `touches` sets are disjoint.
+
+Usage: touches-overlap WORKSPACE ID [ID...]    (reads <ws>/plan.json)
+Exit codes: 0 = disjoint, 1 = overlap (conflicting pairs on stderr),
+            2 = usage / missing plan / unknown id.
+
+Resource profile: dispatch none; stdout not LLM-facing; ledger read none
+(plan.json only); one Python pass; wall-clock trivial; git none.
+"""
+
+import json
+import os
+import sys
+
+
+def main():
+    if len(sys.argv) < 3:
+        print("usage: touches-overlap WORKSPACE ID [ID...]", file=sys.stderr)
+        return 2
+    ws, ids = sys.argv[1], sys.argv[2:]
+    plan_path = os.path.join(ws, "plan.json")
+    if not os.path.isfile(plan_path):
+        print("TOUCHES-OVERLAP: no plan.json at {}".format(plan_path), file=sys.stderr)
+        return 2
+    with open(plan_path, encoding="utf-8", errors="replace") as fh:
+        plan = json.load(fh)
+    touches = {str(t.get("id")): set(t.get("touches", []))
+               for t in plan.get("tasks", [])}
+    unknown = [i for i in ids if i not in touches]
+    if unknown:
+        print("TOUCHES-OVERLAP: unknown task id(s) {}".format(",".join(unknown)),
+              file=sys.stderr)
+        return 2
+    conflicts = []
+    for a in range(len(ids)):
+        for b in range(a + 1, len(ids)):
+            shared = sorted(touches[ids[a]] & touches[ids[b]])
+            if shared:
+                conflicts.append((ids[a], ids[b], shared))
+    if conflicts:
+        for x, y, shared in conflicts:
+            print("TOUCHES-OVERLAP: {} and {} share {}".format(x, y, ",".join(shared)),
+                  file=sys.stderr)
+        return 1
+    print("TOUCHES-OVERLAP: disjoint")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
