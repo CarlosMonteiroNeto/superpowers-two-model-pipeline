@@ -88,6 +88,13 @@ class IntegrateTest(unittest.TestCase):
         with open(self.wt_ws(n) / "ledger.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
 
+    def shard_complete(self, n):
+        # Approval evidence: integrate only merges a task whose shard holds
+        # `task_complete` (coder-gate commits before the revisor runs, so a
+        # committed-but-unapproved shard must never be merged).
+        self.shard_append(n, {"ts": "t", "type": "task_complete",
+                              "task": str(n), "summary": "APPROVED"})
+
     def ledger(self):
         return [json.loads(line)
                 for line in (self.ws / "ledger.jsonl").read_text(
@@ -121,6 +128,7 @@ class IntegrateTest(unittest.TestCase):
     def test_clean_merge_integrates_branch_and_shard(self):
         self.alloc(1)
         self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
         self.shard_append(1, {"ts": "t", "type": "review_outcome", "task": "1",
                               "summary": "APPROVED", "findings": "0"})
         r = self.run_integrate(1, RUN_GATES_BIN=self.gate_ok())
@@ -138,6 +146,43 @@ class IntegrateTest(unittest.TestCase):
         self.assertFalse(self.wt(1).exists())
         self.assertTrue((self.repo / "lib" / "task1.go").is_file())
 
+    def test_unapproved_shard_is_not_merged_or_released(self):
+        """Critical: coder-gate commits BEFORE the revisor runs, so a shard
+        without `task_complete` is a committed-but-unapproved task. integrate
+        must ledger `integration_failed N not approved`, leave the integration
+        HEAD untouched, and NOT release the worktree (the only debug copy)."""
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        head_before = self.head()
+        r = self.run_integrate(1, RUN_GATES_BIN=self.gate_ok())
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        fails = self.entries("integration_failed")
+        self.assertEqual(len(fails), 1, fails)
+        self.assertEqual(str(fails[0]["task"]), "1")
+        self.assertIn("not approved", fails[0]["summary"])
+        self.assertEqual(self.head(), head_before)
+        self.assertNotIn("integrated", [e["type"] for e in self.ledger()])
+        self.assertNotIn("worktree_release", [e["type"] for e in self.ledger()])
+        self.assertFalse((self.repo / "lib" / "task1.go").exists())
+        self.assertIn("task/1", self.branches())
+        self.assertTrue(self.wt(1).exists())
+
+    def test_approved_shard_still_integrates(self):
+        """The approval precheck must not block the happy path: a shard with
+        `task_complete` merges, is ledgered `integrated`, and is released."""
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
+        r = self.run_integrate(1, RUN_GATES_BIN=self.gate_ok())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("INTEGRATE: wave integrated", r.stdout)
+        self.assertEqual([str(e["task"]) for e in self.entries("integrated")],
+                         ["1"])
+        self.assertIn("task_complete",
+                      [e["type"] for e in self.ledger()])
+        self.assertNotIn("task/1", self.branches())
+        self.assertTrue((self.repo / "lib" / "task1.go").is_file())
+
     def test_conflict_signals_and_leaves_head_and_branch(self):
         self.alloc(1)
         (self.repo / "lib" / "a.go").write_text(
@@ -146,6 +191,7 @@ class IntegrateTest(unittest.TestCase):
         git(self.repo, "commit", "-qm", "integration edit")
         head_before = self.head()
         self.task_commit(1, "lib/a.go", "package a // task1\n")
+        self.shard_complete(1)
         r = self.run_integrate(1, RUN_GATES_BIN=self.gate_ok())
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         fails = self.entries("integration_failed")
@@ -168,6 +214,8 @@ class IntegrateTest(unittest.TestCase):
         git(self.repo, "commit", "-qm", "integration edit")
         self.task_commit(1, "lib/a.go", "package a // task1\n")
         self.task_commit(2, "lib/task2.go", "package lib\n")
+        self.shard_complete(1)
+        self.shard_complete(2)
         r = self.run_integrate(1, 2, RUN_GATES_BIN=self.gate_ok())
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         pairs = [(e["type"], str(e["task"])) for e in self.ledger()]
@@ -184,6 +232,7 @@ class IntegrateTest(unittest.TestCase):
     def test_gate_red_signals_and_leaves_head(self):
         self.alloc(1)
         self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
         head_before = self.head()
         r = self.run_integrate(1, RUN_GATES_BIN=self.gate_fail())
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
@@ -202,6 +251,7 @@ class IntegrateTest(unittest.TestCase):
     def test_commit_failure_signals_and_aborts_merge(self):
         self.alloc(1)
         self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
         head_before = self.head()
         hook = self.repo / ".git" / "hooks" / "pre-commit"
         hook.parent.mkdir(parents=True, exist_ok=True)
@@ -225,6 +275,7 @@ class IntegrateTest(unittest.TestCase):
     def test_flutter_lang_runs_green_gate_argv(self):
         self.alloc(1)
         self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
         gate = {"ts": "t", "type": "gate", "task": "-", "summary": "go",
                 "lang": "flutter", "test_cmd": "flutter test",
                 "analyze_cmd": "flutter analyze"}
@@ -250,6 +301,8 @@ class IntegrateTest(unittest.TestCase):
         self.alloc(2)
         self.task_commit(1, "lib/task1.go", "package lib\n")
         self.task_commit(2, "lib/task2.go", "package lib\n")
+        self.shard_complete(1)
+        self.shard_complete(2)
         counter = self._tmp / "gate-count"
         stub = write_stub(
             self.stub_dir, "gate-once",

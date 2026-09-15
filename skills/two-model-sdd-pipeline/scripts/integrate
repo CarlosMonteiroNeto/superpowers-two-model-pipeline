@@ -19,6 +19,15 @@
 # shard is folded in via ledger-merge (a non-zero result is NOT swallowed: a
 # lost shard entry is a silent loss) and the worktree/branch is released.
 #
+# A task is integrated only when its worktree shard proves the task was
+# approved: the shard must contain a `task_complete`. coder-gate commits
+# BEFORE the revisor runs, so a post-commit failure (interrupted revisor
+# dispatch, escalation, stuck detector) leaves a committed-but-unapproved
+# branch; an un-approved shard is ledgered `integration_failed N not approved`
+# and skipped - never merged, never released (the worktree keeps the only
+# debug copy). run-pipeline's bounded recovery then re-runs that task, which
+# is meaningful precisely because it was never approved.
+#
 # Resource profile: dispatch none; git merges + commits on the integration
 # branch; ledger writes (integration global + per-task shard merge); subprocess:
 # run-gates (generic) or green-gate --no-commit (flutter) once per task, plus
@@ -50,6 +59,16 @@ lang=$(printf '%s' "$gate_line" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 failed=0
 
 for n in $(printf '%s\n' "$@" | sort -n); do
+  shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/$(basename "$ws")/ledger.jsonl"
+  # Approval precheck: only a shard carrying `task_complete` proves the
+  # revisor approved the task. Merging (and releasing) an un-approved branch
+  # would ship unreviewed work and destroy the only debug copy.
+  if ! grep -qE '"type": *"task_complete"' "$shard" 2>/dev/null; then
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "not approved"
+    failed=1
+    continue
+  fi
+
   if ! git merge --no-commit --no-ff "task/$n" >/dev/null 2>&1; then
     git merge --abort 2>/dev/null || true
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" "conflict"
@@ -82,7 +101,6 @@ for n in $(printf '%s\n' "$@" | sort -n); do
   sha=$(git rev-parse --short HEAD)
   "$script_dir/ledger-append" "$ledger" integrated "$n" "merged $sha" "commits=$sha" "sha=$sha"
 
-  shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/$(basename "$ws")/ledger.jsonl"
   merge_rc=0
   "$script_dir/ledger-merge" "$ws" "$shard" || merge_rc=$?
   if [ "$merge_rc" -ne 0 ]; then
