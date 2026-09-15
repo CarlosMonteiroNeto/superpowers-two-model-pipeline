@@ -1,18 +1,28 @@
 #!/usr/bin/env bash
 # Top-level Script CEO driver: invokable anywhere with a tracked plan file.
-# Scaffolds the toolchain gate, then loops task-run (the per-task lifecycle,
-# which itself loops the single dispatch table orchestrator and owns the
-# LLM-owned REVIEW/CORRECTIVE/ARBITRATE branches) -> route-next advances the
-# task until FINAL_REVIEW -> closing -> push+PR.
+# Scaffolds the toolchain gate, then drives the plan either serially
+# (--max-parallel 1) or in plan-derived waves (--max-parallel N>1, default 2).
+# Serial: loop task-run (the per-task lifecycle, which itself loops the single
+#   dispatch table orchestrator and owns the LLM-owned REVIEW/CORRECTIVE/
+#   ARBITRATE branches) -> route-next advances the task until FINAL_REVIEW.
+# Wave:   wave-next emits the next ready, touches-disjoint wave -> each task is
+#   isolated by worktree-alloc and run by task-run inside its worktree ->
+#   integrate folds the wave's branches into HEAD (per-merge full suite, per
+#   task ledger shard), a failed task is re-emitted alone on the next wave.
+# Both paths converge on closing -> push+PR.
 # No Agente estratégico in the loop: briefs are scaffolded, tasks come from
 # Agente diretor, gates decide, revisor judges. Resumable: re-running on the
-# same plan continues from the ledger (route-next reads state, never memory).
+# same plan continues from the ledger (route-next/wave-next read state, never
+# memory).
 #
-# Usage: run-pipeline PLAN_FILE [TOTAL] [--no-push]
-#   PLAN_FILE  tracked plan (docs/superpowers/plans/<name>-plan.json)
-#   TOTAL      optional total task count (default: plan task count, live -
-#              corrective tasks appended mid-run are counted automatically)
-#   --no-push  stop after the closing assessment (no push/PR) - also for tests
+# Usage: run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]
+#   PLAN_FILE     tracked plan (docs/superpowers/plans/<name>-plan.json)
+#   TOTAL         optional total task count (default: plan task count, live -
+#                 corrective tasks appended mid-run are counted automatically)
+#   --no-push     stop after the closing assessment (no push/PR) - also for tests
+#   --max-parallel N  max tasks per wave (integer >= 1; default 2). N == 1 is
+#                 the pre-wave serial path (no worktrees, no integrate) - the
+#                 explicit regression contract.
 #
 # Env:
 #   TASK_RUN_BIN  override the per-task loop (default: this dir's task-run)
@@ -30,19 +40,28 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PLAN=""
 TOTAL_ARG=""
 NO_PUSH=0
-for arg in "$@"; do
-  case "$arg" in
-    --no-push) NO_PUSH=1 ;;
+MAX_PARALLEL=2
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-push) NO_PUSH=1; shift ;;
+    --max-parallel)
+      [ $# -ge 2 ] || { echo "usage: run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]" >&2; exit 2; }
+      MAX_PARALLEL=$2; shift 2 ;;
+    --max-parallel=*) MAX_PARALLEL=${1#--max-parallel=}; shift ;;
     *)
-      if [ -z "$PLAN" ]; then PLAN=$arg; else TOTAL_ARG=$arg; fi
-      ;;
+      if [ -z "$PLAN" ]; then PLAN=$1; else TOTAL_ARG=$1; fi
+      shift ;;
   esac
 done
-[ -n "$PLAN" ] || { echo "usage: run-pipeline PLAN_FILE [TOTAL] [--no-push]" >&2; exit 2; }
+[ -n "$PLAN" ] || { echo "usage: run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]" >&2; exit 2; }
 [ -f "$PLAN" ] || { echo "RUN-PIPELINE: no plan file: $PLAN" >&2; exit 2; }
 case "$TOTAL_ARG" in
   ""|*[!0-9]*) [ -z "$TOTAL_ARG" ] || { echo "RUN-PIPELINE: TOTAL must be numeric" >&2; exit 2; } ;;
 esac
+case "$MAX_PARALLEL" in
+  ""|*[!0-9]*) echo "RUN-PIPELINE: --max-parallel must be an integer >= 1" >&2; exit 2 ;;
+esac
+[ "$MAX_PARALLEL" -ge 1 ] || { echo "RUN-PIPELINE: --max-parallel must be an integer >= 1" >&2; exit 2; }
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "RUN-PIPELINE: not in a git repo" >&2; exit 2; }
 # Absolutize the plan BEFORE cd-ing: gates run git in the repo root, and a
@@ -148,29 +167,72 @@ tasks_usable || block "plan has no usable tasks (every task needs acceptance) - 
 # --- main loop ---
 # The per-task lifecycle (orchestrator + REVIEW/CORRECTIVE/ARBITRATE) lives in
 # task-run, shared by the serial runner and the wave path (the H2 lesson:
-# never two copies of the routing logic). This driver owns only task advance:
-# after a task completes, route-next reads the ledger (never memory) and
-# decides NEXT vs FINAL_REVIEW, so a re-run on the same plan resumes correctly.
-task=$(first_incomplete)
-while true; do
-  total=$(total_now)
-  rc=0
-  task_run_bin="${TASK_RUN_BIN:-$SCRIPT_DIR/task-run}"
-  PLAN="$PLAN" "$task_run_bin" "$WS" "$task" "$total" || rc=$?
-  case "$rc" in
-    0) ;;
-    1) block "task $task blocked (inspect task-$task logs)";;
-    *) block "task-run exit $rc on task $task";;
-  esac
-  action=$("$SCRIPT_DIR/route-next" "$WS" "$task" "$total") \
-    || block "route-next inconsistent after task $task"
-  say "$action"
-  case "$action" in
-    NEXT\ *) task=${action#NEXT } ;;
-    FINAL_REVIEW*) break ;;
-    *) block "unexpected action after completed task $task: $action" ;;
-  esac
-done
+# never two copies of the routing logic). This driver owns only task advance.
+# Serial (MAX_PARALLEL == 1): after a task completes, route-next reads the
+# ledger (never memory) and decides NEXT vs FINAL_REVIEW, so a re-run on the
+# same plan resumes correctly; no worktrees, no integrate.
+# Wave (MAX_PARALLEL > 1): wave-next computes the next ready, touches-disjoint
+# wave from plan + ledger; each task runs in its own worktree in parallel;
+# integrate merges the wave and the loop re-derives. A failed integration is
+# ledgered integration_failed and simply re-emitted alone by the next
+# wave-next (corrective) - never special-cased here.
+if [ "$MAX_PARALLEL" -eq 1 ]; then
+  task=$(first_incomplete)
+  while true; do
+    total=$(total_now)
+    rc=0
+    task_run_bin="${TASK_RUN_BIN:-$SCRIPT_DIR/task-run}"
+    PLAN="$PLAN" "$task_run_bin" "$WS" "$task" "$total" || rc=$?
+    case "$rc" in
+      0) ;;
+      1) block "task $task blocked (inspect task-$task logs)";;
+      *) block "task-run exit $rc on task $task";;
+    esac
+    action=$("$SCRIPT_DIR/route-next" "$WS" "$task" "$total") \
+      || block "route-next inconsistent after task $task"
+    say "$action"
+    case "$action" in
+      NEXT\ *) task=${action#NEXT } ;;
+      FINAL_REVIEW*) break ;;
+      *) block "unexpected action after completed task $task: $action" ;;
+    esac
+  done
+else
+  while true; do
+    rc=0
+    wave=$("$SCRIPT_DIR/wave-next" "$WS" "$MAX_PARALLEL") || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      [ "$rc" -eq 1 ] && block "wave-next: nothing runnable (WAVE_EMPTY)"
+      block "wave-next exit $rc"
+    fi
+    case "$wave" in
+      FINAL_REVIEW*) break ;;
+    esac
+    ids=$(printf '%s\n' "$wave" | sed -n 's/^RUN //p')
+    [ -n "$ids" ] || block "wave-next emitted neither RUN ids nor FINAL_REVIEW"
+    say "wave: RUN $ids"
+    declare -A wt_of=()
+    declare -A wsws_of=()
+    for n in $ids; do
+      rc=0
+      out=$("$SCRIPT_DIR/worktree-alloc" "$WS" "$n") || rc=$?
+      # A failed alloc (1 = already allocated, 2 = usage) is a blocker, never a
+      # half-launched task: do not background a task whose worktree is absent.
+      [ "$rc" -eq 0 ] || block "worktree-alloc task $n (rc=$rc)"
+      wt_of[$n]=$(printf '%s\n' "$out" | sed -n 's/^WORKTREE=//p')
+      wsws_of[$n]=$(printf '%s\n' "$out" | sed -n 's/^WS=//p')
+      [ -n "${wt_of[$n]}" ] && [ -n "${wsws_of[$n]}" ] \
+        || block "worktree-alloc task $n printed no WORKTREE=/WS="
+    done
+    for n in $ids; do
+      total=$(total_now)
+      ( cd "${wt_of[$n]}" && "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
+          >"$WS/task-$n-run.log" 2>&1 ) &
+    done
+    wait
+    "$SCRIPT_DIR/integrate" "$WS" $ids || true
+  done
+fi
 
 # --- closing ---
 total=$(total_now)

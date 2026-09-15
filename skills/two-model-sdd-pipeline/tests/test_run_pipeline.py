@@ -132,6 +132,30 @@ exit 0
 """,
         )
 
+    def fake_red_gate_committing(self):
+        # Wave-path gate stub: unlike fake_red_gate it makes a REAL commit
+        # (its cwd is the task worktree), so integrate has something to merge
+        # and the integration HEAD can be asserted to carry each task.
+        return write_stub(
+            self.stub_dir, "red-gate-committing",
+            """
+ws=$1; task=$2
+append="${LEDGER_APPEND_BIN:?}"
+mkdir -p wave
+printf 'task %s\\n' "$task" > "wave/task-$task.txt"
+git add "wave/task-$task.txt"
+git commit -q -m "task $task"
+sha=$(git rev-parse --short HEAD)
+"$append" "$ws/ledger.jsonl" red_check "$task" "RED"
+"$append" "$ws/ledger.jsonl" commit "$task" "green" "commits=$sha"
+printf '{"type":"text","part":{"type":"text","text":"working"}}\\n' > "$ws/task-$task-reviewer.log"
+printf '{"verdict":"APPROVED","findings":[],"minors":[],"summary":"ok"}\\n' >> "$ws/task-$task-reviewer.log"
+"$append" "$ws/ledger.jsonl" review_outcome "$task" "APPROVED" "findings=0"
+"$append" "$ws/ledger.jsonl" task_complete "$task" "APPROVED"
+exit 0
+""",
+        )
+
     def fake_red_gate_send_back(self):
         # Simulates task 1 going green then being SEND_BACK by the revisor:
         # commit + a SEND_BACK review_outcome (route-next reads the verdict
@@ -212,6 +236,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_gate()
         r = self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             RED_GATE_BIN=self.fake_red_gate(),
             DISPATCH_BIN=self.fake_dispatch(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
@@ -250,6 +275,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_reviewer_log(2, "APPROVED")
         r = self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             RED_GATE_BIN=self.fake_red_gate_send_back(),
             CODER_GATE_BIN=self.fake_coder_gate_committed(),
             DISPATCH_BIN=self.fake_dispatch(),
@@ -285,6 +311,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_gate()
         r = self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             DISPATCH_BIN=self.fake_dispatch(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
         )
@@ -307,6 +334,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
             "STALE-SESSION\n", encoding="utf-8")
         self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             DISPATCH_BIN=self.fake_capture_fail(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
         )
@@ -340,6 +368,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_reviewer_log(1, "ESCALATE")
         r = self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             DISPATCH_BIN=self.fake_dispatch(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
             LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
@@ -383,6 +412,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_reviewer_log(2, "APPROVED")
         r = self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             DISPATCH_BIN=self.fake_dispatch(),
             CODER_GATE_BIN=self.fake_coder_gate_committed(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
@@ -403,6 +433,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
                                  "exit 124\n")
         r = self.run_pipeline(
             "--no-push",
+            "--max-parallel", "1",
             RED_GATE_BIN=interrupted,
             DISPATCH_BIN=self.fake_dispatch(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
@@ -456,6 +487,108 @@ class TestRunPipelineFlow(RunPipelineTestBase):
                      if e.get("type") == "task_complete"
                      and str(e.get("task")) == "1"]
         self.assertEqual(len(completes), 1, entries)
+
+    def test_max_parallel_zero_is_usage(self):
+        """--max-parallel N must be an integer >= 1: 0 is a usage error."""
+        self.write_plan([dict(FULL_TASK)])
+        r = self.run_pipeline("--no-push", "--max-parallel", "0")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+
+    def test_max_parallel_non_numeric_is_usage(self):
+        """A non-numeric --max-parallel is a usage error (exit 2)."""
+        self.write_plan([dict(FULL_TASK)])
+        r = self.run_pipeline("--no-push", "--max-parallel", "two")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+
+    def test_max_parallel_1_regression_is_the_serial_path(self):
+        """--max-parallel 1 reproduces the pre-wave serial flow: task-run in
+        the repo root + route-next advance, no worktrees and no integrate.
+        The ledger (type, task) sequence is the pre-change serial order."""
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate()
+        r = self.run_pipeline(
+            "--no-push", "--max-parallel", "1",
+            RED_GATE_BIN=self.fake_red_gate(),
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("FINAL_REVIEW", r.stdout)
+        entries = [
+            json.loads(line)
+            for line in (self.ws() / "ledger.jsonl").read_text(
+                encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        seq = [(e["type"], str(e.get("task"))) for e in entries]
+        self.assertEqual(seq, [
+            ("gate", "-"),
+            ("brief_ready", "1"),
+            ("red_check", "1"),
+            ("commit", "1"),
+            ("review_outcome", "1"),
+            ("task_complete", "1"),
+            ("final_review", "-"),
+        ])
+        for wave_type in ("worktree_alloc", "worktree_release", "integrated",
+                          "integration_failed"):
+            self.assertNotIn(wave_type, [t for t, _ in seq])
+        branches = subprocess.run(
+            ["git", "branch", "--list", "task/*"], cwd=str(self.repo),
+            capture_output=True, text=True).stdout.strip()
+        self.assertEqual(branches, "")
+
+    def test_wave_runs_two_disjoint_tasks_in_parallel(self):
+        """--max-parallel 2: two touches-disjoint tasks each run in their own
+        worktree, both integrate, and the integration HEAD carries both
+        changes; every worktree and task branch is released afterwards."""
+        tasks = [
+            {"id": 1, "title": "A", "summary": "Add a.", "spec_refs": ["s1"],
+             "touches": ["lib/a.go"], "depends_on": [],
+             "acceptance": ["a works"]},
+            {"id": 2, "title": "B", "summary": "Add b.", "spec_refs": ["s1"],
+             "touches": ["lib/b.go"], "depends_on": [],
+             "acceptance": ["b works"]},
+        ]
+        self.write_plan(tasks)
+        self.write_gate()
+        r = self.run_pipeline(
+            "--no-push", "--max-parallel", "2",
+            RED_GATE_BIN=self.fake_red_gate_committing(),
+            DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        entries = [
+            json.loads(line)
+            for line in (self.ws() / "ledger.jsonl").read_text(
+                encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        allocs = sorted(str(e["task"]) for e in entries
+                        if e["type"] == "worktree_alloc")
+        releases = sorted(str(e["task"]) for e in entries
+                          if e["type"] == "worktree_release")
+        self.assertEqual(allocs, ["1", "2"])
+        self.assertEqual(releases, ["1", "2"])
+        integrated = sorted(str(e["task"]) for e in entries
+                            if e["type"] == "integrated")
+        self.assertEqual(integrated, ["1", "2"])
+        for n in ("1", "2"):
+            content = subprocess.run(
+                ["git", "show", "HEAD:wave/task-%s.txt" % n],
+                cwd=str(self.repo), capture_output=True, text=True).stdout
+            self.assertIn("task %s" % n, content)
+        branches = subprocess.run(
+            ["git", "branch", "--list", "task/*"], cwd=str(self.repo),
+            capture_output=True, text=True).stdout.strip()
+        self.assertEqual(branches, "")
+        wt_root = self.repo / ".superpowers" / "two-model" / "worktrees"
+        leftovers = sorted(p.name for p in wt_root.iterdir()) \
+            if wt_root.exists() else []
+        self.assertEqual(leftovers, [])
 
 
 if __name__ == "__main__":
