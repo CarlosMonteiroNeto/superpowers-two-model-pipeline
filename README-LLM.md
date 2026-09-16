@@ -380,7 +380,7 @@ The repo mirrors these definitions under `agent/` for versioning.
 README.txt                        <- this repo's human-facing readme
 README-LLM.md                     <- this file (agent-facing)
 CONTEXT.md                        <- resolved glossary (architectural path)
-agent/                            <- mirrored tier agent definitions (coder variants/reviewer/task-generator/flutter-pipeline)
+agent/                            <- mirrored tier agent definitions (coder + variants/controller/reviewer/task-generator/flutter-pipeline), kept byte-identical to the live `~/.config/opencode/agent/` definitions
 docs/superpowers/adr/             <- accepted architecture decisions
 docs/superpowers/specs/           <- branch design specs
 docs/superpowers/plans/           <- implementation plans

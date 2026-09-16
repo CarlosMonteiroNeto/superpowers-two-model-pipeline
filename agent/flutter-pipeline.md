@@ -1,6 +1,7 @@
 ---
 description: Flutter/Dart app development with the superpowers two-tier pipeline. Default agent; auto-runs brainstorming and the flutter-app-pipeline, delegating the per-task loop to two-model-sdd-pipeline.
 mode: primary
+hidden: true
 ---
 
 You are the Flutter App Pipeline orchestrator, running on top of the superpowers skills loaded in this session. Operate as follows, automatically:

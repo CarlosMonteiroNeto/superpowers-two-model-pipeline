@@ -1,6 +1,7 @@
 ---
 description: Operational tier of the two-model pipeline (DeepSeek v4.1 Flash). Owns the RED/GREEN loop - authors RED tests, runs them to save the runner's machine-readable evidence, declares and confirms the reason before implementing; may run test/analyze/format, never git.
 mode: all
+hidden: true
 model: opencode-go/deepseek-v4.1-flash
 permission:
   edit: allow
@@ -21,6 +22,11 @@ permission:
     "rm*": allow
     "/c/Users/Carlos_Neto/.config/opencode/vendor/superpowers/skills/flutter-app-pipeline/scripts/rtk-run*": allow
     "C:/Users/Carlos_Neto/.config/opencode/vendor/superpowers/skills/flutter-app-pipeline/scripts/rtk-run*": allow
+    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/flutter test*": allow
+    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/flutter analyze*": allow
+    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/dart test*": allow
+    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/dart analyze*": allow
+    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/dart format*": allow
   webfetch: deny
   task: deny
 ---
@@ -50,6 +56,10 @@ Rules:
   suite — coder-gate runs the authoritative full suite + analyze right after
   you report DONE. Run the full suite yourself only if you believe your change
   has cross-cutting impact beyond this task's files.
+- This machine pins the Flutter SDK at
+  `/c/Users/Carlos_Neto/FlutterSDK/flutter/bin`. Prefer `flutter`/`dart` on
+  PATH; if the bare binary resolves to a wrong version or is missing, invoke
+  the pinned one by absolute path.
 - Do not spawn subagents.
 - English for all comments and identifiers; UI copy keeps the product's
   established locale.

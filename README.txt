@@ -475,7 +475,8 @@ REPOSITORY LAYOUT
 README.txt            this file (for people)
 README-LLM.md         harness reference (for LLM agents)
 CONTEXT.md            resolved glossary (architectural path)
-agent/                mirrored tier agent definitions
+agent/                mirrored tier agent definitions (kept byte-identical
+                      to the live ~/.config/opencode/agent/ definitions)
 docs/superpowers/     ADRs, specs, plans
 skills/               the skills (SKILL.md per skill)
   flutter-app-pipeline/   the Flutter layer + scripts + tests

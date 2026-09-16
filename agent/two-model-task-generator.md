@@ -1,6 +1,7 @@
 ---
 description: Strategic tier of the two-model pipeline (DeepSeek v4.1 Flash). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
 mode: all
+hidden: true
 model: opencode-go/deepseek-v4.1-flash
 permission:
   edit: allow
