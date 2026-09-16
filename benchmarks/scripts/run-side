@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Run ONE side of the pipeline parallelism benchmark and record its timing.
+#
+# The benchmark never modifies the pipeline and never runs the harness inside
+# the measured repo:
+#
+#   1. the engine is checked out clean into a throwaway git worktree at a
+#      given ref (so harness files can never leak into the measured repo and
+#      keep-discard can never see them);
+#   2. the fixture template is copied into a fresh scratch git repo with the
+#      10-task plan, giving every run an identical starting state;
+#   3. the pipeline runs non-interactively (tiers pre-configured, toolchain
+#      auto-detected, agents allow/deny with no prompts, --no-push);
+#   4. wall-clock start/end are captured around the run and written, with the
+#      exact command, engine ref, exit code, and workspace path, to
+#      <work-dir>/result.json.
+#
+# Usage:
+#   run-side --side NAME --engine-ref REF [--engine-repo PATH] [--work-dir DIR]
+#            [--max-parallel N] [--plan PATH] [--fixture PATH] [--keep]
+#
+#   --side NAME        label recorded in result.json (e.g. serial, parallel)
+#   --engine-ref REF   git ref of the pipeline engine to run (SHA, branch, ...)
+#   --engine-repo PATH repo holding the engine (default: this harness repo)
+#   --work-dir DIR     scratch dir (default <engine-repo>/.superpowers/bench/<side>)
+#   --max-parallel N   forwarded as --max-parallel N (omit for the serial engine)
+#   --plan PATH        plan to install (default benchmarks/plans/<the 10-task plan>)
+#   --fixture PATH     fixture template (default benchmarks/fixture)
+#   --keep             reuse an existing work dir instead of recreating it
+#
+# Exit codes: 0..N = the pipeline's own exit code (recorded in result.json);
+#             2 = usage / setup failure.
+set -uo pipefail
+
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+BENCH_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+DEFAULT_ENGINE_REPO=$(cd "$BENCH_DIR/.." && pwd)
+BASH_BIN="${BASH_BIN:-bash}"
+PLAN_NAME="2026-09-16-parallelism-benchmark-plan.json"
+
+side=""
+engine_ref=""
+engine_repo="$DEFAULT_ENGINE_REPO"
+work_dir=""
+max_parallel=""
+plan="$BENCH_DIR/plans/$PLAN_NAME"
+fixture="$BENCH_DIR/fixture"
+keep=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --side) side=${2:-}; shift 2 ;;
+    --engine-ref) engine_ref=${2:-}; shift 2 ;;
+    --engine-repo) engine_repo=${2:-}; shift 2 ;;
+    --work-dir) work_dir=${2:-}; shift 2 ;;
+    --max-parallel) max_parallel=${2:-}; shift 2 ;;
+    --plan) plan=${2:-}; shift 2 ;;
+    --fixture) fixture=${2:-}; shift 2 ;;
+    --keep) keep=1; shift ;;
+    *) echo "run-side: unexpected argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$side" ] || { echo "run-side: --side is required" >&2; exit 2; }
+[ -n "$engine_ref" ] || { echo "run-side: --engine-ref is required" >&2; exit 2; }
+[ -f "$plan" ] || { echo "run-side: no plan at $plan" >&2; exit 2; }
+[ -d "$fixture" ] || { echo "run-side: no fixture at $fixture" >&2; exit 2; }
+[ -d "$engine_repo/.git" ] || git -C "$engine_repo" rev-parse --git-dir >/dev/null 2>&1 \
+  || { echo "run-side: not a git repo: $engine_repo" >&2; exit 2; }
+[ -z "$work_dir" ] && work_dir="$engine_repo/.superpowers/bench/$side"
+
+now() { python3 -c "import time; print('%.3f' % time.time())"; }
+
+# Normalize a POSIX path to a native Windows path for the result file, so a
+# consumer reading it (not going through bash argv) gets an openable path.
+# No-op on platforms without cygpath.
+norm() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+
+# Keep the bench scratch dir out of the engine repo's `git status` without
+# touching any tracked file (same trick pipeline-workspace uses).
+mkdir -p "$engine_repo/.superpowers/bench"
+printf '*\n' > "$engine_repo/.superpowers/bench/.gitignore"
+
+mkdir -p "$work_dir"
+if [ "$keep" -eq 0 ]; then
+  rm -rf "$work_dir/engine" "$work_dir/fixture"
+fi
+
+# 1. clean engine worktree at the requested ref
+echo "run-side: engine worktree at $engine_ref"
+git -C "$engine_repo" worktree prune >/dev/null 2>&1 || true
+if ! git -C "$engine_repo" worktree add --detach "$work_dir/engine" "$engine_ref" >/dev/null 2>&1; then
+  echo "run-side: cannot create engine worktree at $engine_ref" >&2
+  exit 2
+fi
+ENGINE="$work_dir/engine"
+RUN_PIPELINE="$ENGINE/skills/two-model-sdd-pipeline/scripts/run-pipeline"
+[ -f "$RUN_PIPELINE" ] || { echo "run-side: engine $engine_ref has no run-pipeline" >&2; exit 2; }
+
+# 2. fresh scratch fixture repo with the plan, identical start state every run
+FIXTURE_REPO="$work_dir/fixture"
+mkdir -p "$FIXTURE_REPO"
+cp -R "$fixture/." "$FIXTURE_REPO/"
+mkdir -p "$FIXTURE_REPO/docs/superpowers/plans"
+cp "$plan" "$FIXTURE_REPO/docs/superpowers/plans/$PLAN_NAME"
+(
+  cd "$FIXTURE_REPO" || exit 2
+  git init -q
+  git config user.email "benchmark@example.com"
+  git config user.name "Benchmark"
+  git add -A
+  git commit -q -m "benchmark fixture baseline"
+) || { echo "run-side: cannot prepare the fixture repo" >&2; exit 2; }
+
+# 3. build and run the exact pipeline command
+plan_in_fixture="$FIXTURE_REPO/docs/superpowers/plans/$PLAN_NAME"
+cmd=("$BASH_BIN" "$RUN_PIPELINE" "$plan_in_fixture" "--no-push")
+if [ -n "$max_parallel" ]; then
+  cmd+=("--max-parallel" "$max_parallel")
+fi
+
+echo "run-side: ${cmd[*]}"
+start=$(now)
+(
+  cd "$FIXTURE_REPO" || exit 2
+  "${cmd[@]}"
+) > "$work_dir/run.log" 2>&1
+rc=$?
+end=$(now)
+
+# 4. locate the run's workspace (plan-slug dir) and write the result
+slug=$(basename "$PLAN_NAME")
+slug=${slug%.json}
+slug=${slug%.md}
+workspace="$FIXTURE_REPO/.superpowers/two-model/$slug"
+if [ ! -f "$workspace/ledger.jsonl" ]; then
+  workspace=""
+  for candidate in "$FIXTURE_REPO"/.superpowers/two-model/*/; do
+    [ -f "$candidate/ledger.jsonl" ] && workspace=${candidate%/}
+  done
+fi
+
+[ -n "$workspace" ] && workspace=$(norm "$workspace")
+
+python3 - "$(norm "$work_dir/result.json")" "$side" "$ENGINE" "$engine_ref" \
+  "$max_parallel" "$(norm "$FIXTURE_REPO")" "$workspace" "$start" "$end" "$rc" \
+  "${cmd[@]}" <<'PY'
+import json, sys
+out, side, engine, ref, maxp, fixture, workspace, start, end, rc = sys.argv[1:11]
+command = sys.argv[11:]
+start, end, rc = float(start), float(end), int(rc)
+max_parallel = int(maxp) if str(maxp).strip() else None
+data = {
+    "side": side,
+    "engine": engine,
+    "engine_ref": ref,
+    "max_parallel": max_parallel,
+    "fixture": fixture,
+    "workspace": workspace or None,
+    "command": command,
+    "start": start,
+    "end": end,
+    "total_seconds": round(end - start, 3),
+    "exit_code": rc,
+}
+with open(out, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2)
+    fh.write("\n")
+PY
+
+echo "run-side: exit $rc in $(python3 -c "print('%.1f' % ($end - $start))")s -> $work_dir/result.json"
+exit "$rc"

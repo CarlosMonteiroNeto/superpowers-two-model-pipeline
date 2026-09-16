@@ -10,6 +10,12 @@ skills/*/scripts/* text eol=lf
 scripts/* text eol=lf
 hooks/session-start text eol=lf
 
+# Benchmark harness: extensionless bash scripts (run-benchmark, run-side) and
+# the Dart fixture must stay LF, or shellcheck/bash break on a CRLF checkout.
+benchmarks/run-benchmark text eol=lf
+benchmarks/scripts/* text eol=lf
+*.dart text eol=lf
+
 # Ensure the polyglot wrapper keeps LF (it's parsed by both cmd and bash)
 *.cmd text eol=lf
 

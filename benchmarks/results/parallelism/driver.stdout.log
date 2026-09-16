@@ -1,0 +1,6 @@
+=== serial: engine d5c0868  ===
+run-side: engine worktree at d5c0868
+run-side: bash /c/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/serial/engine/skills/two-model-sdd-pipeline/scripts/run-pipeline /c/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/serial/fixture/docs/superpowers/plans/2026-09-16-parallelism-benchmark-plan.json --no-push
+run-side: exit 0 in 1394.5s -> /c/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/serial/result.json
+run-benchmark: serial report -> benchmarks/results/parallelism/serial-report.md
+run-benchmark: results in benchmarks/results/parallelism (pipeline rc=0)

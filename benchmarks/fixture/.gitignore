@@ -1,0 +1,6 @@
+.dart_tool/
+build/
+pubspec.lock
+green-gate-report.txt
+green-gate-report.txt.analyze
+green-gate-report.txt.format

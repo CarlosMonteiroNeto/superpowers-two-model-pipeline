@@ -1,0 +1,146 @@
+{
+  "feature": "Benchmark fixture: ten independent pure-Dart utility features",
+  "spec_doc": "docs/spec.md",
+  "global_constraints": [
+    "Pure Dart: no Flutter widgets; the only dependency is package:test.",
+    "Each task touches exactly one lib/src/feature_NN.dart file and nothing else.",
+    "English identifiers and comments; never weaken a test to make it pass."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Implement slugify",
+      "summary": "Implement slugify in lib/src/feature_01.dart: lowercase the input, collapse each run of non-alphanumeric characters into a single hyphen, and trim leading and trailing hyphens.",
+      "spec_refs": ["§1"],
+      "touches": ["lib/src/feature_01.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "slugify('Hello World!') returns 'hello-world'.",
+        "Runs of non-alphanumeric characters collapse to a single hyphen.",
+        "Leading and trailing hyphens are trimmed.",
+        "An empty or all-punctuation input returns an empty string."
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Implement isPalindrome",
+      "summary": "Implement isPalindrome in lib/src/feature_02.dart: ignore case and non-alphanumeric characters, then compare the string to its reverse.",
+      "spec_refs": ["§2"],
+      "touches": ["lib/src/feature_02.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "isPalindrome('A man, a plan, a canal: Panama') is true.",
+        "Comparison ignores case and non-alphanumeric characters.",
+        "isPalindrome('abc') is false.",
+        "The empty string is a palindrome."
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Implement chunk",
+      "summary": "Implement the generic chunk in lib/src/feature_03.dart: split a list into consecutive chunks of at most size elements, keeping a shorter final chunk.",
+      "spec_refs": ["§3"],
+      "touches": ["lib/src/feature_03.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "chunk([1, 2, 3, 4, 5], 2) returns [[1, 2], [3, 4], [5]].",
+        "The final chunk may be shorter than size.",
+        "An empty input list returns an empty list.",
+        "A size of zero or less throws ArgumentError."
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Implement romanToInt",
+      "summary": "Implement romanToInt in lib/src/feature_04.dart: convert a valid Roman numeral to its integer value, handling the subtractive pairs.",
+      "spec_refs": ["§4"],
+      "touches": ["lib/src/feature_04.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "romanToInt('MCMXCIV') is 1994.",
+        "romanToInt('IV') is 4 and romanToInt('IX') is 9.",
+        "romanToInt('XL') is 40 and romanToInt('CM') is 900."
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Implement camelToSnake",
+      "summary": "Implement camelToSnake in lib/src/feature_05.dart: convert camelCase and PascalCase identifiers to snake_case, including acronym boundaries.",
+      "spec_refs": ["§5"],
+      "touches": ["lib/src/feature_05.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "camelToSnake('camelCaseName') returns 'camel_case_name'.",
+        "camelToSnake('HTTPServer') returns 'http_server'.",
+        "An input that is already snake_case is returned unchanged."
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Implement wordCount",
+      "summary": "Implement wordCount in lib/src/feature_06.dart: split on whitespace and count words case-insensitively, keyed by the lowercase word.",
+      "spec_refs": ["§6"],
+      "touches": ["lib/src/feature_06.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "wordCount('The cat the hat') returns {'the': 2, 'cat': 1, 'hat': 1}.",
+        "Counting is case-insensitive.",
+        "Words are separated by whitespace."
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Implement clampInt",
+      "summary": "Implement clampInt in lib/src/feature_07.dart: return the value bounded to the inclusive range, throwing ArgumentError for an inverted range.",
+      "spec_refs": ["§7"],
+      "touches": ["lib/src/feature_07.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "clampInt(5, 1, 10) is 5.",
+        "A value below min returns min; a value above max returns max.",
+        "A range where min is greater than max throws ArgumentError."
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Implement binarySearch",
+      "summary": "Implement binarySearch in lib/src/feature_08.dart: return the index of the target in an ascending sorted list, or -1 when it is absent.",
+      "spec_refs": ["§8"],
+      "touches": ["lib/src/feature_08.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "binarySearch([1, 3, 5, 7, 9], 7) is 3.",
+        "An absent target returns -1.",
+        "An empty list returns -1."
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Implement formatBytes",
+      "summary": "Implement formatBytes in lib/src/feature_09.dart: render a byte count with one decimal place and a unit suffix, stepping by 1024.",
+      "spec_refs": ["§9"],
+      "touches": ["lib/src/feature_09.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "formatBytes(0) returns '0 B'.",
+        "formatBytes(1024) returns '1.0 KB'.",
+        "formatBytes(1536) returns '1.5 KB'.",
+        "formatBytes(1048576) returns '1.0 MB'."
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Implement parseDuration",
+      "summary": "Implement parseDuration in lib/src/feature_10.dart: parse a compact duration string by summing its h, m, s, and ms components, throwing FormatException for an unrecognized string.",
+      "spec_refs": ["§10"],
+      "touches": ["lib/src/feature_10.dart"],
+      "depends_on": [],
+      "acceptance": [
+        "parseDuration('1h30m') equals Duration(hours: 1, minutes: 30).",
+        "parseDuration('45s') equals Duration(seconds: 45).",
+        "parseDuration('500ms') equals Duration(milliseconds: 500).",
+        "An unrecognized string throws FormatException."
+      ]
+    }
+  ]
+}

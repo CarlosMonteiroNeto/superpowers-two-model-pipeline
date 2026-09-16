@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Run the pipeline parallelism benchmark end to end.
+#
+# Runs one or both sides sequentially (never concurrently, per the benchmark
+# methodology: parallel runs distort cache state and rate limits), then
+# writes each side's report and, when both sides exist, the comparison.
+#
+# Usage:
+#   run-benchmark [--serial-ref REF] [--parallel-ref REF]
+#                 [--max-parallel N] [--only serial|parallel]
+#                 [--results-dir DIR] [--keep]
+#
+#   --serial-ref    engine ref for the baseline side (default: 4aec81a's child
+#                   on main, the last commit before the parallel feature) --
+#                   see SERIAL_REF below
+#   --parallel-ref  engine ref for the parallel side (default: origin/main)
+#   --max-parallel  wave cap for the parallel side (default 5)
+#   --only          run a single side now (the other can be run later)
+#
+# Exit codes: 0 = all requested runs and reports succeeded; non-zero = the
+# last pipeline exit code (the report is still written when a workspace exists).
+set -uo pipefail
+
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+BENCH_DIR="$SCRIPT_DIR"
+ENGINE_REPO=$(cd "$BENCH_DIR/.." && pwd)
+RUN_SIDE="$SCRIPT_DIR/scripts/run-side"
+
+# The last commit on main before the parallel-task-execution branch merged.
+# Override with --serial-ref after the repository history changes.
+SERIAL_REF="d5c0868"
+PARALLEL_REF="origin/main"
+MAX_PARALLEL="5"
+ONLY=""
+RESULTS_DIR=""
+KEEP=""
+ENGINE_REPO_ARG=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --serial-ref) SERIAL_REF=${2:-}; shift 2 ;;
+    --parallel-ref) PARALLEL_REF=${2:-}; shift 2 ;;
+    --max-parallel) MAX_PARALLEL=${2:-}; shift 2 ;;
+    --only) ONLY=${2:-}; shift 2 ;;
+    --results-dir) RESULTS_DIR=${2:-}; shift 2 ;;
+    --engine-repo) ENGINE_REPO_ARG=${2:-}; shift 2 ;;
+    --keep) KEEP="--keep"; shift ;;
+    *) echo "run-benchmark: unexpected argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$ENGINE_REPO_ARG" ] && ENGINE_REPO="$ENGINE_REPO_ARG"
+
+case "$ONLY" in
+  ""|serial|parallel) ;;
+  *) echo "run-benchmark: --only must be serial or parallel" >&2; exit 2 ;;
+esac
+
+[ -z "$RESULTS_DIR" ] && RESULTS_DIR="$BENCH_DIR/results/$(date -u +%Y%m%d-%H%M%S)"
+mkdir -p "$RESULTS_DIR"
+
+# Scratch (engine worktree + fixture repo) lives under the gitignored
+# .superpowers/bench/ area; only reports are written to the results dir.
+WORK_ROOT="$ENGINE_REPO/.superpowers/bench/$(basename "$RESULTS_DIR")"
+
+rc=0
+
+run_side() {
+  local side=$1 ref=$2 extra=$3
+  local work="$WORK_ROOT/$side"
+  echo "=== $side: engine $ref $extra ==="
+  # shellcheck disable=SC2086
+  "$RUN_SIDE" --side "$side" --engine-ref "$ref" \
+    --engine-repo "$ENGINE_REPO" --work-dir "$work" $extra
+  local side_rc=$?
+  local result="$work/result.json"
+  if [ -f "$result" ]; then
+    python3 - "$result" "$RESULTS_DIR/$side-result.json" <<'PY'
+import json, shutil, sys
+shutil.copyfile(sys.argv[1], sys.argv[2])
+PY
+    local ws
+    ws=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8')).get('workspace') or '')" "$result")
+    if [ -n "$ws" ]; then
+      python3 "$SCRIPT_DIR/scripts/bench_report.py" "$ws" --side "$side" \
+        --out "$RESULTS_DIR/$side-report.json" > "$RESULTS_DIR/$side-report.md" \
+        || echo "run-benchmark: report failed for $side" >&2
+      echo "run-benchmark: $side report -> $RESULTS_DIR/$side-report.md"
+    else
+      echo "run-benchmark: $side produced no workspace (pipeline exit $side_rc)" >&2
+    fi
+  fi
+  [ "$side_rc" -eq 0 ] || rc=$side_rc
+  return 0
+}
+
+if [ "$ONLY" != "parallel" ]; then
+  run_side serial "$SERIAL_REF" ""
+  if [ -f "$RESULTS_DIR/serial-result.json" ]; then
+    got=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8')).get('exit_code'))" "$RESULTS_DIR/serial-result.json")
+    [ "$got" = "0" ] || rc=$got
+  fi
+fi
+
+if [ "$ONLY" != "serial" ]; then
+  run_side parallel "$PARALLEL_REF" "--max-parallel $MAX_PARALLEL"
+  if [ -f "$RESULTS_DIR/parallel-result.json" ]; then
+    got=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8')).get('exit_code'))" "$RESULTS_DIR/parallel-result.json")
+    [ "$got" = "0" ] || rc=$got
+  fi
+fi
+
+if [ -f "$RESULTS_DIR/serial-report.json" ] && [ -f "$RESULTS_DIR/parallel-report.json" ]; then
+  python3 "$SCRIPT_DIR/scripts/bench_compare.py" \
+    "$RESULTS_DIR/serial-report.json" "$RESULTS_DIR/parallel-report.json" \
+    --out "$RESULTS_DIR/compare.json" > "$RESULTS_DIR/compare.md" \
+    || echo "run-benchmark: compare failed" >&2
+  echo "run-benchmark: comparison -> $RESULTS_DIR/compare.md"
+fi
+
+echo "run-benchmark: results in $RESULTS_DIR (pipeline rc=$rc)"
+exit "$rc"

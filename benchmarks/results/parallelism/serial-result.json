@@ -1,0 +1,18 @@
+{
+  "side": "serial",
+  "engine": "C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/serial/engine",
+  "engine_ref": "d5c0868",
+  "max_parallel": null,
+  "fixture": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\serial\\fixture",
+  "workspace": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\serial\\fixture\\.superpowers\\two-model\\2026-09-16-parallelism-benchmark-plan",
+  "command": [
+    "bash",
+    "C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/serial/engine/skills/two-model-sdd-pipeline/scripts/run-pipeline",
+    "C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/serial/fixture/docs/superpowers/plans/2026-09-16-parallelism-benchmark-plan.json",
+    "--no-push"
+  ],
+  "start": 1789573932.387,
+  "end": 1789575326.907,
+  "total_seconds": 1394.52,
+  "exit_code": 0
+}
