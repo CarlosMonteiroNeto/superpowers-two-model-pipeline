@@ -20,13 +20,8 @@ permission:
     "dart run build_runner*": allow
     "mkdir*": allow
     "rm*": allow
-    "/c/Users/Carlos_Neto/.config/opencode/vendor/superpowers/skills/flutter-app-pipeline/scripts/rtk-run*": allow
-    "C:/Users/Carlos_Neto/.config/opencode/vendor/superpowers/skills/flutter-app-pipeline/scripts/rtk-run*": allow
-    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/flutter test*": allow
-    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/flutter analyze*": allow
-    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/dart test*": allow
-    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/dart analyze*": allow
-    "/c/Users/Carlos_Neto/FlutterSDK/flutter/bin/dart format*": allow
+    "*/flutter-app-pipeline/scripts/rtk-run": allow
+    "*/flutter-app-pipeline/scripts/rtk-run *": allow
   webfetch: deny
   task: deny
 ---
@@ -56,10 +51,11 @@ Rules:
   suite — coder-gate runs the authoritative full suite + analyze right after
   you report DONE. Run the full suite yourself only if you believe your change
   has cross-cutting impact beyond this task's files.
-- This machine pins the Flutter SDK at
-  `/c/Users/Carlos_Neto/FlutterSDK/flutter/bin`. Prefer `flutter`/`dart` on
-  PATH; if the bare binary resolves to a wrong version or is missing, invoke
-  the pinned one by absolute path.
+- This definition ships with the repo, so it must stay machine-independent:
+  never pin an absolute home path. Prefer `flutter`/`dart` on PATH; if a bare
+  binary resolves to a wrong version or is missing on a specific machine, that
+  machine adds its own SDK path to its LIVE definition's allowlist and keeps
+  the change local - it does not belong in the mirror.
 - Do not spawn subagents.
 - English for all comments and identifiers; UI copy keeps the product's
   established locale.

@@ -203,8 +203,10 @@ skills/flutter-app-pipeline/scripts/:
                        so its test output is RTK-compressed while the full
                        output lands on disk. `red` writes WS/task-N-red.txt
                        (the path red-form-check reads). A closed mode set is
-                       why the bash allowlist can permit this one path
-                       without granting arbitrary execution
+                       why the bash allowlist permits exactly this runner, via
+                       an install-independent `*/flutter-app-pipeline/scripts/
+                       rtk-run*` pattern (permission `*` matches `/`), without
+                       granting arbitrary execution
 
 skills/two-model-sdd-pipeline/scripts/:
   run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]

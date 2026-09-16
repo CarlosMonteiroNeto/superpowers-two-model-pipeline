@@ -146,5 +146,44 @@ class TestOperationalVariants(unittest.TestCase):
             self.assertIn("never weaken a test", text)
 
 
+class TestAgentDefinitionsArePortable(unittest.TestCase):
+    """A definition ships to any machine that clones the repo: it must not
+    hardcode one user's home path, and the scoped runner must be permitted by a
+    location-independent pattern rather than an absolute install path.
+
+    Regression: the coder allowlist pinned rtk-run to
+    `/c/Users/Carlos_Neto/.config/opencode/vendor/...`, which can never match on
+    any other machine (and silently fell back to raw `flutter test`)."""
+
+    HOME_MARKERS = ("/c/Users/", "C:/Users/", "C:\\Users\\", "/home/")
+
+    def test_no_agent_definition_hardcodes_a_user_home_path(self):
+        offenders = []
+        for path in sorted((REPO / "agent").glob("*.md")):
+            text = read(path)
+            for marker in self.HOME_MARKERS:
+                if marker in text:
+                    offenders.append("%s: %s" % (path.name, marker))
+        self.assertEqual(
+            offenders, [],
+            "agent definitions must be machine-independent: %s" % offenders,
+        )
+
+    def test_coder_allows_the_scoped_runner_by_a_portable_pattern(self):
+        text = read(CODER_AGENT)
+        rules = [
+            line.strip() for line in text.splitlines()
+            if "rtk-run" in line and ": allow" in line
+        ]
+        self.assertTrue(rules, "the coder must allow the scoped rtk-run runner")
+        self.assertTrue(
+            any(r.startswith('"*/') and "flutter-app-pipeline/scripts/rtk-run" in r
+                for r in rules),
+            "rtk-run must be allowed by a leading-wildcard, install-independent "
+            "pattern (permission `*` matches `/`), not an absolute path: %s"
+            % rules,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
