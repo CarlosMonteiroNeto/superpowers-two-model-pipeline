@@ -196,6 +196,34 @@ class IntegrateTest(unittest.TestCase):
         self.assertNotIn("task/1", self.branches())
         self.assertTrue((self.repo / "lib" / "task1.go").is_file())
 
+    def test_approved_noop_task_integrates_without_a_merge_or_gate(self):
+        """A task whose branch never committed (approved no-op) must integrate
+        and release directly. Failing on 'nothing to commit' would strand the
+        worktree and block final-gate's leftover-branch check. The gate stub
+        exits 1, so a zero exit proves the gate was never run."""
+        self.alloc(1)
+        self.shard_complete(1)
+        r = self.run_integrate(1, RUN_GATES_BIN=self.gate_fail())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("no-op", r.stdout + r.stderr)
+        pairs = [(e["type"], str(e["task"])) for e in self.ledger()]
+        self.assertIn(("integrated", "1"), pairs)
+        self.assertNotIn("integration_failed",
+                         [e["type"] for e in self.ledger()])
+        self.assertNotIn("task/1", self.branches())
+        self.assertFalse(self.wt(1).exists())
+
+    def test_unapproved_never_worked_branch_is_kept(self):
+        """The no-op path is gated on approval: an unapproved never-worked
+        branch stays (it is the only debug copy)."""
+        self.alloc(1)
+        r = self.run_integrate(1, RUN_GATES_BIN=self.gate_ok())
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("not approved",
+                      " ".join(e["summary"] for e in self.entries("integration_failed")))
+        self.assertIn("task/1", self.branches())
+        self.assertTrue(self.wt(1).exists())
+
     def test_conflict_signals_and_leaves_head_and_branch(self):
         self.alloc(1)
         (self.repo / "lib" / "a.go").write_text(

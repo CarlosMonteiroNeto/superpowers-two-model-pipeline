@@ -52,6 +52,12 @@ def load_seen(path):
     return seen
 
 
+def tsv_field(value):
+    """A TSV-safe cell: tabs/newlines would break the batch format, and every
+    ledger value is a single-line token in practice."""
+    return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
+
+
 def main():
     if len(sys.argv) < 3:
         print("usage: ledger-merge INTEGRATION_WS SOURCE_LEDGER [SOURCE_LEDGER...]",
@@ -60,8 +66,7 @@ def main():
     ws, sources = sys.argv[1], sys.argv[2:]
     dest = os.path.join(ws, "ledger.jsonl")
     seen = load_seen(dest)
-    appended = 0
-    failed = 0
+    rows = []
     for src in sources:
         if not os.path.isfile(src):
             continue
@@ -81,19 +86,34 @@ def main():
                 key = key_of(entry)
                 if key in seen:
                     continue
-                args = ["bash", os.path.join(HERE, "ledger-append"), dest,
-                        str(entry.get("type", "")), str(entry.get("task", "-")),
-                        str(entry.get("summary", ""))]
+                seen.add(key)
+                fields = [
+                    tsv_field(entry.get("type", "")),
+                    tsv_field(entry.get("task", "-")),
+                    tsv_field(entry.get("summary", "")),
+                ]
                 for k, v in entry.items():
                     if k in KEEP:
                         continue
-                    args.append("{}={}".format(k, v))
-                rc = subprocess.run(args, capture_output=True, text=True).returncode
-                if rc == 0:
-                    seen.add(key)
-                    appended += 1
-                else:
-                    failed += 1
+                    fields.append("{}={}".format(tsv_field(k), tsv_field(v)))
+                rows.append("\t".join(fields))
+
+    appended = len(rows)
+    failed = 0
+    if rows:
+        # One batch write through the sole writer (ledger-append --stdin-tsv):
+        # one process per shard instead of one per entry. TSV keeps the writer
+        # bash-only (it can split a tab-separated line without a JSON parser).
+        proc = subprocess.run(
+            ["bash", os.path.join(HERE, "ledger-append"), "--stdin-tsv", dest],
+            input="\n".join(rows) + "\n", capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            failed = appended
+            appended = 0
+            if proc.stderr.strip():
+                print(proc.stderr.strip(), file=sys.stderr)
+
     subprocess.run(["bash", os.path.join(HERE, "ledger-migrate"), ws],
                    capture_output=True)
     print("LEDGER-MERGE: merged {} entry(ies) into {}".format(appended, ws))

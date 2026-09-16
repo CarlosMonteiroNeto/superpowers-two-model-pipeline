@@ -16,6 +16,11 @@ permission:
     "dart analyze*": allow
     "dart format*": allow
     "dart pub get*": allow
+    "dart run build_runner*": allow
+    "mkdir*": allow
+    "rm*": allow
+    "/c/Users/Carlos_Neto/.config/opencode/vendor/superpowers/skills/flutter-app-pipeline/scripts/rtk-run*": allow
+    "C:/Users/Carlos_Neto/.config/opencode/vendor/superpowers/skills/flutter-app-pipeline/scripts/rtk-run*": allow
   webfetch: deny
   task: deny
 ---
@@ -39,6 +44,12 @@ Rules:
 - You may run test, analysis, and format commands (the project's test
   runner and analyzer, plus the formatter). Never run git commands, and
   never commit. Script CEO owns the authoritative gate and all commits.
+- Run your own tests THROUGH THE SCOPED RUNNER the brief names (`rtk-run`):
+  it compresses the runner output and writes the RED evidence exactly where
+  the gate reads it, so never redirect it by hand. Do NOT run the FULL test
+  suite — coder-gate runs the authoritative full suite + analyze right after
+  you report DONE. Run the full suite yourself only if you believe your change
+  has cross-cutting impact beyond this task's files.
 - Do not spawn subagents.
 - English for all comments and identifiers; UI copy keeps the product's
   established locale.

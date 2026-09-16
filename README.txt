@@ -198,6 +198,13 @@ skills/flutter-app-pipeline/scripts/:
                          from the two-model scripts dir), including the
                          validated `tree=` hash integrate uses to skip a
                          provably redundant post-merge suite (ADR-0013)
+  rtk-run              the operador's SCOPED test runner (T1, ADR-0016):
+                       accepts only red|test|analyze and delegates to cmd,
+                       so its test output is RTK-compressed while the full
+                       output lands on disk. `red` writes WS/task-N-red.txt
+                       (the path red-form-check reads). A closed mode set is
+                       why the bash allowlist can permit this one path
+                       without granting arbitrary execution
 
 skills/two-model-sdd-pipeline/scripts/:
   run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]
@@ -220,9 +227,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        (exit 0 emitted/FINAL_REVIEW; 1 WAVE_EMPTY blocked;
                        2 usage)
   ledger-merge         fold per-worktree ledger shards into the integration
-                       ledger through ledger-append (skips gate entries and
-                       content-identical duplicates; rebuilds partitions;
-                       exit 0 merged; 1 append failed; 2 usage)
+                       ledger through the sole writer in ONE batch write
+                       (ledger-append --stdin-tsv); skips gate entries and
+                       content-identical duplicates; rebuilds partitions
+                       (exit 0 merged; 1 the batch failed; 2 usage)
   ledger-migrate       rebuild the per-task ledger partitions; deferred while
                        a wave is in flight (unmatched worktree_alloc)
   worktree-alloc       allocate one git worktree + task/<N> branch for a
@@ -235,8 +243,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        pub get --offline) so the first gate pays no cold
                        resolve/compile; failure degrades to the cold path
   worktree-release     remove a task worktree + branch once the branch tip is
-                       merged into the integration HEAD; never removes on
-                       failure (exit 0 released; 1 not merged/not found;
+                       an ancestor of the integration HEAD; a never-committed
+                       branch (tip == its allocation base) is released only
+                       when the shard holds task_complete (an approved no-op
+                       task, ADR-0017) - an unapproved never-worked branch is
+                       kept as the debug copy; never removes on failure
+                       (exit 0 released; 1 not merged/not approved/not found;
                        2 usage)
   task-run             per-task lifecycle extracted from run-pipeline: loops
                        orchestrator and owns the REVIEW/CORRECTIVE/ARBITRATE
@@ -245,7 +257,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        complete; 1 blocked/escalated; 2 usage)
   integrate            script-owned integration gate: require every task's
                        shard to hold task_complete (else integration_failed
-                       not approved). A wave of >=2 approved tasks is merged
+                       not approved). An approved task that never committed
+                       is a no-op: integrated "no-op (no commits)" + shard
+                       folded + worktree released, nothing merged or gated
+                       (ADR-0017). A wave of >=2 approved tasks is merged
                        first and gated ONCE (S2): green commits once, folds
                        each shard and releases each worktree; red
                        git reset --hard the batch and falls back to the
@@ -261,7 +276,9 @@ skills/two-model-sdd-pipeline/scripts/:
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
                        acceptance, spec_refs, reason-declaration and
-                       machine-readable RED instructions). Rejects test-like
+                       machine-readable RED instructions). The RED order also
+                       scopes the operador to the rtk-run runner and forbids
+                       the full suite (Change 2 + T1, ADR-0016). Rejects test-like
                        touches (tests are changed-minus-touches). No LLM
   resolve-toolchain    one-time-per-branch ecosystem detection: inspects the
                        project for a known marker (pubspec.yaml, Cargo.toml,

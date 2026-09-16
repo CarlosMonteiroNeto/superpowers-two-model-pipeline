@@ -135,6 +135,7 @@ outputs; dispatch is owned by scripts):
 | `pub-sync [PACKAGE]` | AI-driven download + AI reasoning about version conflicts + AI reconciling the lockfile |
 | `red-gate WORKSPACE TASK` | AI judging anything (verifies the scaffolded brief exists, dispatches the operador, chains coder-gate) |
 | `green-gate [--no-commit] [-m MSG] [-w WS -t TASK -b BASE]` | AI running/reading `flutter test` + `flutter analyze` and AI deciding commit boundaries (on commit: reviewer dispatch) |
+| `rtk-run [--ws WS --task N] <red\|test\|analyze> [ARGS...]` | The Agente operador's SCOPED runner (T1, ADR-0016): a closed mode set (`red` = `flutter test --machine` into `WS/task-N-red.txt`, `test`, `analyze`) delegated to `cmd`, so its output is RTK-compressed and the full output stays on disk. A closed set is what lets the operador's bash allowlist permit this one path instead of granting the generic `cmd`'s arbitrary execution |
 | `cmd --full-file FILE -- CMD` (two-model) | AI seeing raw command output in context (saves FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code; flutter test/analyze via rtk test/err wrappers) |
 | `dispatch --agent NAME --task N [--continue SESSION] ...` (two-model) | AI launching subagents from the session (headless `opencode run`; JSON stream teed to a workspace log; session id recorded for resume) |
 | `orchestrator WS TASK [TOTAL]` (two-model) | AI deciding the per-task transition (executes route-next actions, hands `OUTCOME:` back to the runner) |

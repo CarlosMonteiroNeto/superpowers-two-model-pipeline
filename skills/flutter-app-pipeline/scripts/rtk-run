@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Scoped test runner for the Agente operador.
+#
+# It runs the project's test/analyze command through the RTK-compressing `cmd`
+# runner, so the operador's context sees only the compressed view while the
+# FULL output lands in a workspace file. The operador may run ONLY the three
+# modes below - never an arbitrary command - which is why the bash allowlist
+# can permit this one absolute path instead of the generic `cmd` (whose
+# `-- COMMAND` interface would accept anything).
+#
+# Usage: rtk-run [--ws WS --task N] <red|test|analyze> [ARGS...]
+#   red     <test-file...>  flutter test --machine ARGS -> WS/task-N-red.txt
+#   test    <test-file...>  flutter test ARGS           -> WS/task-N-test.txt
+#   analyze [ARGS...]       flutter analyze ARGS        -> WS/task-N-analyze.txt
+#
+# The RED evidence path is exactly where red-form-check reads it, so the
+# operador never has to hand-redirect the runner's output.
+#
+# Env:
+#   FLUTTER_BIN  flutter binary (default: flutter)
+#   CMD_BIN      the two-model cmd runner (default: this skill's sibling)
+#   RTK_ENABLED / RTK_BIN  honored by cmd (RTK_ENABLED=0 = passthrough)
+#
+# Exit codes: the wrapped command's own exit code; 2 = usage / missing --ws.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+CMD_BIN="${CMD_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/cmd}"
+FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
+TMP_DIR="${TMPDIR:-/tmp}"
+
+usage() {
+  echo "usage: rtk-run [--ws WS --task N] <red|test|analyze> [ARGS...]" >&2
+  exit 2
+}
+
+ws=""
+task=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ws) ws="${2:-}"; shift 2 ;;
+    --task) task="${2:-}"; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+mode="${1:-}"
+[ -n "$mode" ] || usage
+shift || true
+
+case "$mode" in red | test | analyze) ;; *) usage ;; esac
+
+need_ws() {
+  [ -n "$ws" ] && [ -n "$task" ] || {
+    echo "rtk-run: mode '$mode' needs --ws WS --task N" >&2
+    exit 2
+  }
+}
+
+case "$mode" in
+  red)
+    need_ws
+    "$CMD_BIN" --full-file "${ws%/}/task-${task}-red.txt" -- \
+      "$FLUTTER_BIN" test --machine "$@"
+    ;;
+  test)
+    need_ws
+    "$CMD_BIN" --full-file "${ws%/}/task-${task}-test.txt" -- \
+      "$FLUTTER_BIN" test "$@"
+    ;;
+  analyze)
+    if [ -n "$ws" ] && [ -n "$task" ]; then
+      full="${ws%/}/task-${task}-analyze.txt"
+    else
+      full="$TMP_DIR/rtk-run-analyze-$$.txt"
+    fi
+    "$CMD_BIN" --full-file "$full" -- "$FLUTTER_BIN" analyze "$@"
+    ;;
+esac

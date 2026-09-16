@@ -5,10 +5,12 @@
 # Usage: worktree-release WORKSPACE TASK
 # Exit codes: 0 = released, 1 = not merged / not found, 2 = usage.
 #
-# "Merged" requires real work: the branch tip must differ from the allocation
-# base recorded by worktree-alloc (a never-worked branch tip equals its base and
-# merely becomes an ancestor once any later task advances HEAD) and must be an
-# ancestor of HEAD.
+# "Merged" requires the branch tip to be an ancestor of HEAD. A branch whose
+# tip equals its allocation base recorded by worktree-alloc never committed:
+# that is released only when the task's shard proves approval (an approved
+# no-op task); an unapproved never-worked branch is kept as the debug copy.
+# The branch tip is also released when it differs from the base and is an
+# ancestor of HEAD (the ordinary merged case).
 #
 # Resource profile: dispatch none; stdout not LLM-facing; ledger I/O writes the
 # integration global ledger; subprocess: git worktree remove/prune + branch -d +
@@ -36,10 +38,21 @@ base=$(grep '"type": *"worktree_alloc"' "$ws/ledger.jsonl" 2>/dev/null \
   | grep "\"task\": *\"$task\"" | tail -1 \
   | sed -n 's/.*"base": *"\([^"]*\)".*/\1/p' || true)
 
-if [ -z "$base" ] || [ "$tip" = "$base" ] \
-   || ! git merge-base --is-ancestor "$tip" HEAD; then
+if [ -z "$base" ] || ! git merge-base --is-ancestor "$tip" HEAD; then
   echo "WORKTREE-RELEASE: $branch is not merged into HEAD - keeping worktree" >&2
   exit 1
+fi
+
+# A branch whose tip equals its allocation base never committed. That is fine
+# ONLY for an approved no-op task (its shard holds `task_complete`); an
+# unapproved never-worked branch is kept as the only debug copy.
+if [ "$tip" = "$base" ]; then
+  slug="${WS_SLUG:-$(basename "$ws")}"
+  shard="$root/.superpowers/two-model/worktrees/task-$task/.superpowers/two-model/$slug/ledger.jsonl"
+  if ! grep -qE '"type": *"task_complete"' "$shard" 2>/dev/null; then
+    echo "WORKTREE-RELEASE: $branch never committed and is not approved - keeping worktree" >&2
+    exit 1
+  fi
 fi
 
 if git worktree list --porcelain | grep -Fqx "worktree $wt"; then

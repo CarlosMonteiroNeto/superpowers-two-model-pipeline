@@ -108,6 +108,20 @@ class TestBriefScaffold(BriefScaffoldTestBase):
         self.assertIn("confirm", lower)
         self.assertIn("before implementing", lower)
 
+    def test_brief_scopes_the_operador_to_the_scoped_runner(self):
+        """Change 2 + T1: the RED order must run the operador's own tests
+        through the rtk-run scoped runner (compressed output, evidence at the
+        gate's path) and must forbid the full suite, which coder-gate owns."""
+        self.write_plan(plan_with(FULL_TASK))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("rtk-run", text)
+        self.assertIn("--task 3", text)
+        self.assertIn("red <test-file...>", text)
+        lower = text.lower()
+        self.assertIn("do not run the full test suite", lower)
+
     def test_legacy_expected_red_is_ignored(self):
         """Bootstrap: this branch's tasks still carry expected_red; it must
         scaffold without error and never leak into the brief."""

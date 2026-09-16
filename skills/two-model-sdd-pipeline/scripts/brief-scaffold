@@ -22,12 +22,23 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pathclass import is_test_path  # noqa: E402
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+# The scoped runner the operador must use for its own test runs: it compresses
+# the runner output (RTK) and writes the RED evidence where red-form-check
+# reads it. Emitted as an absolute path so the operador's bash allowlist can
+# permit this one path instead of the generic `cmd`.
+RTK_RUN = os.path.normpath(
+    os.path.join(HERE, "..", "..", "flutter-app-pipeline", "scripts", "rtk-run")
+).replace("\\", "/")
+
 
 def main(argv):
     if len(argv) != 2:
         print("usage: brief-scaffold WORKSPACE TASK", file=sys.stderr)
         return 2
     ws, task = argv
+    # Forward slashes: the brief is pasted into a git-bash command line.
+    ws_sh = ws.rstrip("/\\").replace("\\", "/")
     plan_path = ws.rstrip("/\\") + "/plan.json"
     try:
         with open(plan_path, encoding="utf-8", errors="replace") as fh:
@@ -101,17 +112,30 @@ def main(argv):
         "",
         "1. Write BLACK-BOX tests encoding Acceptance "
         "(skills/test-driven-development/writing-good-tests.md).",
-        "2. RUN those tests yourself and save the failing output in the "
-        "runner's machine-readable format to "
-        "`%s/task-%s-red.txt`." % (ws.rstrip("/\\"), wanted),
-        "   red-form-check reads that file: the suite must load, at least one "
-        "test must execute, and it must fail as an assertion or runtime "
-        "error.",
+        "2. RUN those tests yourself THROUGH THE SCOPED RUNNER. It compresses "
+        "the runner output and writes the RED evidence exactly where the gate "
+        "reads it, so never redirect it by hand:",
+        "",
+        "     %s --ws %s --task %s red <test-file...>" % (RTK_RUN, ws_sh, wanted),
+        "",
+        "   That writes the runner's machine-readable output to "
+        "`%s/task-%s-red.txt`; red-form-check reads it: the suite must load, "
+        "at least one test must execute, and it must fail as an assertion or "
+        "runtime error." % (ws_sh, wanted),
         "3. DECLARE the expected failure reason and CONFIRM the observed RED "
         "is that reason BEFORE implementing; save the declaration beside the "
         "evidence.",
-        "4. Once RED is confirmed, implement until the tests pass, and",
-        "   run them green before reporting DONE.",
+        "4. Once RED is confirmed, implement until YOUR tests pass, running "
+        "them through the same runner so their output stays compressed:",
+        "",
+        "     %s --ws %s --task %s test <test-file...>" % (RTK_RUN, ws_sh, wanted),
+        "",
+        "   Check analysis with `%s analyze`." % RTK_RUN,
+        "5. Do NOT run the FULL test suite. coder-gate runs the authoritative "
+        "full suite + analyze immediately after you report DONE; running it "
+        "yourself duplicates that multi-minute gate and inflates your context "
+        "for no benefit. Run the full suite only if you believe your change "
+        "has cross-cutting impact beyond this task's files.",
         "",
     ]
     out_path = "%s/task-%s-brief.md" % (ws.rstrip("/\\"), wanted)

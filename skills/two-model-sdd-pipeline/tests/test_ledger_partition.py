@@ -84,6 +84,60 @@ class LedgerAppendPartitionTest(unittest.TestCase):
         self.assertTrue((self.ws / "ledger-task-3.jsonl").exists())
 
 
+class LedgerAppendStdinTsvTest(unittest.TestCase):
+    """S5: the batch mode lets ledger-merge fold a whole shard through the sole
+    writer in ONE process instead of one ledger-append spawn per entry."""
+
+    def setUp(self):
+        self._tmp = tempfile.mkdtemp(prefix="ledger-batch-")
+        self.ws = pathlib.Path(self._tmp) / "ws"
+        self.ws.mkdir()
+
+    def tearDown(self):
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def run_batch(self, tsv):
+        ledger = str(self.ws / "ledger.jsonl")
+        return subprocess.run(
+            [BASH, str(SCRIPTS / "ledger-append"), "--stdin-tsv", ledger],
+            input=tsv, capture_output=True, text=True,
+        )
+
+    def test_batch_writes_global_and_partitions_with_fresh_ts(self):
+        tsv = (
+            "gate\t-\tauto-detected\n"
+            "red_check\t3\tRED verified\tstatus=FAIL\n"
+            "integrated\t3\tmerged abc\tsha=abc\n"
+        )
+        r = self.run_batch(tsv)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        lines = [json.loads(l) for l in
+                 (self.ws / "ledger.jsonl").read_text(encoding="utf-8").splitlines()
+                 if l.strip()]
+        self.assertEqual([e["type"] for e in lines], ["gate", "red_check", "integrated"])
+        self.assertEqual(lines[0]["task"], "-")
+        self.assertEqual(lines[1]["status"], "FAIL")
+        self.assertEqual(lines[2]["sha"], "abc")
+        for e in lines:
+            self.assertIn("T", e["ts"])
+        p3 = self.ws / "ledger-task-3.jsonl"
+        self.assertTrue(p3.exists())
+        self.assertEqual(
+            len([l for l in p3.read_text(encoding="utf-8").splitlines() if l.strip()]), 2)
+        self.assertFalse((self.ws / "ledger-task--.jsonl").exists())
+
+    def test_batch_is_empty_safe_and_rejects_bad_extras(self):
+        r = self.run_batch("")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        r2 = self.run_batch("red_check\t3\tRED\tnot-a-kv\n")
+        self.assertEqual(r2.returncode, 2, r2.stdout + r2.stderr)
+
+    def test_batch_requires_a_ledger_file(self):
+        r = subprocess.run([BASH, str(SCRIPTS / "ledger-append"), "--stdin-tsv"],
+                           input="", capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+
+
 class LedgerMigrateTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.mkdtemp(prefix="ledger-migrate-")

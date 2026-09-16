@@ -376,5 +376,53 @@ class TestPubSync(GateTestBase):
         self.assertIn("lockfile consistent", out)
 
 
+class TestRtkRun(GateTestBase):
+    """T1: the operador runs its own tests through a SCOPED runner that
+    compresses the output (via cmd/RTK) and writes the RED evidence where
+    red-form-check reads it - never an arbitrary command."""
+
+    def test_red_writes_evidence_and_returns_the_command_exit(self):
+        ws = pathlib.Path(self._tmp) / "ws"
+        ws.mkdir()
+        test_file = pathlib.Path(self._tmp) / "sample_test.dart"
+        test_file.write_text("void main() {}\n", encoding="utf-8")
+        r = run_script(
+            "rtk-run",
+            ["--ws", str(ws), "--task", "3", "red", str(test_file)],
+            cwd=self._tmp,
+            env_extra={
+                **self.env,
+                "STUB_TEST_EXIT": "1",
+                "STUB_TEST_OUTPUT": '{"type":"done","success":false}',
+            },
+        )
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        evidence = ws / "task-3-red.txt"
+        self.assertTrue(evidence.exists(), r.stdout + r.stderr)
+        full = evidence.read_text(encoding="utf-8")
+        self.assertIn("--machine", full)
+        self.assertIn('"type":"done"', full)
+
+    def test_test_mode_uses_the_task_test_file(self):
+        ws = pathlib.Path(self._tmp) / "ws"
+        ws.mkdir()
+        r = run_script(
+            "rtk-run",
+            ["--ws", str(ws), "--task", "4", "test", "test/a_test.dart"],
+            cwd=self._tmp,
+            env_extra=self.env,
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((ws / "task-4-test.txt").exists())
+
+    def test_unknown_mode_is_usage(self):
+        r = run_script("rtk-run", ["bogus"], cwd=self._tmp, env_extra=self.env)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+
+    def test_red_without_ws_is_usage(self):
+        r = run_script("rtk-run", ["red"], cwd=self._tmp, env_extra=self.env)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

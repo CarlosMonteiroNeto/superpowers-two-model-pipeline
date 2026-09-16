@@ -66,6 +66,14 @@ shard_of() { printf '%s' "$root/.superpowers/two-model/worktrees/task-$1/.superp
 
 approved() { grep -qE '"type": *"task_complete"' "$(shard_of "$1")" 2>/dev/null; }
 
+# alloc_base TASK - the commit the task's worktree was allocated from
+# (worktree_alloc's base=), or empty when unknown.
+alloc_base() {
+  grep -E '"type": *"worktree_alloc"' "$ledger" 2>/dev/null \
+    | grep "\"task\": *\"$1\"" | tail -1 \
+    | sed -n 's/.*"base": *"\([^"]*\)".*/\1/p' || true
+}
+
 # run_gate [TASK] - a TASK id enables the Flutter scope gate (single-task path);
 # no id means the batch gate, which this script's contract explains.
 run_gate() {
@@ -161,18 +169,37 @@ merge_one() {
 failed=0
 ordered=$(printf '%s\n' "$@" | sort -n)
 todo=""
+noop=""
 for n in $ordered; do
   # Approval precheck: only a shard carrying `task_complete` proves the revisor
   # approved the task. Merging (and releasing) an un-approved branch would ship
   # unreviewed work and destroy the only debug copy.
-  if approved "$n"; then
-    todo="$todo $n"
-  else
+  if ! approved "$n"; then
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" "not approved"
     failed=1
+    continue
+  fi
+  # A NO-OP task: approved, but its branch never committed (tip == the
+  # allocation base). There is nothing to merge and nothing new to gate, so it
+  # is integrated and released directly instead of failing on "nothing to
+  # commit" (which would strand the worktree and block final-gate's
+  # leftover-branch check).
+  base_sha=$(alloc_base "$n")
+  tip_sha=$(git rev-parse --verify --quiet "refs/heads/task/$n" || true)
+  if [ -n "$base_sha" ] && [ -n "$tip_sha" ] && [ "$tip_sha" = "$base_sha" ]; then
+    noop="$noop $n"
+  else
+    todo="$todo $n"
   fi
 done
 todo=${todo# }
+noop=${noop# }
+
+for n in $noop; do
+  echo "INTEGRATE: task $n is a no-op (approved, no commits) - integrating without a merge"
+  "$script_dir/ledger-append" "$ledger" integrated "$n" "no-op (no commits)"
+  ledger_and_release "$n" "$(git rev-parse --short HEAD)" || failed=1
+done
 
 count=$(printf '%s\n' $todo | grep -c . || true)
 [ "$count" -ge 1 ] || { [ "$failed" -eq 0 ] || exit 1; echo "INTEGRATE: wave integrated"; exit 0; }

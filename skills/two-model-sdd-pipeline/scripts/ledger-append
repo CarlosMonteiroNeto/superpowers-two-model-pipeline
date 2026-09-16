@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# Append one structured entry to the pipeline's JSONL ledger.
+# Append structured entries to the pipeline's JSONL ledger. The ledger is
+# written by this script from structured fields - never as free prose by an
+# LLM. One JSON object per line; entries are append-only so recovery after
+# compaction can trust the file's tail.
 #
-# The ledger is written by the script from structured fields - never as
-# free prose by an LLM. One JSON object per line; entries are append-only
-# so recovery after compaction can trust the file's tail.
+# Values are escaped for JSON (quotes, backslashes, control chars); keys must
+# be bare identifiers. TASK is a task number, or '-' for branch-level entries
+# (gate, final_review, merge).
 #
-# Values are escaped for JSON (quotes, backslashes, control chars); keys
-# must be bare identifiers. TASK is a task number, or '-' for branch-level
-# entries (gate, final_review, merge).
+# Usage:
+#   ledger-append [--task N] LEDGER_FILE TYPE TASK "SUMMARY" [KEY=VALUE ...]
+#   ledger-append --stdin-tsv LEDGER_FILE
 #
-# Usage: ledger-append [--task N] LEDGER_FILE TYPE TASK "SUMMARY" [KEY=VALUE ...]
-# Example:
+# Examples:
 #   ledger-append ledger.jsonl review_outcome 3 "SEND_BACK" findings=2 severity=Critical
 #   ledger-append --task 3 ledger.jsonl review_outcome 3 "SEND_BACK" findings=2
+#   printf 'integrated\t3\tmerged abc\tcommits=abc\tsha=abc\n' | \
+#     ledger-append --stdin-tsv ledger.jsonl
+#
+# `--stdin-tsv` is the batch form: one entry per line, tab-separated as
+# `TYPE<TAB>TASK<TAB>SUMMARY[<TAB>KEY=VALUE ...]`. It exists so `ledger-merge`
+# can fold a whole shard through the sole writer in ONE process instead of one
+# process per entry. TSV (not JSON) because this script is bash: it can split a
+# tab-separated line without a JSON parser. Values must not contain tabs or
+# newlines (the producers sanitize them).
 #
 # Partitioning (route-next perf fix): when the entry belongs to a numeric
 # task, the same JSON line is appended to BOTH the global LEDGER_FILE (kept
@@ -22,6 +33,76 @@
 # the global file. The --task flag overrides the partition key explicitly;
 # otherwise the positional TASK is used when numeric. No schema change.
 set -euo pipefail
+
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '%s' "$s"
+}
+
+# append_line LINE TASK - write one formed JSON line to the global file and,
+# when TASK is numeric, to its per-task partition.
+append_line() {
+  local line=$1 task=$2 partition=$3
+  printf '%s\n' "$line" >> "$file"
+  if [ -z "$partition" ]; then
+    case "$task" in
+      '' | *[!0-9]*) ;;
+      *) partition=$task ;;
+    esac
+  fi
+  case "$partition" in
+    '' | *[!0-9]* | -) ;;
+    *)
+      printf '%s\n' "$line" >> "$(dirname "$file")/ledger-task-${partition}.jsonl"
+      ;;
+  esac
+}
+
+# make_line TYPE TASK SUMMARY EXTRAS_JSON - one JSON object, fresh ts.
+make_line() {
+  local type=$1 task=$2 summary=$3 extras=$4
+  printf '{"ts":"%s","type":"%s","task":"%s","summary":"%s"%s}' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "$(json_escape "$type")" \
+    "$(json_escape "$task")" \
+    "$(json_escape "$summary")" \
+    "$extras"
+}
+
+if [ "${1:-}" = "--stdin-tsv" ]; then
+  file="${2:-}"
+  [ -n "$file" ] || {
+    echo "usage: ledger-append --stdin-tsv LEDGER_FILE" >&2
+    exit 2
+  }
+  count=0
+  while IFS= read -r row; do
+    row=${row%$'\r'}   # CRLF-safe: a Windows producer may emit \r\n
+    [ -n "$row" ] || continue
+    IFS=$'\t' read -r -a fields <<< "$row"
+    type=${fields[0]:-}
+    task=${fields[1]:-"-"}
+    summary=${fields[2]:-}
+    extras=""
+    for kv in "${fields[@]:3}"; do
+      [ -n "$kv" ] || continue
+      case "$kv" in
+        *=*) ;;
+        *) echo "not KEY=VALUE: $kv" >&2; exit 2 ;;
+      esac
+      extras+=",\"$(json_escape "${kv%%=*}")\":\"$(json_escape "${kv#*=}")\""
+    done
+    append_line "$(make_line "$type" "$task" "$summary" "$extras")" "$task" ""
+    count=$((count + 1))
+  done
+  echo "ledgered: $count entry(ies) via --stdin-tsv"
+  exit 0
+fi
 
 partition_task=""
 if [ "${1:-}" = "--task" ]; then
@@ -40,16 +121,6 @@ type=$2
 task=$3
 summary=$4
 
-json_escape() {
-  local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\n'/\\n}
-  s=${s//$'\r'/\\r}
-  s=${s//$'\t'/\\t}
-  printf '%s' "$s"
-}
-
 extras=""
 if [ $# -gt 4 ]; then
   for kv in "${@:5}"; do
@@ -63,31 +134,6 @@ if [ $# -gt 4 ]; then
   done
 fi
 
-ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-line=$(printf '{"ts":"%s","type":"%s","task":"%s","summary":"%s"%s}' \
-  "$ts" \
-  "$(json_escape "$type")" \
-  "$(json_escape "$task")" \
-  "$(json_escape "$summary")" \
-  "$extras")
-printf '%s\n' "$line" >> "$file"
-
-# Per-task partition mirror. Explicit --task wins; otherwise mirror when the
-# positional TASK is numeric. All existing call sites (red-gate, coder-gate,
-# green-gate, orchestrator, resolve-toolchain) already pass the task number
-# positionally, so they get the partition with no call-site change.
-if [ -z "$partition_task" ]; then
-  case "$task" in
-    ''|*[!0-9]*) ;;
-    *) partition_task=$task ;;
-  esac
-fi
-case "$partition_task" in
-  ''|*[!0-9]*|-) ;;
-  *)
-    task_file="$(dirname "$file")/ledger-task-${partition_task}.jsonl"
-    printf '%s\n' "$line" >> "$task_file"
-    ;;
-esac
+append_line "$(make_line "$type" "$task" "$summary" "$extras")" "$task" "$partition_task"
 
 echo "ledgered: $type task=$task $summary"
