@@ -176,12 +176,16 @@ class TestAgentDefinitionsArePortable(unittest.TestCase):
             if "rtk-run" in line and ": allow" in line
         ]
         self.assertTrue(rules, "the coder must allow the scoped rtk-run runner")
+        # Both ends must be wildcards: the operador's shell may wrap the call
+        # (`& "<path>"`, `bash "<path>"`, bare) and quotes follow the path, so
+        # a pattern anchored to `rtk-run ` (space) never matches. And it must
+        # not be an absolute path, which could not ship to another machine.
         self.assertTrue(
-            any(r.startswith('"*/') and "flutter-app-pipeline/scripts/rtk-run" in r
+            any(r.startswith('"*') and r.rstrip().endswith('*": allow')
+                and "flutter-app-pipeline/scripts/rtk-run" in r
                 for r in rules),
-            "rtk-run must be allowed by a leading-wildcard, install-independent "
-            "pattern (permission `*` matches `/`), not an absolute path: %s"
-            % rules,
+            "rtk-run must be allowed by a two-sided wildcard, "
+            "install-independent pattern, not an absolute path: %s" % rules,
         )
 
 

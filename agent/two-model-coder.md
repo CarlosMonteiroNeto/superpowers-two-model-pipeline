@@ -20,8 +20,7 @@ permission:
     "dart run build_runner*": allow
     "mkdir*": allow
     "rm*": allow
-    "*/flutter-app-pipeline/scripts/rtk-run": allow
-    "*/flutter-app-pipeline/scripts/rtk-run *": allow
+    "*flutter-app-pipeline/scripts/rtk-run*": allow
   webfetch: deny
   task: deny
 ---
