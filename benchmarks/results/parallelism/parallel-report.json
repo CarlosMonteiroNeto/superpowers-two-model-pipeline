@@ -1,49 +1,49 @@
 {
   "side": "parallel",
   "workspace": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\parallel\\fixture\\.superpowers\\two-model\\2026-09-16-parallelism-benchmark-plan",
-  "total_wall_clock_s": 2025.0,
-  "cache_hit_pct": 70.6,
-  "uncached_tokens": 34476,
+  "total_wall_clock_s": 1083.0,
+  "cache_hit_pct": 89.0,
+  "uncached_tokens": 374380,
   "totals": {
-    "input": 29025,
-    "output": 1874,
-    "reasoning": 3577,
-    "cache_read": 69632,
+    "input": 311979,
+    "output": 35431,
+    "reasoning": 26970,
+    "cache_read": 2511488,
     "cache_write": 0,
-    "cost": 0.007833246,
-    "requests": 5,
-    "span_s": 35.778
+    "cost": 0.09177191399999998,
+    "requests": 185,
+    "span_s": 1090.337
   },
   "roles": {
     "coder": {
-      "input": 0,
-      "output": 0,
-      "reasoning": 0,
-      "cache_read": 0,
+      "input": 184271,
+      "output": 28364,
+      "reasoning": 14750,
+      "cache_read": 2313088,
       "cache_write": 0,
-      "cost": 0.0,
-      "requests": 0,
-      "span_s": 0.0
+      "cost": 0.060448313999999996,
+      "requests": 154,
+      "span_s": 938.623
     },
     "reviewer": {
-      "input": 0,
-      "output": 0,
-      "reasoning": 0,
-      "cache_read": 0,
+      "input": 103946,
+      "output": 5762,
+      "reasoning": 10827,
+      "cache_read": 183424,
       "cache_write": 0,
-      "cost": 0.0,
-      "requests": 0,
-      "span_s": 0.0
+      "cost": 0.026095571999999997,
+      "requests": 28,
+      "span_s": 133.921
     },
     "director": {
-      "input": 29025,
-      "output": 1874,
-      "reasoning": 3577,
-      "cache_read": 69632,
+      "input": 23762,
+      "output": 1305,
+      "reasoning": 1393,
+      "cache_read": 14976,
       "cache_write": 0,
-      "cost": 0.007833246,
-      "requests": 5,
-      "span_s": 35.778
+      "cost": 0.005228028,
+      "requests": 3,
+      "span_s": 17.793
     }
   },
   "tasks": [
@@ -51,28 +51,28 @@
       "id": 1,
       "status": "APPROVED",
       "correction_rounds": 0,
-      "brief_s": 0.0,
-      "gate_s": null,
+      "brief_s": 1.0,
+      "gate_s": 87.847,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 16616,
+          "output": 2523,
+          "reasoning": 1780,
+          "cache_read": 197120,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.00566556,
+          "requests": 14,
+          "span_s": 99.524
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9372,
+          "output": 383,
+          "reasoning": 493,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.001954824,
+          "requests": 2,
+          "span_s": 8.061
         }
       }
     },
@@ -81,27 +81,27 @@
       "status": "APPROVED",
       "correction_rounds": 0,
       "brief_s": 0.0,
-      "gate_s": null,
+      "gate_s": 85.446,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 23127,
+          "output": 3306,
+          "reasoning": 1136,
+          "cache_read": 285312,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.006990186000000001,
+          "requests": 17,
+          "span_s": 104.287
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9422,
+          "output": 525,
+          "reasoning": 1694,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.0027681240000000003,
+          "requests": 2,
+          "span_s": 14.65
         }
       }
     },
@@ -109,28 +109,28 @@
       "id": 3,
       "status": "APPROVED",
       "correction_rounds": 0,
-      "brief_s": 1.0,
-      "gate_s": null,
+      "brief_s": 0.0,
+      "gate_s": 62.047,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 18518,
+          "output": 2616,
+          "reasoning": 1549,
+          "cache_read": 241792,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.006002076000000001,
+          "requests": 16,
+          "span_s": 139.925
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9570,
+          "output": 473,
+          "reasoning": 605,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.002105724,
+          "requests": 2,
+          "span_s": 8.477
         }
       }
     },
@@ -139,27 +139,27 @@
       "status": "APPROVED",
       "correction_rounds": 0,
       "brief_s": 0.0,
-      "gate_s": null,
+      "gate_s": 75.341,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 20190,
+          "output": 2923,
+          "reasoning": 1342,
+          "cache_read": 273536,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.006408108,
+          "requests": 17,
+          "span_s": 130.557
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 17080,
+          "output": 1227,
+          "reasoning": 802,
+          "cache_read": 71552,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.003994056,
+          "requests": 7,
+          "span_s": 25.983
         }
       }
     },
@@ -167,28 +167,28 @@
       "id": 5,
       "status": "APPROVED",
       "correction_rounds": 0,
-      "brief_s": 0.0,
-      "gate_s": null,
+      "brief_s": 1.0,
+      "gate_s": 58.704,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 17600,
+          "output": 2489,
+          "reasoning": 1653,
+          "cache_read": 173312,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.0056451359999999985,
+          "requests": 12,
+          "span_s": 70.337
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9367,
+          "output": 465,
+          "reasoning": 1295,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.002484474,
+          "requests": 2,
+          "span_s": 11.593
         }
       }
     },
@@ -196,28 +196,28 @@
       "id": 6,
       "status": "APPROVED",
       "correction_rounds": 0,
-      "brief_s": 0.0,
-      "gate_s": null,
+      "brief_s": 1.0,
+      "gate_s": 58.776,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 16313,
+          "output": 2558,
+          "reasoning": 815,
+          "cache_read": 183040,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.00501987,
+          "requests": 14,
+          "span_s": 70.639
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9483,
+          "output": 396,
+          "reasoning": 572,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.002026674,
+          "requests": 2,
+          "span_s": 8.389
         }
       }
     },
@@ -226,27 +226,27 @@
       "status": "APPROVED",
       "correction_rounds": 0,
       "brief_s": 0.0,
-      "gate_s": null,
+      "gate_s": 54.367,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 16409,
+          "output": 2868,
+          "reasoning": 2518,
+          "cache_read": 212224,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.006329622000000001,
+          "requests": 15,
+          "span_s": 82.091
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9476,
+          "output": 377,
+          "reasoning": 380,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.001899024,
+          "requests": 2,
+          "span_s": 7.65
         }
       }
     },
@@ -255,27 +255,27 @@
       "status": "APPROVED",
       "correction_rounds": 0,
       "brief_s": 0.0,
-      "gate_s": null,
+      "gate_s": 68.989,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 14434,
+          "output": 2253,
+          "reasoning": 981,
+          "cache_read": 156800,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.0045759,
+          "requests": 13,
+          "span_s": 68.161
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9373,
+          "output": 498,
+          "reasoning": 570,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.002070174,
+          "requests": 2,
+          "span_s": 9.283
         }
       }
     },
@@ -283,28 +283,28 @@
       "id": 9,
       "status": "APPROVED",
       "correction_rounds": 0,
-      "brief_s": 1.0,
-      "gate_s": null,
+      "brief_s": 0.0,
+      "gate_s": 88.762,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 20896,
+          "output": 3453,
+          "reasoning": 1356,
+          "cache_read": 289792,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.006889175999999999,
+          "requests": 17,
+          "span_s": 83.596
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 9415,
+          "output": 398,
+          "reasoning": 588,
+          "cache_read": 7808,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.002027274,
+          "requests": 2,
+          "span_s": 8.116
         }
       }
     },
@@ -313,27 +313,27 @@
       "status": "APPROVED",
       "correction_rounds": 0,
       "brief_s": 0.0,
-      "gate_s": null,
+      "gate_s": 83.473,
       "roles": {
         "coder": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 20168,
+          "output": 3375,
+          "reasoning": 1620,
+          "cache_read": 300160,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.006922679999999999,
+          "requests": 19,
+          "span_s": 89.506
         },
         "reviewer": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
+          "input": 11388,
+          "output": 1020,
+          "reasoning": 3828,
+          "cache_read": 49408,
           "cache_write": 0,
-          "cost": 0.0,
-          "requests": 0,
-          "span_s": 0.0
+          "cost": 0.004765223999999999,
+          "requests": 5,
+          "span_s": 31.719
         }
       }
     }

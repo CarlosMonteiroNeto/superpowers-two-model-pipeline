@@ -5,6 +5,7 @@
   "max_parallel": 2,
   "fixture": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\parallel\\fixture",
   "workspace": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\parallel\\fixture\\.superpowers\\two-model\\2026-09-16-parallelism-benchmark-plan",
+  "harvest": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\parallel\\harvest",
   "command": [
     "bash",
     "C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/parallelism/parallel/engine/skills/two-model-sdd-pipeline/scripts/run-pipeline",
@@ -13,8 +14,8 @@
     "--max-parallel",
     "2"
   ],
-  "start": 1789579137.167,
-  "end": 1789581165.37,
-  "total_seconds": 2028.203,
+  "start": 1789585440.082,
+  "end": 1789586525.5,
+  "total_seconds": 1085.418,
   "exit_code": 0
 }
