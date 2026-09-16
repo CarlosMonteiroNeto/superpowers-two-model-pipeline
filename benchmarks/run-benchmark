@@ -84,9 +84,14 @@ shutil.copyfile(sys.argv[1], sys.argv[2])
 PY
     local ws
     ws=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8')).get('workspace') or '')" "$result")
+    local harvest
+    harvest=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8')).get('harvest') or '')" "$result")
     if [ -n "$ws" ]; then
+      local extra=""
+      [ -n "$harvest" ] && extra="--extra-logs $harvest"
+      # shellcheck disable=SC2086
       python3 "$SCRIPT_DIR/scripts/bench_report.py" "$ws" --side "$side" \
-        --out "$RESULTS_DIR/$side-report.json" > "$RESULTS_DIR/$side-report.md" \
+        $extra --out "$RESULTS_DIR/$side-report.json" > "$RESULTS_DIR/$side-report.md" \
         || echo "run-benchmark: report failed for $side" >&2
       echo "run-benchmark: $side report -> $RESULTS_DIR/$side-report.md"
     else

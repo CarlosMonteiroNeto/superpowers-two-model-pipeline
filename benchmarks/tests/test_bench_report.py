@@ -243,6 +243,40 @@ class BenchReportTest(unittest.TestCase):
         self.assertEqual(coder["requests"], 2)
         self.assertAlmostEqual(coder["cost"], 0.00013359 + 0.000241608, places=8)
 
+    def test_extra_log_dirs_are_read_when_the_workspace_log_is_gone(self):
+        # Parallel tasks run in worktrees; their logs are harvested elsewhere
+        # before the worktree is released, so the analyzer must read the
+        # harvest dir when the integration workspace has no task log.
+        harvest = self._tmp / "harvest"
+        harvest.mkdir()
+        (harvest / "task-9-coder.log").write_text(
+            step_finish(ms(0), 111, 22, 3, 333, 0, 0.01) + "\n",
+            encoding="utf-8",
+        )
+        (harvest / "task-9-reviewer.log").write_text(
+            step_finish(ms(5), 44, 4, 0, 55, 0, 0.002) + "\n",
+            encoding="utf-8",
+        )
+        self.write("ledger.jsonl", [
+            ledger_line("2026-09-16T10:00:00Z", "task_complete", "9", "done"),
+        ])
+        result = analyze_workspace(str(self.ws), extra_log_dirs=[str(harvest)])
+        task = result["tasks"][0]
+        self.assertEqual(task["roles"]["coder"]["input"], 111)
+        self.assertEqual(task["roles"]["coder"]["requests"], 1)
+        self.assertEqual(task["roles"]["reviewer"]["input"], 44)
+
+    def test_workspace_log_wins_over_extra_log_dirs(self):
+        harvest = self._tmp / "harvest"
+        harvest.mkdir()
+        (harvest / "task-1-coder.log").write_text(
+            step_finish(ms(0), 999, 0, 0, 0, 0, 0.0) + "\n", encoding="utf-8")
+        self.build_fixture_workspace()
+        result = analyze_workspace(str(self.ws), extra_log_dirs=[str(harvest)])
+        coder = {t["id"]: t for t in result["tasks"]}[1]["roles"]["coder"]
+        # the workspace's own task-1-coder.log is the authoritative one
+        self.assertEqual(coder["input"], 120)
+
 
 if __name__ == "__main__":
     unittest.main()

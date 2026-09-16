@@ -125,6 +125,30 @@ if [ -n "$max_parallel" ]; then
 fi
 
 echo "run-side: ${cmd[*]}"
+
+# Harvest per-task dispatch logs from the worktree workspaces before
+# worktree-release deletes them. The parallel engine runs each task in its own
+# worktree; the integration workspace receives only the merged ledger, so the
+# coder/reviewer event logs (the token/request source) would otherwise be lost.
+HARVEST="$work_dir/harvest"
+mkdir -p "$HARVEST"
+harvest_once() {
+  for f in "$FIXTURE_REPO"/.superpowers/two-model/worktrees/*/.superpowers/two-model/*/task-*-coder.log \
+           "$FIXTURE_REPO"/.superpowers/two-model/worktrees/*/.superpowers/two-model/*/task-*-reviewer.log; do
+    [ -f "$f" ] || continue
+    cp -f "$f" "$HARVEST/$(basename "$f")" 2>/dev/null || true
+  done
+}
+harvest_loop() {
+  while [ -f "$HARVEST/.running" ]; do
+    harvest_once
+    sleep 1
+  done
+}
+: > "$HARVEST/.running"
+harvest_loop &
+HARVESTER_PID=$!
+
 start=$(now)
 (
   cd "$FIXTURE_REPO" || exit 2
@@ -132,6 +156,13 @@ start=$(now)
 ) > "$work_dir/run.log" 2>&1
 rc=$?
 end=$(now)
+
+# Stop the harvester (sentinel + wait) and take one last sweep, so a serial run
+# (no worktrees) and any log written just before release are both covered.
+rm -f "$HARVEST/.running"
+wait "$HARVESTER_PID" 2>/dev/null || true
+harvest_once || true
+rm -f "$HARVEST/.running"
 
 # 4. locate the run's workspace (plan-slug dir) and write the result
 slug=$(basename "$PLAN_NAME")
@@ -148,11 +179,12 @@ fi
 [ -n "$workspace" ] && workspace=$(norm "$workspace")
 
 python3 - "$(norm "$work_dir/result.json")" "$side" "$ENGINE" "$engine_ref" \
-  "$max_parallel" "$(norm "$FIXTURE_REPO")" "$workspace" "$start" "$end" "$rc" \
+  "$max_parallel" "$(norm "$FIXTURE_REPO")" "$workspace" "$(norm "$HARVEST")" \
+  "$start" "$end" "$rc" \
   "${cmd[@]}" <<'PY'
 import json, sys
-out, side, engine, ref, maxp, fixture, workspace, start, end, rc = sys.argv[1:11]
-command = sys.argv[11:]
+out, side, engine, ref, maxp, fixture, workspace, harvest, start, end, rc = sys.argv[1:12]
+command = sys.argv[12:]
 start, end, rc = float(start), float(end), int(rc)
 max_parallel = int(maxp) if str(maxp).strip() else None
 data = {
@@ -162,6 +194,7 @@ data = {
     "max_parallel": max_parallel,
     "fixture": fixture,
     "workspace": workspace or None,
+    "harvest": harvest or None,
     "command": command,
     "start": start,
     "end": end,

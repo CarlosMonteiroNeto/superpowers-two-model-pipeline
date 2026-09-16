@@ -34,6 +34,22 @@ printf '%s\\n' '{"ts":"2026-09-16T00:00:05Z","type":"task_complete","task":"1","
 exit "${BENCH_STUB_EXIT:-0}"
 """
 
+# Simulates the real parallel flow: the coder log lives in the task worktree
+# and the worktree is deleted on release, so only a harvester can see it.
+STUB_ENGINE_WITH_WORKTREE = """#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p ".superpowers/two-model/stubws"
+ledger=".superpowers/two-model/stubws/ledger.jsonl"
+printf '%s\\n' '{"ts":"2026-09-16T00:00:00Z","type":"gate","task":"-"}' > "$ledger"
+wt=".superpowers/two-model/worktrees/task-1/.superpowers/two-model/stubws"
+mkdir -p "$wt"
+printf '%s\\n' '{"type":"step_finish","timestamp":1000,"tokens":{"input":7}}' > "$wt/task-1-coder.log"
+sleep 5
+rm -rf ".superpowers/two-model/worktrees"
+printf '%s\\n' '{"ts":"2026-09-16T00:00:05Z","type":"task_complete","task":"1","summary":"done"}' >> "$ledger"
+exit 0
+"""
+
 
 class RunSideTest(unittest.TestCase):
     def setUp(self):
@@ -119,6 +135,20 @@ class RunSideTest(unittest.TestCase):
         proc = self.run_side("serial", env_extra={"BENCH_STUB_EXIT": "7"})
         self.assertEqual(proc.returncode, 7)
         self.assertEqual(self.result()["exit_code"], 7)
+
+    def test_worktree_logs_are_harvested_before_release(self):
+        script = (self.engine / "skills" / "two-model-sdd-pipeline" /
+                  "scripts" / "run-pipeline")
+        script.write_text(STUB_ENGINE_WITH_WORKTREE, encoding="utf-8", newline="\n")
+        subprocess.run(["git", "commit", "-qam", "worktree stub"],
+                       cwd=str(self.engine), check=True)
+        proc = self.run_side("parallel", "--max-parallel", "2")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        harvested = self.work / "harvest" / "task-1-coder.log"
+        self.assertTrue(harvested.is_file(),
+                        "worktree log was not harvested before release")
+        self.assertIn("step_finish", harvested.read_text(encoding="utf-8"))
+        self.assertIn("harvest", self.result()["harvest"])
 
 
 if __name__ == "__main__":

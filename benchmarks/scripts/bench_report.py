@@ -183,8 +183,26 @@ def _last_of(entries, type_):
     return found
 
 
-def analyze_workspace(workspace, total_seconds=None, side=None):
+def _log_path(workspace, name, extra_dirs):
+    """Prefer the workspace's own log; fall back to harvested copies.
+
+    In the parallel engine the per-task logs live in a worktree that is
+    deleted on release, so `run-side` harvests them into a stable dir. The
+    integration workspace stays authoritative when it does have the log.
+    """
+    primary = os.path.join(workspace, name)
+    if os.path.isfile(primary):
+        return primary
+    for directory in extra_dirs or []:
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return primary
+
+
+def analyze_workspace(workspace, total_seconds=None, side=None, extra_log_dirs=None):
     workspace = str(workspace)
+    extra_log_dirs = list(extra_log_dirs or [])
     ledger_path = os.path.join(workspace, "ledger.jsonl")
     if not os.path.isfile(ledger_path):
         raise OSError("no ledger at %s" % ledger_path)
@@ -206,9 +224,10 @@ def analyze_workspace(workspace, total_seconds=None, side=None):
     role_totals = {role: _zero() for role in ROLES}
     for task_id in sorted(task_ids):
         task_entries = by_task.get(str(task_id), [])
-        coder_path = os.path.join(workspace, "task-%d-coder.log" % task_id)
+        coder_path = _log_path(workspace, "task-%d-coder.log" % task_id, extra_log_dirs)
         coder, _, coder_end_ms = _scan_log(coder_path)
-        reviewer = parse_log(os.path.join(workspace, "task-%d-reviewer.log" % task_id))
+        reviewer = parse_log(
+            _log_path(workspace, "task-%d-reviewer.log" % task_id, extra_log_dirs))
         _add(role_totals["coder"], coder)
         _add(role_totals["reviewer"], reviewer)
 
@@ -315,12 +334,15 @@ def main(argv):
     parser.add_argument("workspace")
     parser.add_argument("--side", default=None)
     parser.add_argument("--total-seconds", type=float, default=None)
+    parser.add_argument("--extra-logs", action="append", default=None,
+                        help="dir of harvested task logs (repeatable)")
     parser.add_argument("--out", default=None)
     parser.add_argument("--json", dest="emit_json", action="store_true")
     args = parser.parse_args(argv)
 
     try:
-        result = analyze_workspace(args.workspace, args.total_seconds, args.side)
+        result = analyze_workspace(args.workspace, args.total_seconds, args.side,
+                                   extra_log_dirs=args.extra_logs)
     except OSError as exc:
         print("REPORT: %s" % exc, file=os.sys.stderr)
         return 2
