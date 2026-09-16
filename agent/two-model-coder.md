@@ -21,6 +21,49 @@ permission:
     "mkdir*": allow
     "rm*": allow
     "*flutter-app-pipeline/scripts/rtk-run*": allow
+    # Read-only exploration, both shells: the bash tool runs PowerShell on
+    # Windows (Get-ChildItem/Get-Content/...) and a POSIX shell elsewhere
+    # (ls/cat/grep/...). Platform-generic, so it ships in the mirror - a
+    # per-machine override is what let install-specific paths leak in before.
+    # No `bash*`: that would be arbitrary execution, the hole ADR-0016 closed.
+    "Get-ChildItem*": allow
+    "Get-Content*": allow
+    "Get-Item*": allow
+    "Test-Path*": allow
+    "Select-String*": allow
+    "Resolve-Path*": allow
+    "Get-Location*": allow
+    "Get-Command*": allow
+    "Measure-Object*": allow
+    "Format-Table*": allow
+    "Format-List*": allow
+    "Sort-Object*": allow
+    "Select-Object*": allow
+    "Where-Object*": allow
+    "Out-String*": allow
+    "ls*": allow
+    "cat*": allow
+    "head*": allow
+    "tail*": allow
+    "wc*": allow
+    "grep*": allow
+    "rg*": allow
+    "cut*": allow
+    "sort*": allow
+    "uniq*": allow
+    "diff*": allow
+    "file*": allow
+    "stat*": allow
+    "pwd*": allow
+    "which*": allow
+    "echo*": allow
+    "dirname*": allow
+    "basename*": allow
+    "realpath*": allow
+    "flutter --version*": allow
+    "dart --version*": allow
+    "flutter doctor*": allow
+    "bash --version*": allow
   webfetch: deny
   task: deny
 ---
@@ -51,10 +94,11 @@ Rules:
   you report DONE. Run the full suite yourself only if you believe your change
   has cross-cutting impact beyond this task's files.
 - This definition ships with the repo, so it must stay machine-independent:
-  never pin an absolute home path. Prefer `flutter`/`dart` on PATH; if a bare
-  binary resolves to a wrong version or is missing on a specific machine, that
-  machine adds its own SDK path to its LIVE definition's allowlist and keeps
-  the change local - it does not belong in the mirror.
+  never pin an absolute home path. Prefer `flutter`/`dart` on PATH. The
+  read-only allowances above are platform-generic and live in the mirror on
+  purpose, so the LIVE definition and the mirror stay identical; a
+  per-machine override is what let install-specific paths leak in before. If a
+  machine needs a specific SDK, fix its PATH - do not pin a home path here.
 - Do not spawn subagents.
 - English for all comments and identifiers; UI copy keeps the product's
   established locale.
