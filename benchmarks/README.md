@@ -103,6 +103,36 @@ integration, closing and provider latency.
 Full artifacts: `results/parallelism/serial-report.{md,json}` and
 `serial-result.json`.
 
+## Best-condition pair (same engine, same agent definitions)
+
+The controlled answer to "would a non-parallel version with the improvements
+beat the current parallel one?" Both sides use the identical engine
+(`origin/main` = `dda0b0a`) and the identical corrected, `rtk-run`-enabled
+agent definitions, so the only variable is wave width — the delta is wave
+scheduling alone.
+
+| Metric | serial (`--max-parallel 1`) | parallel (`--max-parallel 2`) |
+|---|---|---|
+| Wall-clock | 2122.0 s | 919.9 s (**2.31x faster**) |
+| LLM requests | 284 | 260 |
+| Uncached tokens | 637,645 | 508,317 |
+| Cache-hit % | 92.7 | 92.0 |
+| Cost | 0.167889 | 0.128692 |
+
+**No** — the non-parallel version is much slower. Parallelism is the decisive
+factor, not the general improvements: on the same engine, dropping to one lane
+costs 2.31x.
+
+Caveat observed while collecting this: the hardened allowlist (ADR-0016 drops
+`bash*`/`python*`) causes permission-denial churn on Windows, where the
+operador's shell is PowerShell and it reaches for `Get-ChildItem` / `Test-Path`
+/ `Get-Content` — 47 denials in the serial run, 27 in the parallel run. It
+inflates both sides; serial pays it in full, parallel partly absorbs it in
+overlap.
+
+Full artifacts: `results/parallelism/{serial-best,parallel-best}-report.{md,json}`
+and `compare-best.{md,json}`.
+
 ## Non-interactive by construction
 
 The benchmark must not pause for approvals, or the timing is wrong:

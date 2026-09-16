@@ -1,0 +1,341 @@
+{
+  "side": "parallel-best",
+  "workspace": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallel-best\\side\\fixture\\.superpowers\\two-model\\2026-09-16-parallelism-benchmark-plan",
+  "total_wall_clock_s": 919.887,
+  "cache_hit_pct": 92.0,
+  "uncached_tokens": 508317,
+  "totals": {
+    "input": 424223,
+    "output": 46816,
+    "reasoning": 37278,
+    "cache_read": 4867328,
+    "cache_write": 0,
+    "cost": 0.128691834,
+    "requests": 260,
+    "span_s": 1097.733
+  },
+  "roles": {
+    "coder": {
+      "input": 290210,
+      "output": 39281,
+      "reasoning": 24708,
+      "cache_read": 4570624,
+      "cache_write": 0,
+      "cost": 0.095636772,
+      "requests": 219,
+      "span_s": 943.559
+    },
+    "reviewer": {
+      "input": 110441,
+      "output": 6335,
+      "reasoning": 11464,
+      "cache_read": 282112,
+      "cache_write": 0,
+      "cost": 0.028091886000000003,
+      "requests": 38,
+      "span_s": 139.253
+    },
+    "director": {
+      "input": 23572,
+      "output": 1200,
+      "reasoning": 1106,
+      "cache_read": 14592,
+      "cache_write": 0,
+      "cost": 0.004963176,
+      "requests": 3,
+      "span_s": 14.921
+    }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 1.0,
+      "gate_s": 51.742,
+      "roles": {
+        "coder": {
+          "input": 39026,
+          "output": 3989,
+          "reasoning": 3375,
+          "cache_read": 669440,
+          "cache_write": 0,
+          "cost": 0.012280619999999999,
+          "requests": 26,
+          "span_s": 113.828
+        },
+        "reviewer": {
+          "input": 9585,
+          "output": 523,
+          "reasoning": 1010,
+          "cache_read": 7936,
+          "cache_write": 0,
+          "cost": 0.002381358,
+          "requests": 2,
+          "span_s": 9.396
+        }
+      }
+    },
+    {
+      "id": 2,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 45.441,
+      "roles": {
+        "coder": {
+          "input": 29668,
+          "output": 5043,
+          "reasoning": 3591,
+          "cache_read": 648576,
+          "cache_write": 0,
+          "cost": 0.011576327999999999,
+          "requests": 27,
+          "span_s": 120.751
+        },
+        "reviewer": {
+          "input": 9581,
+          "output": 493,
+          "reasoning": 1017,
+          "cache_read": 7936,
+          "cache_write": 0,
+          "cost": 0.0023669579999999997,
+          "requests": 2,
+          "span_s": 9.14
+        }
+      }
+    },
+    {
+      "id": 3,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 61.247,
+      "roles": {
+        "coder": {
+          "input": 32069,
+          "output": 3740,
+          "reasoning": 1682,
+          "cache_read": 382592,
+          "cache_write": 0,
+          "cost": 0.009211325999999999,
+          "requests": 16,
+          "span_s": 70.368
+        },
+        "reviewer": {
+          "input": 14770,
+          "output": 807,
+          "reasoning": 829,
+          "cache_read": 44160,
+          "cache_write": 0,
+          "cost": 0.0033295800000000004,
+          "requests": 5,
+          "span_s": 15.644
+        }
+      }
+    },
+    {
+      "id": 4,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 42.035,
+      "roles": {
+        "coder": {
+          "input": 31255,
+          "output": 4534,
+          "reasoning": 2506,
+          "cache_read": 487808,
+          "cache_write": 0,
+          "cost": 0.010375673999999998,
+          "requests": 22,
+          "span_s": 89.833
+        },
+        "reviewer": {
+          "input": 9671,
+          "output": 408,
+          "reasoning": 1020,
+          "cache_read": 7936,
+          "cache_write": 0,
+          "cost": 0.002331258,
+          "requests": 2,
+          "span_s": 8.88
+        }
+      }
+    },
+    {
+      "id": 5,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 1.0,
+      "gate_s": 60.262,
+      "roles": {
+        "coder": {
+          "input": 25892,
+          "output": 3678,
+          "reasoning": 2115,
+          "cache_read": 348032,
+          "cache_write": 0,
+          "cost": 0.008403696,
+          "requests": 18,
+          "span_s": 86.218
+        },
+        "reviewer": {
+          "input": 9544,
+          "output": 543,
+          "reasoning": 624,
+          "cache_read": 7936,
+          "cache_write": 0,
+          "cost": 0.002155608,
+          "requests": 2,
+          "span_s": 7.235
+        }
+      }
+    },
+    {
+      "id": 6,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 63.663,
+      "roles": {
+        "coder": {
+          "input": 23974,
+          "output": 3013,
+          "reasoning": 1990,
+          "cache_read": 272128,
+          "cache_write": 0,
+          "cost": 0.007414283999999999,
+          "requests": 16,
+          "span_s": 83.219
+        },
+        "reviewer": {
+          "input": 13775,
+          "output": 1143,
+          "reasoning": 1243,
+          "cache_read": 86912,
+          "cache_write": 0,
+          "cost": 0.003758586,
+          "requests": 9,
+          "span_s": 27.214
+        }
+      }
+    },
+    {
+      "id": 7,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 1.0,
+      "gate_s": 56.423,
+      "roles": {
+        "coder": {
+          "input": 26318,
+          "output": 4211,
+          "reasoning": 3093,
+          "cache_read": 474752,
+          "cache_write": 0,
+          "cost": 0.009754356000000002,
+          "requests": 26,
+          "span_s": 103.728
+        },
+        "reviewer": {
+          "input": 13478,
+          "output": 829,
+          "reasoning": 887,
+          "cache_read": 72576,
+          "cache_write": 0,
+          "cost": 0.0032690279999999993,
+          "requests": 8,
+          "span_s": 22.504
+        }
+      }
+    },
+    {
+      "id": 8,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 63.564,
+      "roles": {
+        "coder": {
+          "input": 27930,
+          "output": 3484,
+          "reasoning": 1439,
+          "cache_read": 451456,
+          "cache_write": 0,
+          "cost": 0.008497668,
+          "requests": 23,
+          "span_s": 97.669
+        },
+        "reviewer": {
+          "input": 10089,
+          "output": 518,
+          "reasoning": 371,
+          "cache_read": 17792,
+          "cache_write": 0,
+          "cost": 0.002100126,
+          "requests": 3,
+          "span_s": 8.083
+        }
+      }
+    },
+    {
+      "id": 9,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 89.191,
+      "roles": {
+        "coder": {
+          "input": 18697,
+          "output": 3195,
+          "reasoning": 1729,
+          "cache_read": 253184,
+          "cache_write": 0,
+          "cost": 0.006518501999999999,
+          "requests": 17,
+          "span_s": 70.514
+        },
+        "reviewer": {
+          "input": 9591,
+          "output": 479,
+          "reasoning": 1370,
+          "cache_read": 7936,
+          "cache_write": 0,
+          "cost": 0.0025718579999999998,
+          "requests": 2,
+          "span_s": 10.417
+        }
+      }
+    },
+    {
+      "id": 10,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": 52.533,
+      "roles": {
+        "coder": {
+          "input": 35381,
+          "output": 4394,
+          "reasoning": 3188,
+          "cache_read": 582656,
+          "cache_write": 0,
+          "cost": 0.011604318,
+          "requests": 28,
+          "span_s": 107.431
+        },
+        "reviewer": {
+          "input": 10357,
+          "output": 592,
+          "reasoning": 3093,
+          "cache_read": 20992,
+          "cache_write": 0,
+          "cost": 0.0038275259999999995,
+          "requests": 3,
+          "span_s": 20.74
+        }
+      }
+    }
+  ]
+}
