@@ -195,7 +195,9 @@ skills/flutter-app-pipeline/scripts/:
                          revisor dispatch.
                          On commit appends the ledger `commit` entry
                          (task from -t when given; ledger-append resolved
-                         from the two-model scripts dir)
+                         from the two-model scripts dir), including the
+                         validated `tree=` hash integrate uses to skip a
+                         provably redundant post-merge suite (ADR-0013)
 
 skills/two-model-sdd-pipeline/scripts/:
   run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]
@@ -234,10 +236,14 @@ skills/two-model-sdd-pipeline/scripts/:
                        complete; 1 blocked/escalated; 2 usage)
   integrate            script-owned serial integration gate: per task, merge
                        task/<N> (ascending id), run the FULL suite after each
-                       merge, commit on green, ledger integrated + merge the
-                       shard + release the worktree; on conflict/red abort
-                       only that merge and ledger integration_failed (exit 0
-                       all integrated; 1 >=1 integration_failed; 2 usage)
+                       merge - skipped (ledger integrate_suite_skipped) when
+                       the merge is provably tree-equivalent to the branch
+                       tip's already-gated commit, i.e. HEAD is an ancestor of
+                       task/<N> and the recorded tree= matches (ADR-0013) -
+                       commit on green, ledger integrated + merge the shard +
+                       release the worktree; on conflict/red abort only that
+                       merge and ledger integration_failed (exit 0 all
+                       integrated; 1 >=1 integration_failed; 2 usage)
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
@@ -379,8 +385,10 @@ the founding rule (LLMs reason; scripts decide). Pass `--max-parallel N`:
     worktree, so a task's files and its session never contend with a sibling.
   - `integrate` folds the wave back in ascending id order, running the FULL
     suite after EACH individual merge and aborting only the failing merge, so
-    the integration branch is never left red. The task's shard is then merged
-    into the integration ledger (ADR-0011/0012).
+    the integration branch is never left red. The post-merge suite is skipped
+    (ledger `integrate_suite_skipped`) only when the merge is provably
+    tree-equivalent to what green-gate already validated (ADR-0013). The task's
+    shard is then merged into the integration ledger (ADR-0011/0012).
   - Default is `--max-parallel 2`. `--max-parallel 1` is the serial path,
     behavior-preserving (advances via `route-next` instead of `first_incomplete`;
     the ledger sequence is asserted by a regression test) - no worktrees, no

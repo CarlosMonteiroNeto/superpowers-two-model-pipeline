@@ -247,6 +247,33 @@ class TestGreenGate(GateTestBase):
         self.assertEqual(dcalls, "")
 
 
+    def test_ledger_records_validated_tree(self):
+        """green-gate records the tree hash it validated on the commit entry
+        (ADR-0013). `integrate` compares that hash against the merged tree to
+        skip its post-merge suite when the merge is provably tree-equivalent."""
+        repo = self._git_repo()
+        (repo / "lib" / "app.dart").write_text("void main() { print('done'); }\n", encoding="utf-8")
+        ws = self._ws_with_plan()
+        ledger = ws / "ledger.jsonl"
+        r = run_script(
+            "green-gate",
+            ["-m", "Task 3: done", "-l", str(ledger), "-t", "3",
+             "-w", str(ws), "-b", "HEAD"],
+            cwd=repo,
+            env_extra=self.env,
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        entries = [json.loads(line) for line in
+                   ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        commits = [e for e in entries if e.get("type") == "commit"]
+        self.assertEqual(len(commits), 1, entries)
+        head_tree = subprocess.run(
+            [self.env["GIT_BIN"], "rev-parse", "HEAD^{tree}"],
+            cwd=str(repo), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        self.assertEqual(commits[0].get("tree"), head_tree, commits[0])
+
+
 class TestRedGate(GateTestBase):
     def setUp(self):
         super().setUp()

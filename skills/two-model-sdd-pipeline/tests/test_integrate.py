@@ -106,6 +106,19 @@ class IntegrateTest(unittest.TestCase):
     def head(self):
         return git(self.repo, "rev-parse", "HEAD").stdout.strip()
 
+    def task_tree(self, n):
+        return git(self.repo, "rev-parse", "task/%d^{tree}" % n).stdout.strip()
+
+    def make_flutter_gate(self):
+        gate = {"ts": "t", "type": "gate", "task": "-", "summary": "go",
+                "lang": "flutter", "test_cmd": "flutter test",
+                "analyze_cmd": "flutter analyze"}
+        rest = [line for line in (self.ws / "ledger.jsonl").read_text(
+                    encoding="utf-8").splitlines()
+                if line.strip() and not json.loads(line).get("type") == "gate"]
+        (self.ws / "ledger.jsonl").write_text(
+            json.dumps(gate) + "\n" + "\n".join(rest) + "\n", encoding="utf-8")
+
     def branches(self):
         return git(self.repo, "branch", "--list",
                    "--format=%(refname:short)").stdout
@@ -321,6 +334,59 @@ class IntegrateTest(unittest.TestCase):
         self.assertFalse((self.repo / "lib" / "task2.go").exists())
         self.assertNotIn("task/1", self.branches())
         self.assertIn("task/2", self.branches())
+
+    def test_ff_equivalent_merge_skips_green_gate(self):
+        """ADR-0013: when HEAD is an ancestor of task/N and the branch tip's
+        tree equals the tree green-gate already validated (recorded as `tree=`
+        on the shard's commit entry), the post-merge suite is redundant and
+        must be skipped, ledgered `integrate_suite_skipped`; the merge still
+        lands, commits, and releases the worktree."""
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
+        tree = self.task_tree(1)
+        self.shard_append(1, {"ts": "t", "type": "commit", "task": "1",
+                              "summary": "green deadbee", "commits": "deadbee",
+                              "tree": tree})
+        self.make_flutter_gate()
+        argv_log = self._tmp / "green-gate-argv"
+        stub = write_stub(
+            self.stub_dir, "green-gate",
+            "printf '%%s\\n' \"$*\" >> \"%s\"\nexit 0\n" % (argv_log,))
+        r = self.run_integrate(1, GREEN_GATE_BIN=stub,
+                               RUN_GATES_BIN=self.gate_fail())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(argv_log.exists(), "green-gate must not run")
+        skipped = self.entries("integrate_suite_skipped")
+        self.assertEqual(len(skipped), 1, self.ledger())
+        self.assertEqual(str(skipped[0]["task"]), "1")
+        self.assertIn(tree, skipped[0]["summary"])
+        self.assertEqual(len(self.entries("integrated")), 1, self.ledger())
+        self.assertTrue((self.repo / "lib" / "task1.go").is_file())
+        self.assertNotIn("task/1", self.branches())
+
+    def test_non_equivalent_merge_runs_green_gate(self):
+        """The skip is guarded: a recorded gated tree that does not match the
+        branch tip means the suite must run (the safe default)."""
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.shard_complete(1)
+        self.shard_append(1, {"ts": "t", "type": "commit", "task": "1",
+                              "summary": "green deadbee", "commits": "deadbee",
+                              "tree": "0" * 40})
+        self.make_flutter_gate()
+        argv_log = self._tmp / "green-gate-argv"
+        stub = write_stub(
+            self.stub_dir, "green-gate",
+            "printf '%%s\\n' \"$*\" >> \"%s\"\nexit 0\n" % (argv_log,))
+        r = self.run_integrate(1, GREEN_GATE_BIN=stub,
+                               RUN_GATES_BIN=self.gate_fail())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(argv_log.exists(), "green-gate must run")
+        self.assertEqual(argv_log.read_text(encoding="utf-8").strip(),
+                         "--no-commit -w %s -t 1" % self.ws)
+        self.assertNotIn("integrate_suite_skipped",
+                         [e["type"] for e in self.ledger()])
 
     def test_usage_no_args(self):
         r = subprocess.run([BASH, str(SCRIPTS / "integrate")],

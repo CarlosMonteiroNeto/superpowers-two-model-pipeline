@@ -90,6 +90,10 @@ fi
 "$GIT_BIN" add -A
 if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
   sha=$("$GIT_BIN" rev-parse --short HEAD)
+  # The tree this gate just validated. `integrate` compares it against the
+  # merged tree to skip the post-merge suite when the merge is provably
+  # tree-equivalent to this commit (ADR-0013).
+  tree=$("$GIT_BIN" rev-parse 'HEAD^{tree}')
   echo "GREEN-GATE: committed $sha"
   if [ -n "$ledger" ]; then
     # Resolve ledger-append from the two-model scripts dir (the canonical
@@ -101,7 +105,7 @@ if "$GIT_BIN" commit -m "$message" >/dev/null 2>&1; then
     LEDGER_APPEND="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append"
     [ -x "$LEDGER_APPEND" ] || LEDGER_APPEND="$(dirname "$ledger")/ledger-append"
     if [ -x "$LEDGER_APPEND" ]; then
-      "$LEDGER_APPEND" "$ledger" commit "$task_field" "green $sha" "commits=$sha"
+      "$LEDGER_APPEND" "$ledger" commit "$task_field" "green $sha" "commits=$sha" "tree=$tree"
       # H1: advisory interface guard after the commit (flutter path).
       if [ -n "$ws" ] && [ -n "$task" ]; then
         IC="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/interface-check"

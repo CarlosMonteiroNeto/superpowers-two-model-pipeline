@@ -69,6 +69,24 @@ for n in $(printf '%s\n' "$@" | sort -n); do
     continue
   fi
 
+  # Suite-skip precheck (ADR-0013). coder-gate's green-gate already validated
+  # the exact tree of `task/$n`'s tip commit (recorded as `tree=` on the shard's
+  # `commit` entry). When HEAD is an ancestor of task/$n, the --no-ff merge
+  # produces that same tree byte-for-byte, so re-running the suite verifies
+  # content already verified. Every condition must hold; anything uncertain
+  # falls back to running the gate (the safe default). Non-Flutter tasks have no
+  # `tree=` evidence, so they never skip.
+  suite_skip=0
+  if [ -z "$(git status --porcelain 2>/dev/null)" ] \
+     && git merge-base --is-ancestor HEAD "task/$n" 2>/dev/null; then
+    gated_tree=$(grep -E '"type": *"commit"' "$shard" 2>/dev/null \
+      | tail -1 | sed -n 's/.*"tree": *"\([0-9a-fA-F]*\)".*/\1/p' || true)
+    task_tree=$(git rev-parse "task/$n^{tree}" 2>/dev/null || true)
+    if [ -n "$gated_tree" ] && [ "$gated_tree" = "$task_tree" ]; then
+      suite_skip=1
+    fi
+  fi
+
   if ! git merge --no-commit --no-ff "task/$n" >/dev/null 2>&1; then
     git merge --abort 2>/dev/null || true
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" "conflict"
@@ -76,18 +94,24 @@ for n in $(printf '%s\n' "$@" | sort -n); do
     continue
   fi
 
-  gate_rc=0
-  if [ "$lang" = "flutter" ]; then
-    "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "$n" || gate_rc=$?
+  if [ "$suite_skip" = "1" ]; then
+    echo "INTEGRATE: task $n merge is tree-equivalent to its gated commit - skipping the suite"
+    "$script_dir/ledger-append" "$ledger" integrate_suite_skipped "$n" \
+      "ff-equivalent tree=$gated_tree"
   else
-    "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd" || gate_rc=$?
-  fi
+    gate_rc=0
+    if [ "$lang" = "flutter" ]; then
+      "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "$n" || gate_rc=$?
+    else
+      "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd" || gate_rc=$?
+    fi
 
-  if [ "$gate_rc" -ne 0 ]; then
-    git merge --abort 2>/dev/null || true
-    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$gate_rc)"
-    failed=1
-    continue
+    if [ "$gate_rc" -ne 0 ]; then
+      git merge --abort 2>/dev/null || true
+      "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$gate_rc)"
+      failed=1
+      continue
+    fi
   fi
 
   commit_rc=0
