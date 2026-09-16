@@ -62,6 +62,18 @@ class CompareTest(unittest.TestCase):
         md = render_compare_markdown(out)
         self.assertIn("speedup", md.lower())
         self.assertIn("2.40", md)
+        self.assertIn("faster", md)
+
+    def test_markdown_reports_slower_when_speedup_below_one(self):
+        slow_parallel = report(total=1200.0, requests=10, input_t=1, output_t=1,
+                               cache_read=0, cost=0.0)
+        out = compare_reports(report(total=600.0, requests=10, input_t=1,
+                                     output_t=1, cache_read=0, cost=0.0),
+                              slow_parallel)
+        self.assertAlmostEqual(out["speedup"], 0.5, places=2)
+        md = render_compare_markdown(out)
+        self.assertIn("slower", md)
+        self.assertNotIn("faster", md)
 
     def test_zero_parallel_time_is_not_a_division_error(self):
         out = compare_reports(self.serial, report(0.0, 0, 0, 0, 0, 0.0))

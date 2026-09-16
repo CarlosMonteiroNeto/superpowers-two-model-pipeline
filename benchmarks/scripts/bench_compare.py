@@ -76,9 +76,12 @@ def render_compare_markdown(result):
     lines.append("| Cost | %.6f | %.6f | %+.6f |" % (
         result["cost_serial"], result["cost_parallel"], result["cost_delta"]))
     lines.append("")
-    if result["speedup"]:
+    if result["speedup"] and result["speedup"] >= 1:
         lines.append("Parallel was **%.2fx faster** in wall-clock time."
                      % result["speedup"])
+    elif result["speedup"]:
+        lines.append("Parallel was **%.2fx slower** in wall-clock time."
+                     % (1.0 / result["speedup"]))
     else:
         lines.append("No positive parallel wall-clock time recorded; "
                      "speedup not computable.")
