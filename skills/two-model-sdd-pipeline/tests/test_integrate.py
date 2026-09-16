@@ -309,7 +309,10 @@ class IntegrateTest(unittest.TestCase):
                          "--no-commit -w %s -t 1" % self.ws)
         self.assertEqual(len(self.entries("integrated")), 1, self.ledger())
 
-    def test_gate_runs_after_each_merge(self):
+    def test_batch_merges_the_wave_and_gates_once(self):
+        """S2: a >=2-task wave merges all its branches first and runs the full
+        gate exactly ONCE; the common uncoupled case stops paying one suite per
+        merge."""
         self.alloc(1)
         self.alloc(2)
         self.task_commit(1, "lib/task1.go", "package lib\n")
@@ -318,15 +321,67 @@ class IntegrateTest(unittest.TestCase):
         self.shard_complete(2)
         counter = self._tmp / "gate-count"
         stub = write_stub(
-            self.stub_dir, "gate-once",
+            self.stub_dir, "gate-count",
             "n=$(cat \"%s\" 2>/dev/null || echo 0)\n"
             "n=$((n+1))\n"
             "printf '%%s' \"$n\" > \"%s\"\n"
-            "[ \"$n\" -eq 1 ] && exit 0\n"
-            "exit 1\n" % (counter, counter))
+            "exit 0\n" % (counter, counter))
+        r = self.run_integrate(1, 2, RUN_GATES_BIN=stub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(counter.read_text(encoding="utf-8").strip(), "1")
+        self.assertEqual(
+            sorted(str(e["task"]) for e in self.entries("integrated")), ["1", "2"])
+        self.assertTrue((self.repo / "lib" / "task1.go").is_file())
+        self.assertTrue((self.repo / "lib" / "task2.go").is_file())
+        self.assertNotIn("task/1", self.branches())
+        self.assertNotIn("task/2", self.branches())
+
+    def test_batch_gate_red_falls_back_to_per_merge(self):
+        """A red batch gate resets and bisects with the per-merge loop, which
+        still lands both tasks when each merge is individually green."""
+        self.alloc(1)
+        self.alloc(2)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.task_commit(2, "lib/task2.go", "package lib\n")
+        self.shard_complete(1)
+        self.shard_complete(2)
+        counter = self._tmp / "gate-count"
+        stub = write_stub(
+            self.stub_dir, "gate-first-red",
+            "n=$(cat \"%s\" 2>/dev/null || echo 0)\n"
+            "n=$((n+1))\n"
+            "printf '%%s' \"$n\" > \"%s\"\n"
+            "[ \"$n\" -eq 1 ] && exit 1\n"
+            "exit 0\n" % (counter, counter))
+        r = self.run_integrate(1, 2, RUN_GATES_BIN=stub)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(counter.read_text(encoding="utf-8").strip(), "3")
+        self.assertEqual(
+            sorted(str(e["task"]) for e in self.entries("integrated")), ["1", "2"])
+        self.assertNotIn("integration_failed",
+                         [e["type"] for e in self.ledger()])
+        self.assertTrue((self.repo / "lib" / "task1.go").is_file())
+        self.assertTrue((self.repo / "lib" / "task2.go").is_file())
+
+    def test_batch_red_then_bisect_isolates_a_bad_task(self):
+        """The bisect still leaves a genuinely bad task out: when only task 2's
+        tree is red, task 1 integrates and task 2 is integration_failed."""
+        self.alloc(1)
+        self.alloc(2)
+        self.task_commit(1, "lib/task1.go", "package lib\n")
+        self.task_commit(2, "lib/task2.go", "package lib\n")
+        self.shard_complete(1)
+        self.shard_complete(2)
+        counter = self._tmp / "gate-count"
+        stub = write_stub(
+            self.stub_dir, "gate-task2-red",
+            "n=$(cat \"%s\" 2>/dev/null || echo 0)\n"
+            "n=$((n+1))\n"
+            "printf '%%s' \"$n\" > \"%s\"\n"
+            "[ -f lib/task2.go ] && exit 1\n"
+            "exit 0\n" % (counter, counter))
         r = self.run_integrate(1, 2, RUN_GATES_BIN=stub)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertEqual(counter.read_text(encoding="utf-8").strip(), "2")
         pairs = [(e["type"], str(e["task"])) for e in self.ledger()]
         self.assertIn(("integrated", "1"), pairs)
         self.assertIn(("integration_failed", "2"), pairs)

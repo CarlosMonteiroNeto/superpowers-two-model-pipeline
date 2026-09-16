@@ -243,16 +243,20 @@ skills/two-model-sdd-pipeline/scripts/:
                        branches until the task is APPROVED or blocked; runs
                        in the serial root or inside a wave worktree (exit 0
                        complete; 1 blocked/escalated; 2 usage)
-  integrate            script-owned serial integration gate: per task, merge
-                       task/<N> (ascending id), run the FULL suite after each
-                       merge - skipped (ledger integrate_suite_skipped) when
-                       the merge is provably tree-equivalent to the branch
-                       tip's already-gated commit, i.e. HEAD is an ancestor of
-                       task/<N> and the recorded tree= matches (ADR-0013) -
-                       commit on green, ledger integrated + merge the shard +
-                       release the worktree; on conflict/red abort only that
-                       merge and ledger integration_failed (exit 0 all
-                       integrated; 1 >=1 integration_failed; 2 usage)
+  integrate            script-owned integration gate: require every task's
+                       shard to hold task_complete (else integration_failed
+                       not approved). A wave of >=2 approved tasks is merged
+                       first and gated ONCE (S2): green commits once, folds
+                       each shard and releases each worktree; red
+                       git reset --hard the batch and falls back to the
+                       per-merge loop, which IS the bisect (merge one, gate,
+                       abort+integration_failed the bad one, keep going). A
+                       one-task wave takes the per-merge path, which also
+                       carries the ADR-0013 skip (ledger
+                       integrate_suite_skipped) when the merge is provably
+                       tree-equivalent to the branch tip's gated commit
+                       (exit 0 all integrated; 1 >=1 integration_failed;
+                       2 usage)
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
@@ -335,7 +339,9 @@ skills/two-model-sdd-pipeline/scripts/:
   final-gate           pre-closing: all tasks complete + no unresolved
                        verdicts + no blocking parked (structured
                        PARKED_SEVERITY) + tests/analyze green (skipped when
-                       the tree is unchanged since the last green commit;
+                       the tree is unchanged since the last green checkpoint;
+                       HEAD equal to the newest commit OR integrated ledger
+                       sha, so the skip also fires after a wave merge;
                        exit 0 ready; 1 blockers; 2 usage)
   doc-check            pipeline files changed -> READMEs must change too
                        (exit 0 OK; 1 violation; 2 usage)
@@ -405,12 +411,13 @@ the founding rule (LLMs reason; scripts decide). Pass `--max-parallel N`:
   - `run-pipeline` prefixes each background task's output with `[task N]`
     (the heartbeat), so a wave shows progress instead of going silent until
     `wait` returns.
-  - `integrate` folds the wave back in ascending id order, running the FULL
-    suite after EACH individual merge and aborting only the failing merge, so
-    the integration branch is never left red. The post-merge suite is skipped
-    (ledger `integrate_suite_skipped`) only when the merge is provably
-    tree-equivalent to what green-gate already validated (ADR-0013). The task's
-    shard is then merged into the integration ledger (ADR-0011/0012).
+  - `integrate` merges the whole wave first and gates ONCE (S2); on red it
+    resets and bisects with the per-merge loop, which aborts only the failing
+    merge, so the integration branch is never left red. In the per-merge path
+    the suite is skipped (ledger `integrate_suite_skipped`) only when the merge
+    is provably tree-equivalent to what green-gate already validated
+    (ADR-0013). Each task's shard is then merged into the integration ledger
+    (ADR-0011/0012).
   - Default is `--max-parallel 2`. `--max-parallel 1` is the serial path,
     behavior-preserving (advances via `route-next` instead of `first_incomplete`;
     the ledger sequence is asserted by a regression test) - no worktrees, no

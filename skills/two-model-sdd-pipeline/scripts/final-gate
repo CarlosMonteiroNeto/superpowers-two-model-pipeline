@@ -8,9 +8,9 @@
 #   3. No task_complete carries a blocking parked finding, judged by the
 #      structured PARKED_SEVERITY field (Critical/Important), never by prose.
 #   4. The test and analyze commands recorded in the `gate` ledger entry both
-#      succeed - SKIPPED when the tree is unchanged since the last green task
-#      commit (clean `git status` + HEAD == last ledger `commit` sha): the
-#      last task's gates already proved this tree.
+#      succeed - SKIPPED when the tree is unchanged since the last green
+#      checkpoint (clean `git status` + HEAD == the newest `commit` or
+#      `integrated` ledger sha): the last gate already proved this tree.
 #   5. No task's newest `integration_failed` postdates its completion
 #      (`task_complete`/`integrated`): the merge is still unresolved.
 #   6. Every `worktree_alloc` has a matching `worktree_release`: no wave is
@@ -53,16 +53,19 @@ emit() {
   blockers=$((blockers + 1))
 }
 
-# True when the working tree provably matches the last green task commit:
-# clean status AND HEAD resolving to the last ledger `commit` sha. Anything
-# uncertain (not a repo, no commit entries) returns false - re-run instead.
+# True when the working tree provably matches the last green checkpoint:
+# clean status AND HEAD resolving to the newest `commit` (serial path) or
+# `integrated` (wave path) ledger sha. After integration HEAD is a merge commit,
+# so the `commit` sha alone would never match and the re-run would never be
+# skipped. Anything uncertain (not a repo, no such entries) returns false -
+# re-run instead.
 tree_unchanged_since_green() {
   [ -z "$(git status --porcelain 2>/dev/null)" ] || return 1
   full_head=$(git rev-parse HEAD 2>/dev/null) || return 1
-  last_commit=$(grep -E '"type": *"commit"' "$ledger" 2>/dev/null \
+  last_green=$(grep -E '"type": *"(commit|integrated)"' "$ledger" 2>/dev/null \
     | tail -1 | sed -n 's/.*"commits": *"\([0-9a-fA-F]*\)".*/\1/p')
-  [ -n "$last_commit" ] || return 1
-  resolved=$(git rev-parse --verify "$last_commit" 2>/dev/null) || return 1
+  [ -n "$last_green" ] || return 1
+  resolved=$(git rev-parse --verify "$last_green" 2>/dev/null) || return 1
   [ "$resolved" = "$full_head" ]
 }
 

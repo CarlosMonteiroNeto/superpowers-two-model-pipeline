@@ -187,6 +187,35 @@ class TestFinalGate(FinalGateBase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("skipping", r.stdout + r.stderr)
 
+    def test_unchanged_tree_skips_rerun_after_integration(self):
+        """After a wave, HEAD is a merge commit and the newest green entry is
+        `integrated`, not `commit`; the skip must still fire (S2)."""
+        repo, _ = self._git_repo()
+        base = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                              cwd=str(repo), capture_output=True, text=True,
+                              check=True).stdout.strip()
+        subprocess.run(["git", "checkout", "-q", "-b", "feature"], cwd=str(repo), check=True)
+        (repo / "other.txt").write_text("y\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=str(repo), check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "task 1"], cwd=str(repo), check=True)
+        subprocess.run(["git", "checkout", "-q", base], cwd=str(repo), check=True)
+        subprocess.run(["git", "merge", "-q", "--no-ff", "-m", "merge task/1", "feature"],
+                       cwd=str(repo), check=True)
+        merge_sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=str(repo),
+            capture_output=True, text=True, check=True).stdout.strip()
+        self.write_ledger([
+            self._new_keys_gate(),
+            self.review(1, "APPROVED"), self.complete(1),
+            {"ts": "t", "type": "integrated", "task": "1", "summary": "merged",
+             "commits": merge_sha, "sha": merge_sha},
+        ])
+        self.env["STUB_TEST_EXIT"] = "1"
+        self.env["STUB_ANALYZE_EXIT"] = "1"
+        r = self._run_in(repo)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("skipping", r.stdout + r.stderr)
+
     def test_changed_tree_runs_commands(self):
         """Dirty tree: the re-run happens (and a failing command blocks)."""
         repo, sha = self._git_repo()

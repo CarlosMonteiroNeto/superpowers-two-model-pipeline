@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Script-owned serial integration gate: fold each parallel task branch into the
-# integration HEAD one at a time, running the FULL gate after every merge. The
-# verdict is an exit code, never LLM judgment. On conflict or a red gate the
-# merge is aborted and nothing of that task lands, so a bad task can never
-# poison the wave - the remaining tasks still integrate.
+# Script-owned integration gate: fold a wave's task branches into the
+# integration HEAD and gate the result. The verdict is an exit code, never LLM
+# judgment.
+#
+# Strategy (S2). A wave of >=2 approved tasks is merged FIRST and gated ONCE:
+# merging all and running the full suite a single time is the common case, where
+# the per-task suites were paying for a coupling that usually is not there. If
+# the batch gate (or a merge) fails, the batch is reset and the per-merge loop
+# runs - that loop IS the bisect: it merges and gates one task at a time, so a
+# single bad task can never poison the wave and the remaining tasks still
+# integrate. A wave of one approved task takes the per-merge path directly,
+# which also carries the ADR-0013 provably-equivalent suite skip.
 #
 # Usage: integrate WORKSPACE TASK [TASK...]
 #   WORKSPACE  the integration pipeline workspace (holds ledger.jsonl + plan)
@@ -13,26 +20,23 @@
 #             2 = usage.
 #
 # Reads `lang`/`test_cmd`/`analyze_cmd` from the first `gate` ledger entry
-# (same shape as final-gate). lang=flutter runs
-# `green-gate --no-commit -w WS -t N`; anything else runs
-# `run-gates WS TEST_CMD ANALYZE_CMD`. After a green commit the task's ledger
-# shard is folded in via ledger-merge (a non-zero result is NOT swallowed: a
-# lost shard entry is a silent loss) and the worktree/branch is released.
+# (same shape as final-gate). lang=flutter runs the Flutter gate; anything else
+# runs `run-gates WS TEST_CMD ANALYZE_CMD`. The batch gate deliberately runs
+# WITHOUT the scope gate: each task's coder-gate already proved its own scope in
+# its worktree, and a single keep-discard pass could only judge one task's
+# `touches`.
 #
 # A task is integrated only when its worktree shard proves the task was
-# approved: the shard must contain a `task_complete`. coder-gate commits
-# BEFORE the revisor runs, so a post-commit failure (interrupted revisor
-# dispatch, escalation, stuck detector) leaves a committed-but-unapproved
+# approved: the shard must contain a `task_complete`. coder-gate commits BEFORE
+# the revisor runs, so a post-commit failure leaves a committed-but-unapproved
 # branch; an un-approved shard is ledgered `integration_failed N not approved`
-# and skipped - never merged, never released (the worktree keeps the only
-# debug copy). run-pipeline's bounded recovery then re-runs that task, which
-# is meaningful precisely because it was never approved.
+# and skipped - never merged, never released (the worktree keeps the only debug
+# copy).
 #
 # Resource profile: dispatch none; git merges + commits on the integration
 # branch; ledger writes (integration global + per-task shard merge); subprocess:
-# run-gates (generic) or green-gate --no-commit (flutter) once per task, plus
-# ledger-merge and worktree-release per task; wall-clock = one full gate suite
-# per task, serialized.
+# one full gate suite per wave (batch) or one per task (fallback), plus
+# ledger-merge and worktree-release per task.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
@@ -56,29 +60,66 @@ analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)"
 [ -n "$analyze_cmd" ] || analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
 lang=$(printf '%s' "$gate_line" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 
-failed=0
+slug="${WS_SLUG:-$(basename "$ws")}"
 
-for n in $(printf '%s\n' "$@" | sort -n); do
-  shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/${WS_SLUG:-$(basename "$ws")}/ledger.jsonl"
-  # Approval precheck: only a shard carrying `task_complete` proves the
-  # revisor approved the task. Merging (and releasing) an un-approved branch
-  # would ship unreviewed work and destroy the only debug copy.
-  if ! grep -qE '"type": *"task_complete"' "$shard" 2>/dev/null; then
-    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "not approved"
-    failed=1
-    continue
+shard_of() { printf '%s' "$root/.superpowers/two-model/worktrees/task-$1/.superpowers/two-model/$slug/ledger.jsonl"; }
+
+approved() { grep -qE '"type": *"task_complete"' "$(shard_of "$1")" 2>/dev/null; }
+
+# run_gate [TASK] - a TASK id enables the Flutter scope gate (single-task path);
+# no id means the batch gate, which this script's contract explains.
+run_gate() {
+  local t="${1:-}" rc=0
+  if [ "$lang" = "flutter" ]; then
+    if [ -n "$t" ]; then
+      "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "$t" || rc=$?
+    else
+      "$GREEN_GATE_BIN" --no-commit || rc=$?
+    fi
+  else
+    "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd" || rc=$?
   fi
+  return "$rc"
+}
 
-  # Suite-skip precheck (ADR-0013). coder-gate's green-gate already validated
-  # the exact tree of `task/$n`'s tip commit (recorded as `tree=` on the shard's
-  # `commit` entry). When HEAD is an ancestor of task/$n, the --no-ff merge
-  # produces that same tree byte-for-byte, so re-running the suite verifies
-  # content already verified. Every condition must hold; anything uncertain
-  # falls back to running the gate (the safe default). Non-Flutter tasks have no
-  # `tree=` evidence, so they never skip.
+# ledger_and_release TASK SHA - record the integration, fold the shard, release.
+ledger_and_release() {
+  local n=$1 sha=$2 shard rc=0
+  shard="$(shard_of "$n")"
+  "$script_dir/ledger-append" "$ledger" integrated "$n" "merged $sha" "commits=$sha" "sha=$sha"
+  rc=0
+  "$script_dir/ledger-merge" "$ws" "$shard" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "INTEGRATE: ledger-merge failed for task $n" >&2
+    # Do NOT release: the worktree holds the only copy of the lost shard.
+    return 1
+  fi
+  rc=0
+  "$script_dir/worktree-release" "$ws" "$n" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "INTEGRATE: worktree-release failed for task $n" >&2
+    return 1
+  fi
+  return 0
+}
+
+# merge_one TASK - the per-merge path: merge, (skip or) gate, commit, record.
+# Carries the ADR-0013 skip. Returns non-zero (and ledgers integration_failed)
+# on conflict / red gate / failed commit.
+merge_one() {
+  local n=$1 shard gated_tree task_tree suite_skip mrc
+
+  # Suite-skip precheck (ADR-0013): coder-gate's green-gate validated the exact
+  # tree of task/N's tip (recorded as `tree=` on the shard's `commit` entry).
+  # When HEAD is an ancestor of task/N, the --no-ff merge reproduces that tree
+  # byte-for-byte, so the suite would verify content already verified. Every
+  # condition must hold; anything uncertain runs the gate (the safe default).
+  # Non-Flutter tasks have no `tree=` evidence, so they never skip.
   suite_skip=0
+  gated_tree=""
   if [ -z "$(git status --porcelain 2>/dev/null)" ] \
      && git merge-base --is-ancestor HEAD "task/$n" 2>/dev/null; then
+    shard="$(shard_of "$n")"
     gated_tree=$(grep -E '"type": *"commit"' "$shard" 2>/dev/null \
       | tail -1 | sed -n 's/.*"tree": *"\([0-9a-fA-F]*\)".*/\1/p' || true)
     task_tree=$(git rev-parse "task/$n^{tree}" 2>/dev/null || true)
@@ -90,8 +131,7 @@ for n in $(printf '%s\n' "$@" | sort -n); do
   if ! git merge --no-commit --no-ff "task/$n" >/dev/null 2>&1; then
     git merge --abort 2>/dev/null || true
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" "conflict"
-    failed=1
-    continue
+    return 1
   fi
 
   if [ "$suite_skip" = "1" ]; then
@@ -99,49 +139,76 @@ for n in $(printf '%s\n' "$@" | sort -n); do
     "$script_dir/ledger-append" "$ledger" integrate_suite_skipped "$n" \
       "ff-equivalent tree=$gated_tree"
   else
-    gate_rc=0
-    if [ "$lang" = "flutter" ]; then
-      "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "$n" || gate_rc=$?
-    else
-      "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd" || gate_rc=$?
-    fi
-
-    if [ "$gate_rc" -ne 0 ]; then
+    local grc=0
+    run_gate "$n" || grc=$?
+    if [ "$grc" -ne 0 ]; then
       git merge --abort 2>/dev/null || true
-      "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$gate_rc)"
-      failed=1
-      continue
+      "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$grc)"
+      return 1
     fi
   fi
 
-  commit_rc=0
-  git commit --no-edit >/dev/null 2>&1 || commit_rc=$?
-  if [ "$commit_rc" -ne 0 ]; then
+  mrc=0
+  git commit --no-edit >/dev/null 2>&1 || mrc=$?
+  if [ "$mrc" -ne 0 ]; then
     git merge --abort 2>/dev/null || true
-    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "commit (rc=$commit_rc)"
-    failed=1
-    continue
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "commit (rc=$mrc)"
+    return 1
   fi
-  sha=$(git rev-parse --short HEAD)
-  "$script_dir/ledger-append" "$ledger" integrated "$n" "merged $sha" "commits=$sha" "sha=$sha"
+  ledger_and_release "$n" "$(git rev-parse --short HEAD)"
+}
 
-  merge_rc=0
-  "$script_dir/ledger-merge" "$ws" "$shard" || merge_rc=$?
-  if [ "$merge_rc" -ne 0 ]; then
-    echo "INTEGRATE: ledger-merge failed for task $n" >&2
-    failed=1
-    # Do NOT release: the worktree holds the only copy of the lost shard
-    # (gitignored/untracked), so removing it would destroy the recovery data.
-    continue
-  fi
-
-  rel_rc=0
-  "$script_dir/worktree-release" "$ws" "$n" || rel_rc=$?
-  if [ "$rel_rc" -ne 0 ]; then
-    echo "INTEGRATE: worktree-release failed for task $n" >&2
+failed=0
+ordered=$(printf '%s\n' "$@" | sort -n)
+todo=""
+for n in $ordered; do
+  # Approval precheck: only a shard carrying `task_complete` proves the revisor
+  # approved the task. Merging (and releasing) an un-approved branch would ship
+  # unreviewed work and destroy the only debug copy.
+  if approved "$n"; then
+    todo="$todo $n"
+  else
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "not approved"
     failed=1
   fi
 done
+todo=${todo# }
+
+count=$(printf '%s\n' $todo | grep -c . || true)
+[ "$count" -ge 1 ] || { [ "$failed" -eq 0 ] || exit 1; echo "INTEGRATE: wave integrated"; exit 0; }
+
+if [ "$count" -eq 1 ]; then
+  merge_one "$todo" || failed=1
+else
+  # Batch: merge the whole wave, gate once, and fall back to the per-merge
+  # bisect only when the combined tree is bad.
+  base=$(git rev-parse HEAD)
+  batch_ok=1
+  batch_shas=()
+  for n in $todo; do
+    if ! git merge --no-ff -m "merge task/$n" "task/$n" >/dev/null 2>&1; then
+      git merge --abort 2>/dev/null || true
+      batch_ok=0
+      break
+    fi
+    batch_shas+=("$(git rev-parse --short HEAD)")
+  done
+
+  if [ "$batch_ok" = "1" ] && run_gate; then
+    i=0
+    for n in $todo; do
+      ledger_and_release "$n" "${batch_shas[$i]}" || failed=1
+      i=$((i + 1))
+    done
+  else
+    # Reset the batch and bisect with the per-merge loop.
+    git reset --hard "$base" >/dev/null 2>&1 || true
+    echo "INTEGRATE: batch gate failed - falling back to per-merge integration"
+    for n in $todo; do
+      merge_one "$n" || failed=1
+    done
+  fi
+fi
 
 [ "$failed" -eq 0 ] || exit 1
 echo "INTEGRATE: wave integrated"
