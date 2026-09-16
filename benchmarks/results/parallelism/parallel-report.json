@@ -1,0 +1,341 @@
+{
+  "side": "parallel",
+  "workspace": "C:\\Users\\CARLOS\\superpowers-two-model-pipeline\\.superpowers\\bench\\parallelism\\parallel\\fixture\\.superpowers\\two-model\\2026-09-16-parallelism-benchmark-plan",
+  "total_wall_clock_s": 2025.0,
+  "cache_hit_pct": 70.6,
+  "uncached_tokens": 34476,
+  "totals": {
+    "input": 29025,
+    "output": 1874,
+    "reasoning": 3577,
+    "cache_read": 69632,
+    "cache_write": 0,
+    "cost": 0.007833246,
+    "requests": 5,
+    "span_s": 35.778
+  },
+  "roles": {
+    "coder": {
+      "input": 0,
+      "output": 0,
+      "reasoning": 0,
+      "cache_read": 0,
+      "cache_write": 0,
+      "cost": 0.0,
+      "requests": 0,
+      "span_s": 0.0
+    },
+    "reviewer": {
+      "input": 0,
+      "output": 0,
+      "reasoning": 0,
+      "cache_read": 0,
+      "cache_write": 0,
+      "cost": 0.0,
+      "requests": 0,
+      "span_s": 0.0
+    },
+    "director": {
+      "input": 29025,
+      "output": 1874,
+      "reasoning": 3577,
+      "cache_read": 69632,
+      "cache_write": 0,
+      "cost": 0.007833246,
+      "requests": 5,
+      "span_s": 35.778
+    }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 2,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 3,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 1.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 4,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 5,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 6,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 7,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 8,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 9,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 1.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    },
+    {
+      "id": 10,
+      "status": "APPROVED",
+      "correction_rounds": 0,
+      "brief_s": 0.0,
+      "gate_s": null,
+      "roles": {
+        "coder": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        },
+        "reviewer": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost": 0.0,
+          "requests": 0,
+          "span_s": 0.0
+        }
+      }
+    }
+  ]
+}
