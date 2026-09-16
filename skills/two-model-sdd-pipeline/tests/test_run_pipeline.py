@@ -612,6 +612,36 @@ class TestRunPipelineFlow(RunPipelineTestBase):
             if wt_root.exists() else []
         self.assertEqual(leftovers, [])
 
+    def test_wave_resume_reuses_an_existing_worktree(self):
+        """A re-run after a crash/block must REUSE an already-allocated task
+        worktree (worktree-alloc exit 1 still prints WORKTREE=/WS=) instead of
+        blocking on it - the same tolerance the bounded-recovery path has."""
+        tasks = [
+            {"id": 1, "title": "A", "summary": "Add a.", "spec_refs": ["s1"],
+             "touches": ["lib/a.go"], "depends_on": [],
+             "acceptance": ["a works"]},
+            {"id": 2, "title": "B", "summary": "Add b.", "spec_refs": ["s1"],
+             "touches": ["lib/b.go"], "depends_on": [],
+             "acceptance": ["b works"]},
+        ]
+        self.write_plan(tasks)
+        self.write_gate()
+        blocking = write_stub(self.stub_dir, "red-gate-block", "exit 1\n")
+        r1 = self.run_pipeline(
+            "--no-push", "--max-parallel", "2",
+            RED_GATE_BIN=blocking, DISPATCH_BIN=self.fake_dispatch(),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertNotEqual(r1.returncode, 0, r1.stdout + r1.stderr)
+        wt = self.repo / ".superpowers" / "two-model" / "worktrees" / "task-1"
+        self.assertTrue(wt.exists(), "fixture must leave task 1 allocated")
+        r2 = self.run_pipeline(
+            "--no-push", "--max-parallel", "2",
+            RED_GATE_BIN=blocking, DISPATCH_BIN=self.fake_dispatch(),
+            LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
+        )
+        self.assertNotIn("BLOCKED - worktree-alloc", r2.stdout + r2.stderr)
+
     def test_wave_task_run_receives_worktree_tracked_plan(self):
         """Item 2: the wave task-run must be handed the WORKTREE's tracked
         plan path, not the worktree's gitignored workspace plan.json. Only

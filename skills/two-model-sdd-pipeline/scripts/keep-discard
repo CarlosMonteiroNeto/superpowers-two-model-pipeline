@@ -6,13 +6,20 @@ approach-soundness judgment for Agente diretor when the gate says DISCARD.
 
 Mechanical DISCARD triggers (first match wins):
   1. No partial work since HEAD (empty diff, nothing staged, no untracked).
-  2. Any changed file outside this task's `touches` (plan.json), EXCEPT a
-     test file that is newly authored (not present in HEAD). A modified
-     committed test file is tampering and stays a violation.
+  2. Any changed file outside this task's `touches` (plan.json), EXCEPT:
+     - a test file that is newly authored (not present in HEAD); a modified
+       committed test file is tampering and stays a violation;
+     - a code-generated file (`.freezed.dart`, `.g.dart`, `.gr.dart`,
+       `.gen.dart`, `.mocks.dart`): build output, not authored scope, and a
+       whole-project generator run rewrites every drifted generated file;
+     - the tracked plan (`docs/superpowers/plans/*.json`): pipeline state the
+       diretor edits during arbitration, never a task's authored scope.
 
 The test exemption shares `is_test_path` with brief-scaffold: tests are
 defined as `changed - touches`, so every honest task writes files outside
 `touches`. Without the exemption the gate would DISCARD every task (H3).
+The generated/plan exemptions share `is_generated_path` with the same module
+(C3).
 
 Usage: keep-discard WORKSPACE TASK     (run from the repository root)
 Exit codes: 0 = KEEP, 1 = DISCARD (out of scope / tampered), 2 = usage /
@@ -25,7 +32,12 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pathclass import is_test_path  # noqa: E402
+from pathclass import is_generated_path, is_test_path  # noqa: E402
+
+
+def is_plan_path(path):
+    """The tracked plan file(s): pipeline state, not task scope."""
+    return path.startswith("docs/superpowers/plans/") and path.endswith(".json")
 
 
 def git(*args):
@@ -83,6 +95,12 @@ def main():
         # A newly authored test file is expected (tests are changed - touches);
         # a modified committed test file is tampering, not authoring.
         if is_test_path(c) and not in_head(c):
+            continue
+        # Build output (codegen): derived, not authored scope (C3).
+        if is_generated_path(c):
+            continue
+        # The tracked plan: pipeline state the diretor edits (C3).
+        if is_plan_path(c):
             continue
         out_of_scope.append(c)
     if out_of_scope:

@@ -204,7 +204,9 @@ skills/two-model-sdd-pipeline/scripts/:
                        [--no-push] [--max-parallel N]; drives the plan
                        serially (N == 1) or in plan-derived waves (N > 1,
                        default 2) to closing -> push+PR. Invokable anywhere,
-                       no estrategista loop
+                       no estrategista loop. Resumable: an already-allocated
+                       task worktree (worktree-alloc exit 1, which still
+                       reports the paths) is reused, not a blocker
   touches-overlap      declared-touches pairwise disjointness decider (two
                        tasks share a wave only when their touches are
                        disjoint; exit 0 disjoint; 1 overlap; 2 usage)
@@ -314,8 +316,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        exit 1 "arbitration did not resolve"; scope_violation
                        escalates; task count from JSON
   keep-discard         the C2 scope gate: KEEP when partial work is in
-                       touches (newly authored tests exempt); out-of-scope
-                       or tampered -> DISCARD (exit 0/1/2/3)
+                       touches (newly authored tests exempt); build output
+                       (.freezed.dart/.g.dart/.gr.dart/.gen.dart/.mocks.dart)
+                       and the tracked plan (docs/superpowers/plans/*.json)
+                       are exempt too - codegen is derived, not authored
+                       scope (C3, ADR-0014); out-of-scope or tampered ->
+                       DISCARD (exit 0/1/2/3)
   interface-check      diff touched a file another task consumes; wired
                        post-commit as the advisory interface_touched entry
                        (exit 0 clean; 1 interface changed; 2 usage)

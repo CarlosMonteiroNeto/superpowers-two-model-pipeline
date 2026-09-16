@@ -93,6 +93,35 @@ class TestKeepDiscard(KeepDiscardBase):
         r = self.run_it()
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
+    def test_generated_build_output_is_exempt(self):
+        """C3: codegen output is derived, not authored scope. A whole-project
+        generator run rewrites every drifted .freezed.dart/.g.dart; those must
+        not DISCARD a task that legitimately changed a generated source."""
+        (self.repo / "src" / "a.dart").write_text("void a() { x(); }\n", encoding="utf-8")
+        (self.repo / "src" / "a.freezed.dart").write_text("// regen\n", encoding="utf-8")
+        (self.repo / "src" / "b.g.dart").write_text("// regen\n", encoding="utf-8")
+        r = self.run_it()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_committed_generated_output_is_exempt(self):
+        """A regenerated committed generated file is exempt too - the drift is
+        the generator version, not the task's authored scope."""
+        (self.repo / "src" / "c.g.dart").write_text("// v1\n", encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "add generated")
+        (self.repo / "src" / "c.g.dart").write_text("// v2\n", encoding="utf-8")
+        r = self.run_it()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_tracked_plan_change_is_exempt(self):
+        """C3: the tracked plan is pipeline state the diretor edits during
+        arbitration; it is never a task's authored scope."""
+        d = self.repo / "docs" / "superpowers" / "plans"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "plan.json").write_text('{"feature":"f"}\n', encoding="utf-8")
+        r = self.run_it()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_missing_plan_is_usage(self):
         (self.ws / "plan.json").unlink()
         r = self.run_it()

@@ -25,3 +25,21 @@ def is_test_path(path):
         or path.endswith("_test.py") or path.startswith("test_")
         or ".test." in path or ".spec." in path
     )
+
+
+def is_generated_path(path):
+    """Build output (codegen), not authored scope.
+
+    A task that changes a code-generated source (e.g. a Freezed model) must
+    regenerate its outputs, and a whole-project generator run rewrites every
+    generated file whose committed copy drifted from the installed generator
+    version. Those are derived artifacts, so `keep-discard` exempts them; the
+    revisor still reviews the regenerated diff.
+    """
+    return (
+        path.endswith(".freezed.dart")
+        or path.endswith(".g.dart")
+        or path.endswith(".gr.dart")
+        or path.endswith(".gen.dart")
+        or path.endswith(".mocks.dart")
+    )
