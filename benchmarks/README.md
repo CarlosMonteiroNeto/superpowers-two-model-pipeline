@@ -133,6 +133,29 @@ overlap.
 Full artifacts: `results/parallelism/{serial-best,parallel-best}-report.{md,json}`
 and `compare-best.{md,json}`.
 
+## Lane-width sweep (same engine, same agent defs)
+
+Same engine (`origin/main` = `dda0b0a`) and same agent definitions on each
+side; only the wave width differs.
+
+| Lanes | Waves | Wall-clock | Requests | Uncached tokens | Cost |
+|---|---|---|---|---|---|
+| 1 (serial) | 10 | 1993.8 s | 252 | 510,444 | 0.129344 |
+| 5 | 2 | 820.6 s | 233 | 440,584 | 0.112718 |
+
+1 -> 5 lanes is **2.43x** faster. (The 2-lane row elsewhere in this file used
+an earlier agent-def revision, so treat it as indicative only.)
+
+Denial-churn note: adding the platform-generic read-only allowances took the
+serial run's permission denials from 47 to 17 (parallel 27 -> 12) but barely
+moved wall-clock (2122.0 -> 1993.8 s). So the denial churn was **not** the
+dominant cost — the earlier 1395 -> 2122 regression is mostly provider-latency
+variance across a 10-task serial run (one reviewer call alone was 357.8 s),
+plus more per-task steps. Single runs are noisy; attribute with repeats.
+
+Full artifacts: `results/parallelism/{serial-1lane,parallel-5lane}-report.{md,json}`
+and `compare-serial-1lane-vs-parallel-5lane.{md,json}`.
+
 ## Non-interactive by construction
 
 The benchmark must not pause for approvals, or the timing is wrong:

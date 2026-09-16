@@ -1,0 +1,20 @@
+{
+  "serial_label": "serial-1lane",
+  "parallel_label": "parallel-5lane",
+  "serial_wall_clock_s": 1993.812,
+  "parallel_wall_clock_s": 820.608,
+  "speedup": 2.43,
+  "wall_clock_delta_s": -1173.204,
+  "requests_serial": 252,
+  "requests_parallel": 233,
+  "requests_delta": -19,
+  "uncached_tokens_serial": 510444,
+  "uncached_tokens_parallel": 440584,
+  "uncached_tokens_delta": -69860,
+  "cache_hit_pct_serial": 91.5,
+  "cache_hit_pct_parallel": 91.5,
+  "cache_hit_delta_pct": 0.0,
+  "cost_serial": 0.12934442399999999,
+  "cost_parallel": 0.112718106,
+  "cost_delta": -0.016626
+}
