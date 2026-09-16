@@ -40,7 +40,11 @@ the approval gate never does.
   ledger (never this session).
 - `depends_on`: the task ids that must be `task_complete` before this task may
   run (empty array = no predecessor). `touches`: the exclusive file set; tasks
-  with overlapping `touches` never share a wave.
+  with overlapping `touches` never share a wave. Because of that, a file whose
+  change is really a *dependency ordering* (a shared router/DI registration,
+  `pubspec.yaml`, a lockfile) belongs in `depends_on`, never in `touches`:
+  listing one file in two tasks' `touches` silently serializes the whole plan.
+  Reserve `touches` for files only one task edits.
 - **Interface design is governed by `apple-design`.** When Phase 1 design touches
   a user interface (screens, components, gestures, motion, materials,
   typography), invoke the vendored `apple-design` skill

@@ -61,6 +61,27 @@ class WaveNextTest(unittest.TestCase):
         r = self.run_it(2)
         self.assertEqual(r.stdout.split(), ["RUN", "1"])
 
+    def test_overlap_deferral_reason_is_printed(self):
+        """A collapsed wave must be observable: the scheduler says which task
+        it dropped and which file caused it."""
+        self.write(self.tasks((1, ["shared"], []), (2, ["shared"], [])), [])
+        r = self.run_it(2)
+        self.assertEqual(r.stdout.split(), ["RUN", "1"])
+        self.assertIn("WAVE-DEFER: task 2 deferred", r.stderr)
+        self.assertIn("shared", r.stderr)
+
+    def test_fewest_touches_first_yields_a_larger_wave(self):
+        """Selection is fewest-touches-first: a wide low-id task must not wall
+        out a schedulable pair. Lowest-id-first would emit only task 1 here;
+        tasks 2 and 3 are disjoint and should run together."""
+        self.write([
+            {"id": 1, "touches": ["a", "b"], "depends_on": []},
+            {"id": 2, "touches": ["a"], "depends_on": []},
+            {"id": 3, "touches": ["b"], "depends_on": []},
+        ], [])
+        r = self.run_it(3)
+        self.assertEqual(r.stdout.split(), ["RUN", "2", "RUN", "3"])
+
     def test_deferred_task_picked_once_dependency_done(self):
         self.write(self.tasks((1, ["a"], []), (2, ["b"], [1])), self.done(1))
         r = self.run_it(2)

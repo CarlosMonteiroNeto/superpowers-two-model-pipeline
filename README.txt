@@ -214,8 +214,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        merged ledger, prints FINAL_REVIEW or one RUN <id>
                        per ready, touches-disjoint task (capped at
                        MAX_PARALLEL, default 2); a corrective/open-episode
-                       task is emitted alone (exit 0 emitted/FINAL_REVIEW;
-                       1 WAVE_EMPTY blocked; 2 usage)
+                       task is emitted alone. Selects fewest-touches-first
+                       and prints each deferred task's conflicting files to
+                       stderr (WAVE-DEFER), so a collapsed wave is visible
+                       (exit 0 emitted/FINAL_REVIEW; 1 WAVE_EMPTY blocked;
+                       2 usage)
   ledger-merge         fold per-worktree ledger shards into the integration
                        ledger through ledger-append (skips gate entries and
                        content-identical duplicates; rebuilds partitions;
@@ -226,7 +229,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        parallel task, seed its workspace (plan.json + a
                        ledger shard with only the branch gate entry), ledger
                        worktree_alloc, print WORKTREE=/WS= (exit 0 allocated;
-                       1 already allocated - still prints the paths; 2 usage)
+                       1 already allocated - still prints the paths; 2 usage).
+                       Best-effort warms the new tree (copies pubspec.lock +
+                       .dart_tool from the integration tree, then
+                       pub get --offline) so the first gate pays no cold
+                       resolve/compile; failure degrades to the cold path
   worktree-release     remove a task worktree + branch once the branch tip is
                        merged into the integration HEAD; never removes on
                        failure (exit 0 released; 1 not merged/not found;
@@ -385,10 +392,19 @@ the founding rule (LLMs reason; scripts decide). Pass `--max-parallel N`:
   - The plan's `depends_on` and `touches` are scheduling-authoritative. A
     "wave" is the ready tasks (all depends_on done, not yet complete) whose
     `touches` are pairwise disjoint, capped at N. `wave-next` computes it;
-    the LLM never infers it (ADR-0010).
+    the LLM never infers it (ADR-0010). A file whose change is a dependency
+    ordering (shared router/DI registration, pubspec.yaml, lockfile) belongs
+    in `depends_on`, never in `touches` - one shared file in two tasks'
+    `touches` silently serializes the whole plan.
   - Each wave task gets its own git worktree + `task/<N>` branch and its own
     ledger shard (`worktree-alloc`); `task-run` drives it inside that
     worktree, so a task's files and its session never contend with a sibling.
+    `worktree-alloc` best-effort warms the new tree (pubspec.lock +
+    .dart_tool copied from the integration tree, then `pub get --offline`)
+    so the first gate is not a cold resolve/compile.
+  - `run-pipeline` prefixes each background task's output with `[task N]`
+    (the heartbeat), so a wave shows progress instead of going silent until
+    `wait` returns.
   - `integrate` folds the wave back in ascending id order, running the FULL
     suite after EACH individual merge and aborting only the failing merge, so
     the integration branch is never left red. The post-merge suite is skipped

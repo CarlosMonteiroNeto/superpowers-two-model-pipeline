@@ -27,7 +27,7 @@ wt="$root/.superpowers/two-model/worktrees/task-$task"
 # Derived before the idempotency check so the already-allocated (exit 1) path
 # can still report where the live worktree and its workspace are: the bounded
 # integration-failure recovery reuses that worktree and needs both paths.
-wt_ws="$wt/.superpowers/two-model/$(basename "$ws")"
+wt_ws="$wt/.superpowers/two-model/${WS_SLUG:-$(basename "$ws")}"
 
 # Idempotency: a worktree OR an orphan branch for this task means "already
 # allocated". Checking only the worktree list would let `worktree add -b`
@@ -46,6 +46,22 @@ base=$(git rev-parse HEAD)
 
 mkdir -p "$(dirname "$wt")"
 git worktree add -q "$wt" -b "task/$task" HEAD
+
+# Warm the new tree: everything that makes a Flutter/Dart tree fast
+# (.dart_tool, pubspec.lock) is gitignored and does not travel with a worktree,
+# so without this the first gate pays a cold resolution plus a full compile.
+# Best-effort by design - any failure degrades to the cold path and never
+# blocks allocation (S1).
+if [ -f "$root/pubspec.lock" ]; then
+  cp -f "$root/pubspec.lock" "$wt/pubspec.lock" 2>/dev/null || true
+fi
+if [ -d "$root/.dart_tool" ]; then
+  mkdir -p "$wt/.dart_tool"
+  cp -rf "$root/.dart_tool/." "$wt/.dart_tool/" 2>/dev/null || true
+fi
+if [ -f "$wt/pubspec.yaml" ] && command -v "${FLUTTER_BIN:-flutter}" >/dev/null 2>&1; then
+  ( cd "$wt" && "${FLUTTER_BIN:-flutter}" pub get --offline >/dev/null 2>&1 ) || true
+fi
 
 # Seed the worktree workspace. The worktree is a fresh checkout: the
 # integration tree's self-ignoring .superpowers/.gitignore is untracked and

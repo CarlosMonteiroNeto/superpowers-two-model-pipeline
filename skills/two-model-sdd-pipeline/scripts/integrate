@@ -59,7 +59,7 @@ lang=$(printf '%s' "$gate_line" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 failed=0
 
 for n in $(printf '%s\n' "$@" | sort -n); do
-  shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/$(basename "$ws")/ledger.jsonl"
+  shard="$root/.superpowers/two-model/worktrees/task-$n/.superpowers/two-model/${WS_SLUG:-$(basename "$ws")}/ledger.jsonl"
   # Approval precheck: only a shard carrying `task_complete` proves the
   # revisor approved the task. Merging (and releasing) an un-approved branch
   # would ship unreviewed work and destroy the only debug copy.

@@ -88,6 +88,14 @@ case "$PLAN_REL" in
   ""|..*|/*) PLAN_REL="" ;;
 esac
 WS=$("$SCRIPT_DIR/pipeline-workspace" "$PLAN") || exit 2
+# The workspace slug (pipeline-workspace's directory name), captured from the
+# original plan path BEFORE cygpath rewrites WS into a Windows path a POSIX
+# basename would not split (W1). worktree-alloc and integrate derive the shard
+# directory from WS_SLUG instead of re-basename-ing a possibly-Windows path.
+_plan_base=$(basename "$PLAN")
+WS_SLUG=${_plan_base%.json}
+WS_SLUG=${WS_SLUG%.md}
+export WS_SLUG
 # pipeline-workspace prints pwd in POSIX form (/c/...) on Git Bash, which
 # native Windows Python cannot open - normalize once, here, for every
 # python3 call below (bash itself accepts either form).
@@ -328,8 +336,12 @@ else
         rc=0
         cd "${wt_of[$n]}" || rc=$?
         if [ "$rc" -eq 0 ]; then
+          # Live heartbeat: tee the per-task log while prefixing each line with
+          # the task id, so a wave shows progress instead of going silent until
+          # `wait` returns. `sed -u` keeps the stream unbuffered; pipefail keeps
+          # task-run's status.
           PLAN="$plan_task" "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
-            >"$WS/task-$n-run.log" 2>&1 || rc=$?
+            2>&1 | tee "$WS/task-$n-run.log" | sed -u "s/^/[task $n] /" || rc=$?
         fi
         printf '%s\n' "$rc" >"$WS/task-$n-run.rc"
       ) &

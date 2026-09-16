@@ -4,20 +4,22 @@
 Reads plan.json + the merged ledger and emits the next wave: the ready tasks
 (all depends_on done, not done, no open episode) whose declared `touches` are
 pairwise disjoint, capped at MAX_PARALLEL. Corrective/pending-episode tasks are
-emitted alone.
+emitted alone. In-flight episodes are only visible once `integrate` folds their
+shard into the global ledger - during a wave the review_outcome lives in the
+task's worktree shard, so the "runs alone" rule applies to episodes from
+previous waves (task-run owns its own episode inside the worktree).
 
 Usage: wave-next WORKSPACE [MAX_PARALLEL]
 Exit codes: 0 = wave emitted (one `RUN <id>` per line) or FINAL_REVIEW,
             1 = nothing runnable while tasks remain (WAVE_EMPTY), 2 = usage.
 
-Resource profile: dispatch none; stdout is Script-CEO-facing (RUN lines);
-ledger I/O reads the global ledger once; one Python pass + one subprocess per
-candidate pair (touches-overlap); git none.
+Resource profile: dispatch none; stdout is Script-CEO-facing (RUN lines) plus
+stderr deferral reasons; ledger I/O reads the global ledger once into a
+per-task index; one Python pass, no subprocess; git none.
 """
 
 import json
 import os
-import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +44,23 @@ def task_of(entry):
     return entry.get("task")
 
 
+def touches_of(task):
+    return set(task.get("touches") or [])
+
+
+def conflicts(selected, candidate):
+    """Declared-touches overlap between a candidate and the chosen wave.
+
+    A local set intersection (the same contract as the standalone
+    `touches-overlap` CLI, which stays the single definition of the rule and
+    keeps its exit-code contract for other callers).
+    """
+    claimed = set()
+    for t in selected:
+        claimed |= touches_of(t)
+    return sorted(claimed & touches_of(candidate))
+
+
 def main():
     if len(sys.argv) not in (2, 3):
         print("usage: wave-next WORKSPACE [MAX_PARALLEL]", file=sys.stderr)
@@ -58,15 +77,19 @@ def main():
         tasks = json.load(fh).get("tasks", [])
     ledger = load_ledger(os.path.join(ws, "ledger.jsonl"))
 
+    # One pass over the ledger into per-task event lists (the previous shape
+    # walked the whole ledger once per task - O(tasks x lines)).
+    by_task = {}
+    for e in ledger:
+        by_task.setdefault(str(task_of(e)), []).append(e)
+
     done_events = ("task_complete", "integrated")
     state = {}      # id -> "done" | "failed" | None
     episode = {}    # id -> True if newest review_outcome is SEND_BACK/ESCALATE
     for t in tasks:
         tid = str(t.get("id"))
         last = None
-        for e in ledger:
-            if str(task_of(e)) != tid:
-                continue
+        for e in by_task.get(tid, ()):
             if e.get("type") in done_events or e.get("type") == "integration_failed":
                 last = e.get("type")
             if e.get("type") == "review_outcome":
@@ -102,16 +125,23 @@ def main():
         print("RUN {}".format(min(int(t["id"]) for t in special)))
         return 0
 
+    # Fewest-touches-first: a wide-touching low-id task selected first becomes a
+    # wall for every later candidate that shares any file with it. The
+    # disjointness check is inlined (a set intersection); touches-overlap stays
+    # the standalone CLI so its exit-code contract and tests are intact.
     selected = []
-    for t in sorted(ready, key=lambda x: int(x["id"])):
+    for t in sorted(ready, key=lambda x: (len(touches_of(x)), int(x["id"]))):
         if len(selected) >= cap:
             break
-        candidate = selected + [t]
-        ids = [str(x["id"]) for x in candidate]
-        rc = subprocess.run([sys.executable, os.path.join(HERE, "touches-overlap"), ws, *ids],
-                            capture_output=True, text=True).returncode
-        if rc == 0:
-            selected = candidate
+        clash = conflicts(selected, t)
+        if clash:
+            print(
+                "WAVE-DEFER: task {} deferred - shares {} with the wave".format(
+                    t["id"], ", ".join(clash)),
+                file=sys.stderr,
+            )
+            continue
+        selected.append(t)
     for t in selected:
         print("RUN {}".format(t["id"]))
     return 0
