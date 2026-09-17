@@ -98,8 +98,7 @@ depends on them, and they must survive compaction.
   never run bare commands.
 - **The operador owns the RED/GREEN loop (ADR-0007, superseding ADR-0002):**
   it authors the RED tests, RUNS them and saves the machine-readable output,
-  declares and confirms the expected reason before implementing, then runs
-  the tests green. `coder-gate` validates the saved evidence by FORM with
+  then implements and runs the tests green. `coder-gate` validates the saved evidence by FORM with
   `red-form-check` (suite loaded, ≥1 test executed, failed as
   assertion/runtime; a compile/load red is a FAIL round, not a TEST_DEFECT),
   then runs the authoritative gate (`green-gate` for Flutter, `run-gates`
@@ -244,9 +243,8 @@ Script CEO never implements, reviews, or fixes anything itself.
 
 - Owns the RED/GREEN loop: authors the RED tests AND the implementation from
   the scaffolded brief + acceptance, RUNS the RED tests saving the
-  machine-readable output to `<ws>/task-N-red.txt`, DECLARES the expected
-  reason and confirms the observed RED is that reason (saving the declaration
-  beside the evidence), then runs the tests green. May run test/analyze/format
+  machine-readable output to `<ws>/task-N-red.txt`, then implements and runs
+  the tests green. May run test/analyze/format
   commands; never runs git commands (ADR-0007).
 - Never weakens a test after green. `coder-gate` validates the saved RED form
   with `red-form-check` (a compile/load red does not count). If a test looks
@@ -441,8 +439,7 @@ For each task in order:
 
  3. **Dispatch + RED-form loop.** Run `scripts/red-gate <workspace> TASK`.
    It dispatches the operador with the scaffolded brief (the operador authors
-   RED tests, runs them and saves the machine-readable output, declares and
-   confirms the expected reason, then implements — one session, tests per
+   RED tests, runs them and saves the machine-readable output, then implements — one session, tests per
    [writing-good-tests.md](../../test-driven-development/writing-good-tests.md)),
    then chains straight into `coder-gate` — this call does not return until the
    task is green-and-reviewed, or TEST_DEFECT stops it. Ledger: `red_check`, then
@@ -578,8 +575,8 @@ Agente estratégico: [complete plan.json + spec approved]
 [scripts/run-pipeline docs/superpowers/plans/invoice-plan.json]
   Script CEO: plan is complete (acceptance; no expected_red) -> no expand dispatch
   Task 1: brief-scaffold -> dispatch operador (headless)
-    operador writes RED tests, runs them (saves machine-readable RED,
-    declares the reason), implements ->
+    operador writes RED tests, runs them (saves machine-readable RED),
+    implements ->
     coder-gate validates the RED form + gates
     (retries until green) -> commit + dispatch revisor (headless)
     revisor returns JSON -> route-next -> NEXT 2

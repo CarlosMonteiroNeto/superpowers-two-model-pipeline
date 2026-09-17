@@ -5,8 +5,7 @@ Reads task TASK from <WORKSPACE>/plan.json and writes
 <WORKSPACE>/task-N-brief.md: statement, acceptance, spec refs, touches,
 out-of-scope fence, and the RED-authorship order for Agente operador.
 The order tells the operador to save the RED run in the runner's
-machine-readable format and to declare and confirm the expected reason
-before implementing (spec §4). expected_red is no longer read: a legacy
+machine-readable format and then implement (spec §4). expected_red is no longer read: a legacy
 task that still carries it scaffolds unchanged. Overwrites an existing
 brief for the same task (scaffolds are derived, never hand-edited).
 
@@ -125,16 +124,13 @@ def main(argv):
         "   Or run the project's runner directly and redirect its "
         "machine-readable output to that path - your choice; neither is "
         "required over the other.",
-        "3. DECLARE the expected failure reason and CONFIRM the observed RED "
-        "is that reason BEFORE implementing; save the declaration beside the "
-        "evidence.",
-        "4. Once RED is confirmed, implement until YOUR tests pass. Running "
+        "3. Implement until YOUR tests pass. Running "
         "them through the scoped runner keeps their output compressed:",
         "",
         "     %s --ws %s --task %s test <test-file...>" % (RTK_RUN, ws_sh, wanted),
         "",
         "   Analysis, if you need it: `%s analyze`." % RTK_RUN,
-        "5. coder-gate runs the authoritative full suite + analyze immediately "
+        "4. coder-gate runs the authoritative full suite + analyze immediately "
         "after you report DONE, so you do not need to run the full suite "
         "yourself; run it only if you believe your change has cross-cutting "
         "impact beyond this task's files.",

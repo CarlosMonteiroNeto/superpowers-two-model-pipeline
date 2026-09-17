@@ -2,9 +2,9 @@
 
 Task 5 acceptance (spec §4/§5): the task-generator loses the EXPAND mode and
 documents the script-controlled context for corrective/arbitrate/closing; the
-coder declares and confirms the reason before implementing and saves the RED in
-the runner's machine-readable format; no prompt references the brief's
-expected-failure text.
+coder saves the RED run in
+the runner's machine-readable format and then implements; no prompt references
+the brief's expected-failure text.
 
 The deliverable is the definitions and prompt templates themselves, so the
 consumed artifact is read as plain text and asserted against hand-derived
@@ -75,8 +75,9 @@ class TestTaskGeneratorControlledContext(unittest.TestCase):
 
 
 class TestCoderMachineReadableRed(unittest.TestCase):
-    """The operador saves the RED run in the runner's machine-readable format
-    and declares and confirms the expected reason before implementing."""
+    """The operador saves the RED run in the runner's machine-readable format.
+    The declare/confirm reason step was removed: it produced narration and a
+    file that no script ever read, so it was pure LLM step cost."""
 
     def test_definition_requires_machine_readable_red(self):
         text = read(CODER_AGENT).lower()
@@ -86,15 +87,14 @@ class TestCoderMachineReadableRed(unittest.TestCase):
         text = read(CODER_PROMPT).lower()
         self.assertIn("machine-readable", text)
 
-    def test_definition_declares_and_confirms_reason_before_implementing(self):
-        text = read(CODER_AGENT).lower()
-        for token in ("declare", "confirm", "reason", "before implementing"):
-            self.assertIn(token, text)
-
-    def test_prompt_declares_and_confirms_reason_before_implementing(self):
-        text = read(CODER_PROMPT).lower()
-        for token in ("declare", "confirm", "reason", "before implementing"):
-            self.assertIn(token, text)
+    def test_no_reason_declaration_step_remains(self):
+        for path in (CODER_AGENT, CODER_PROMPT):
+            text = read(path).lower()
+            for token in ("declare", "declaration", "confirm the observed"):
+                self.assertNotIn(
+                    token, text,
+                    "%s must not require a RED reason declaration" % path.name,
+                )
 
 
 class TestNoExpectedFailureTextInPrompts(unittest.TestCase):
@@ -198,13 +198,13 @@ class TestAgentDefinitionsArePortable(unittest.TestCase):
                      '"rg*": allow'):
             self.assertIn(rule, text)
 
-    def test_coder_shell_flexibility_is_deliberate(self):
-        # The generic interpreters are allowed on purpose: removing them
-        # measurably inflated the operador's step count. If the posture
-        # tightens, this test is the place that must change with it.
+    def test_generic_interpreters_are_not_allowlisted(self):
+        # `bash*`/`python*` are arbitrary execution - the hole ADR-0016 closed.
+        # The measured saving came from the read-only set, not from these.
         text = read(CODER_AGENT)
-        for rule in ('"bash*": allow', '"python3*": allow', '"python*": allow'):
-            self.assertIn(rule, text)
+        for rule in ('"bash*": allow', '"sh*": allow',
+                     '"python3*": allow', '"python*": allow'):
+            self.assertNotIn(rule, text)
 
 
 if __name__ == "__main__":

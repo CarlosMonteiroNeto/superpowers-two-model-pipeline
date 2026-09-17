@@ -210,9 +210,11 @@ skills/flutter-app-pipeline/scripts/:
                        rtk-run*` (permission `*` matches any character) that
                        tolerates the shell's wrapping (`& "<path>"`,
                        `bash "<path>"`, bare). The coder def also carries
-                       platform-generic read-only allowances and keeps
-                       `bash*`/`python*` deliberately (removing them inflated
-                       the operador's step count)
+                       platform-generic read-only allowances; it does NOT
+                       allow `bash*`/`python*` (arbitrary execution), because
+                       the measured saving comes from the read-only set, and
+                       it no longer asks for a RED reason declaration (no
+                       script ever read it)
 
 skills/two-model-sdd-pipeline/scripts/:
   run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]
@@ -283,7 +285,7 @@ skills/two-model-sdd-pipeline/scripts/:
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
-                       acceptance, spec_refs, reason-declaration and
+                       acceptance, spec_refs and
                        machine-readable RED instructions). The RED order
                        OFFERS the rtk-run runner without mandating it and
                        notes that coder-gate owns the full suite (ADR-0016,

@@ -95,18 +95,19 @@ class TestBriefScaffold(BriefScaffoldTestBase):
         self.assertIn("machine-readable", text)
         self.assertIn("task-3-red.txt", text)
 
-    def test_brief_requires_reason_declaration_before_implementing(self):
-        """The operador must declare the expected reason and confirm the
-        observed RED matches it before implementing (design §4)."""
+    def test_brief_drops_the_reason_declaration_step(self):
+        """The declare/confirm step was dead work - no script read the
+        declaration. The brief keeps the machine-readable evidence
+        requirement, which red-form-check does read."""
         self.write_plan(plan_with(FULL_TASK))
         r = run_scaffold(self.ws, 3)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("task-3-red.txt", text)
         lower = text.lower()
-        self.assertIn("reason", lower)
-        self.assertIn("declare", lower)
-        self.assertIn("confirm", lower)
-        self.assertIn("before implementing", lower)
+        self.assertNotIn("declare", lower)
+        self.assertNotIn("declaration", lower)
+        self.assertNotIn("confirm", lower)
 
     def test_brief_offers_the_scoped_runner_without_mandating_it(self):
         """The RED order points at the rtk-run scoped runner (compressed
