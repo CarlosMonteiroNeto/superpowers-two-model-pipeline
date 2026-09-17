@@ -21,6 +21,13 @@ permission:
     "mkdir*": allow
     "rm*": allow
     "*flutter-app-pipeline/scripts/rtk-run*": allow
+    # Flexible shell: the pipeline's own test/explore commands, plus the
+    # generic interpreters. (Deliberately broad - measured to avoid the
+    # denial churn that inflates steps; revisit if the posture tightens.)
+    "bash*": allow
+    "sh*": allow
+    "python3*": allow
+    "python*": allow
     # Read-only exploration, both shells: the bash tool runs PowerShell on
     # Windows (Get-ChildItem/Get-Content/...) and a POSIX shell elsewhere
     # (ls/cat/grep/...). Platform-generic, so it ships in the mirror - a

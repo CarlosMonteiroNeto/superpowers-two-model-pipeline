@@ -202,13 +202,17 @@ skills/flutter-app-pipeline/scripts/:
                        accepts only red|test|analyze and delegates to cmd,
                        so its test output is RTK-compressed while the full
                        output lands on disk. `red` writes WS/task-N-red.txt
-                       (the path red-form-check reads). A closed mode set is
-                       why the bash allowlist permits exactly this runner, via
-                       an install-independent two-sided wildcard
-                       `*flutter-app-pipeline/scripts/rtk-run*` (permission `*`
-                       matches any character) that tolerates the shell's
-                       wrapping (`& "<path>"`, `bash "<path>"`, bare), without
-                       granting arbitrary execution
+                       (the path red-form-check reads). The brief OFFERS it
+                       rather than mandating it: running the project runner
+                       directly and redirecting the evidence is equally fine.
+                       Its allowlist entry is an install-independent
+                       two-sided wildcard `*flutter-app-pipeline/scripts/
+                       rtk-run*` (permission `*` matches any character) that
+                       tolerates the shell's wrapping (`& "<path>"`,
+                       `bash "<path>"`, bare). The coder def also carries
+                       platform-generic read-only allowances and keeps
+                       `bash*`/`python*` deliberately (removing them inflated
+                       the operador's step count)
 
 skills/two-model-sdd-pipeline/scripts/:
   run-pipeline         top-level Script CEO driver: PLAN_FILE [TOTAL]
@@ -280,9 +284,10 @@ skills/two-model-sdd-pipeline/scripts/:
                        plan.json copy)
   brief-scaffold       scaffold task briefs from plan tasks (statement,
                        acceptance, spec_refs, reason-declaration and
-                       machine-readable RED instructions). The RED order also
-                       scopes the operador to the rtk-run runner and forbids
-                       the full suite (Change 2 + T1, ADR-0016). Rejects test-like
+                       machine-readable RED instructions). The RED order
+                       OFFERS the rtk-run runner without mandating it and
+                       notes that coder-gate owns the full suite (ADR-0016,
+                       relaxed). Rejects test-like
                        touches (tests are changed-minus-touches). No LLM
   resolve-toolchain    one-time-per-branch ecosystem detection: inspects the
                        project for a known marker (pubspec.yaml, Cargo.toml,

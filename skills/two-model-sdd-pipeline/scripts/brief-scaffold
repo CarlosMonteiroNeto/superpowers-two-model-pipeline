@@ -112,30 +112,32 @@ def main(argv):
         "",
         "1. Write BLACK-BOX tests encoding Acceptance "
         "(skills/test-driven-development/writing-good-tests.md).",
-        "2. RUN those tests yourself THROUGH THE SCOPED RUNNER. It compresses "
-        "the runner output and writes the RED evidence exactly where the gate "
-        "reads it, so never redirect it by hand:",
+        "2. RUN those tests yourself and save the RED evidence - the runner's "
+        "machine-readable output - to `%s/task-%s-red.txt`; red-form-check "
+        "reads it: the suite must load, at least one test must execute, and it "
+        "must fail as an assertion or runtime error." % (ws_sh, wanted),
+        "",
+        "   OPTIONAL: the scoped runner does both for you (it compresses the "
+        "output and writes that file):",
         "",
         "     %s --ws %s --task %s red <test-file...>" % (RTK_RUN, ws_sh, wanted),
         "",
-        "   That writes the runner's machine-readable output to "
-        "`%s/task-%s-red.txt`; red-form-check reads it: the suite must load, "
-        "at least one test must execute, and it must fail as an assertion or "
-        "runtime error." % (ws_sh, wanted),
+        "   Or run the project's runner directly and redirect its "
+        "machine-readable output to that path - your choice; neither is "
+        "required over the other.",
         "3. DECLARE the expected failure reason and CONFIRM the observed RED "
         "is that reason BEFORE implementing; save the declaration beside the "
         "evidence.",
-        "4. Once RED is confirmed, implement until YOUR tests pass, running "
-        "them through the same runner so their output stays compressed:",
+        "4. Once RED is confirmed, implement until YOUR tests pass. Running "
+        "them through the scoped runner keeps their output compressed:",
         "",
         "     %s --ws %s --task %s test <test-file...>" % (RTK_RUN, ws_sh, wanted),
         "",
-        "   Check analysis with `%s analyze`." % RTK_RUN,
-        "5. Do NOT run the FULL test suite. coder-gate runs the authoritative "
-        "full suite + analyze immediately after you report DONE; running it "
-        "yourself duplicates that multi-minute gate and inflates your context "
-        "for no benefit. Run the full suite only if you believe your change "
-        "has cross-cutting impact beyond this task's files.",
+        "   Analysis, if you need it: `%s analyze`." % RTK_RUN,
+        "5. coder-gate runs the authoritative full suite + analyze immediately "
+        "after you report DONE, so you do not need to run the full suite "
+        "yourself; run it only if you believe your change has cross-cutting "
+        "impact beyond this task's files.",
         "",
     ]
     out_path = "%s/task-%s-brief.md" % (ws.rstrip("/\\"), wanted)

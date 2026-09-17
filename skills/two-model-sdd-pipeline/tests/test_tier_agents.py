@@ -191,14 +191,20 @@ class TestAgentDefinitionsArePortable(unittest.TestCase):
 
     def test_coder_carries_platform_generic_read_only_allowances(self):
         # Read-only exploration belongs in the mirror (not a per-machine
-        # override): it must cover both shells' vocabularies. `bash*` must NOT
-        # be present - it is arbitrary execution, the hole ADR-0016 closed.
+        # override): it must cover both shells' vocabularies.
         text = read(CODER_AGENT)
         for rule in ('"Get-ChildItem*": allow', '"Get-Content*": allow',
                      '"Test-Path*": allow', '"ls*": allow', '"cat*": allow',
                      '"rg*": allow'):
             self.assertIn(rule, text)
-        self.assertNotIn('"bash*": allow', text)
+
+    def test_coder_shell_flexibility_is_deliberate(self):
+        # The generic interpreters are allowed on purpose: removing them
+        # measurably inflated the operador's step count. If the posture
+        # tightens, this test is the place that must change with it.
+        text = read(CODER_AGENT)
+        for rule in ('"bash*": allow', '"python3*": allow', '"python*": allow'):
+            self.assertIn(rule, text)
 
 
 if __name__ == "__main__":
