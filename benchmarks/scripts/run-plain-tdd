@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# "Standard TDD" baseline: ONE headless agent session implements all ten
+# fixture features with plain Red-Green-Refactor. No brief, no revisor, no
+# gates - so the pipeline runs can be compared against the naive approach.
+#
+# Usage: run-plain-tdd [WORK_DIR]
+set -uo pipefail
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+BENCH_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+REPO=$(cd "$BENCH_DIR/.." && pwd)
+PLAN="$BENCH_DIR/plans/2026-09-16-parallelism-benchmark-plan.json"
+WORK="${1:-$REPO/.superpowers/bench/plain-tdd}"
+
+rm -rf "$WORK"
+mkdir -p "$WORK"
+cp -R "$BENCH_DIR/fixture/." "$WORK/fixture/"
+(
+  cd "$WORK/fixture" || exit 2
+  git init -q
+  git config user.email "benchmark@example.com"
+  git config user.name "Benchmark"
+  git add -A
+  git commit -q -m "benchmark fixture baseline"
+) || { echo "prep failed" >&2; exit 2; }
+
+python3 - "$PLAN" "$WORK/prompt.md" <<'PY'
+import json, sys
+plan = json.load(open(sys.argv[1], encoding="utf-8"))
+out = sys.argv[2]
+lines = [
+    "# Implement the ten features with standard TDD",
+    "",
+    "You are the only implementer. Work in the current directory (a pure-Dart",
+    "package). Implement ALL ten features, in order, using plain",
+    "Red-Green-Refactor: for each feature write a failing BLACK-BOX test in",
+    "`test/feature_NN_test.dart`, RUN it to confirm it fails for the expected",
+    "reason, then implement the function in `lib/src/feature_NN.dart` and run",
+    "the test green. Do not skip tests and do not weaken them. After all ten,",
+    "run `flutter test` so the whole suite passes.",
+    "",
+    "Acceptance criteria per feature:",
+    "",
+]
+for t in plan["tasks"]:
+    lines.append("## %s. %s" % (t["id"], t["title"]))
+    lines.append("")
+    for a in t["acceptance"]:
+        lines.append("- %s" % a)
+    lines.append("")
+open(out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+PY
+
+now() { python3 -c "import time; print('%.3f' % time.time())"; }
+
+echo "=== plain-tdd: one session, 10 tasks ==="
+start=$(now)
+(
+  cd "$WORK/fixture" || exit 2
+  opencode run --agent two-model-coder --format json "$WORK/prompt.md" \
+    "Execute the attached instruction exactly; implement all ten features with TDD." 
+) > "$WORK/tdd.log" 2>&1
+rc=$?
+end=$(now)
+
+# Independent verification of the acceptance (pass/fail, not the agent's word).
+(
+  cd "$WORK/fixture" || exit 2
+  flutter test
+) > "$WORK/verify.txt" 2>&1
+vrc=$?
+
+python3 - "$WORK/tdd.log" "$WORK/result.json" "$start" "$end" "$rc" "$vrc" "$WORK/fixture" "$SCRIPT_DIR" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[8])
+from bench_report import parse_log
+log, out, start, end, rc, vrc, fixture = sys.argv[1:8]
+m = parse_log(log)
+data = dict(
+    side="plain-tdd", fixture=fixture, log=log,
+    total_seconds=round(float(end) - float(start), 3),
+    dispatch_exit=int(rc), verify_exit=int(vrc),
+    requests=m["requests"], input=m["input"], output=m["output"],
+    reasoning=m["reasoning"], cache_read=m["cache_read"],
+    cache_write=m["cache_write"], cost=m["cost"], span_s=m["span_s"],
+)
+data["uncached_tokens"] = m["input"] + m["output"] + m["reasoning"]
+den = m["cache_read"] + m["input"]
+data["cache_hit_pct"] = round(100.0 * m["cache_read"] / den, 1) if den else 0.0
+json.dump(data, open(out, "w", encoding="utf-8"), indent=2)
+print(json.dumps(data, indent=2))
+PY
+
+echo "plain-tdd rc=$rc verify=$vrc"

@@ -1,0 +1,20 @@
+{
+  "serial_label": "serial-olddef",
+  "parallel_label": "parallel",
+  "serial_wall_clock_s": 1998.592,
+  "parallel_wall_clock_s": 1083.0,
+  "speedup": 1.85,
+  "wall_clock_delta_s": -915.592,
+  "requests_serial": 217,
+  "requests_parallel": 185,
+  "requests_delta": -32,
+  "uncached_tokens_serial": 471144,
+  "uncached_tokens_parallel": 374380,
+  "uncached_tokens_delta": -96764,
+  "cache_hit_pct_serial": 90.5,
+  "cache_hit_pct_parallel": 89.0,
+  "cache_hit_delta_pct": -1.5,
+  "cost_serial": 0.114963318,
+  "cost_parallel": 0.09177191399999998,
+  "cost_delta": -0.023191
+}

@@ -1,0 +1,14 @@
+warning: in the working copy of 'docs/spec.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/superpowers/plans/2026-09-16-parallelism-benchmark-plan.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_01.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_02.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_03.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_04.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_05.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_06.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_07.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_08.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_09.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_10.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test/smoke_test.dart', LF will be replaced by CRLF the next time Git touches it
+      0 [main] bash 3021 child_copy: data read copy failed, 0x100508000..0x100511000, done 0, windows pid 13236, Win32 error 299

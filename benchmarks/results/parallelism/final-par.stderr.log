@@ -1,0 +1,30 @@
+warning: in the working copy of 'docs/spec.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/superpowers/plans/2026-09-16-parallelism-benchmark-plan.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_01.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_02.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_03.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_04.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_05.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_06.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_07.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_08.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_09.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_10.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test/smoke_test.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/spec.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/superpowers/plans/2026-09-16-parallelism-benchmark-plan.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_01.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_02.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_03.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_04.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_05.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_06.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_07.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_08.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_09.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/src/feature_10.dart', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'test/smoke_test.dart', LF will be replaced by CRLF the next time Git touches it
+      0 [main] bash (13460) child_copy: cygheap read copy failed, 0x800000000..0x800024800, done 0, windows pid 13460, Win32 error 299
+   5587 [main] bash 548 child_copy: dll data read copy failed, 0x210247000..0x210260CB0, done 0, windows pid 13460, Win32 error 299
+COMPARE: [Errno 2] No such file or directory: 'benchmarks/results/parallelism/par5-final-report.json'
+300059357 [main] bash 548 C:\Program Files\Git\usr\bin\bash.exe: *** fatal error in forked process - WFSO timed out after longjmp

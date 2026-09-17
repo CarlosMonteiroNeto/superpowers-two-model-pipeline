@@ -1,0 +1,20 @@
+=== plain-tdd: one session, 10 tasks ===
+{
+  "side": "plain-tdd",
+  "fixture": "C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture",
+  "log": "C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/tdd.log",
+  "total_seconds": 356.057,
+  "dispatch_exit": 0,
+  "verify_exit": 0,
+  "requests": 47,
+  "input": 30902,
+  "output": 9897,
+  "reasoning": 4074,
+  "cache_read": 1197952,
+  "cache_write": 0,
+  "cost": 0.016611756000000002,
+  "span_s": 337.969,
+  "uncached_tokens": 44873,
+  "cache_hit_pct": 97.5
+}
+plain-tdd rc=0 verify=0

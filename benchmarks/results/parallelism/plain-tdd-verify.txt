@@ -1,0 +1,41 @@
+00:00 +0: loading C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_01_test.dart
+00:00 +0: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_01_test.dart: slugify lowercases words and joins them with hyphens
+00:00 +1: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_02_test.dart: isPalindrome recognizes a classic phrase palindrome
+00:00 +2: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_02_test.dart: isPalindrome recognizes a classic phrase palindrome
+00:00 +3: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_02_test.dart: isPalindrome recognizes a classic phrase palindrome
+00:00 +4: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_01_test.dart: slugify returns an empty string for empty or all-punctuation input
+00:00 +5: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_02_test.dart: isPalindrome ignores case and non-alphanumeric characters
+00:00 +6: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_02_test.dart: isPalindrome rejects a non-palindrome
+00:00 +7: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_03_test.dart: chunk splits a list into consecutive chunks of the given size
+00:00 +8: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_03_test.dart: chunk splits a list into consecutive chunks of the given size
+00:00 +9: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_04_test.dart: romanToInt converts a numeral with several subtractive pairs
+00:00 +10: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_04_test.dart: romanToInt converts a numeral with several subtractive pairs
+00:00 +11: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_03_test.dart: chunk returns an empty list for an empty input list
+00:00 +12: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_04_test.dart: romanToInt handles the subtractive pairs IV and IX
+00:00 +13: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_03_test.dart: chunk throws ArgumentError when size is zero or less
+00:00 +14: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_04_test.dart: romanToInt handles the subtractive pairs XL and CM
+00:00 +15: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_04_test.dart: romanToInt adds repeated and descending symbols
+00:00 +16: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_05_test.dart: camelToSnake converts camelCase to snake_case
+00:00 +17: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_05_test.dart: camelToSnake splits an acronym boundary in PascalCase
+00:00 +18: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_05_test.dart: camelToSnake returns an already snake_case input unchanged
+00:00 +19: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_06_test.dart: wordCount counts words keyed by the lowercase word
+00:00 +20: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_07_test.dart: clampInt returns a value already inside the range
+00:00 +21: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_07_test.dart: clampInt returns a value already inside the range
+00:00 +22: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_07_test.dart: clampInt returns a value already inside the range
+00:00 +23: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_07_test.dart: clampInt returns min for a value below the range
+00:00 +24: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_08_test.dart: binarySearch returns the index of a present target
+00:00 +25: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_08_test.dart: binarySearch returns the index of a present target
+00:00 +26: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_08_test.dart: binarySearch returns the index of a present target
+00:00 +27: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_08_test.dart: binarySearch finds the first and last elements
+00:00 +28: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_08_test.dart: binarySearch returns -1 for an absent target
+00:00 +29: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_08_test.dart: binarySearch returns -1 for an empty list
+00:01 +30: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_09_test.dart: formatBytes renders zero bytes without a decimal
+00:01 +31: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_09_test.dart: formatBytes renders a plain byte count without a decimal
+00:01 +32: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_09_test.dart: formatBytes renders kilobytes with one decimal place
+00:01 +33: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_09_test.dart: formatBytes renders megabytes with one decimal place
+00:01 +34: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_10_test.dart: parseDuration sums hour and minute components
+00:01 +35: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_10_test.dart: parseDuration parses a seconds component
+00:01 +36: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/feature_10_test.dart: parseDuration parses a milliseconds component
+00:01 +37: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/smoke_test.dart: all ten feature entrypoints are exported
+00:01 +38: C:/Users/CARLOS/superpowers-two-model-pipeline/.superpowers/bench/plain-tdd/fixture/test/smoke_test.dart: all ten feature entrypoints are exported
+00:01 +39: All tests passed!
