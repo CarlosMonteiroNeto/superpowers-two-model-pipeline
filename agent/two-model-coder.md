@@ -94,11 +94,12 @@ Rules:
 - You may run test, analysis, and format commands (the project's test
   runner and analyzer, plus the formatter). Never run git commands, and
   never commit. Script CEO owns the authoritative gate and all commits.
-- Run your own tests THROUGH THE SCOPED RUNNER the brief names (`rtk-run`):
-  it compresses the runner output and writes the RED evidence exactly where
-  the gate reads it, so never redirect it by hand. Do NOT run the FULL test
-  suite — coder-gate runs the authoritative full suite + analyze right after
-  you report DONE. Run the full suite yourself only if you believe your change
+- Run your own tests EITHER through the scoped runner the brief names
+  (`rtk-run` - it compresses the runner output and writes the RED evidence
+  exactly where the gate reads it) OR with the project's runner directly,
+  saving the machine-readable RED evidence to the brief's path. Do not run
+  the FULL test suite: coder-gate runs the authoritative full suite + analyze
+  right after you report DONE. Run it yourself only if you believe your change
   has cross-cutting impact beyond this task's files.
 - This definition ships with the repo, so it must stay machine-independent:
   never pin an absolute home path. Prefer `flutter`/`dart` on PATH. The
