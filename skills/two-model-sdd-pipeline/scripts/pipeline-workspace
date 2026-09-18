@@ -20,11 +20,22 @@
 # .gitignore at .superpowers/two-model/ keeps every workspace out of
 # `git status` without modifying any tracked file.
 #
-# Usage: pipeline-workspace PLAN_FILE
+# Usage: pipeline-workspace [--refresh] PLAN_FILE
+#   --refresh  validate PLAN_FILE and atomically replace the EXISTING workspace
+#              snapshot, preserving ledger/partitions/briefs/sessions/reports.
+#              A refresh failure exits 1 and keeps the last valid snapshot
+#              (F2: the driver reloads the tracked plan after an integration).
+#   Exit codes: 0 = snapshot written; 1 = --refresh validation/staging failure;
+#               2 = usage / missing plan file.
 set -euo pipefail
 
+refresh=0
+if [ "${1:-}" = "--refresh" ]; then
+  refresh=1
+  shift
+fi
 if [ $# -ne 1 ]; then
-  echo "usage: pipeline-workspace PLAN_FILE" >&2
+  echo "usage: pipeline-workspace [--refresh] PLAN_FILE" >&2
   exit 2
 fi
 
@@ -42,6 +53,71 @@ slug=${slug%.md}
 root=$(git rev-parse --show-toplevel)
 base="$root/.superpowers/two-model"
 dir="$base/$slug"
+
+if [ "$refresh" -eq 1 ]; then
+  mkdir -p "$dir"
+  # Validate the candidate BEFORE touching the live snapshot (F2): reject an
+  # unreadable file, invalid JSON, a non-object root, missing/non-list/empty
+  # tasks, missing required task fields, duplicate/nonpositive integer ids, and
+  # empty/non-list acceptance. A failure leaves the previous snapshot intact.
+  python3 - "$plan" <<'PY'
+import json, sys
+
+path = sys.argv[1]
+
+
+def fail(msg):
+    print("PIPELINE-WORKSPACE: invalid plan: %s" % msg, file=sys.stderr)
+    sys.exit(1)
+
+
+try:
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        plan = json.load(fh)
+except Exception as exc:
+    fail(str(exc))
+
+if not isinstance(plan, dict):
+    fail("root is not an object")
+tasks = plan.get("tasks")
+if not isinstance(tasks, list) or not tasks:
+    fail("tasks must be a non-empty list")
+seen = set()
+for t in tasks:
+    if not isinstance(t, dict):
+        fail("every task must be an object")
+    for key in ("id", "title", "summary", "acceptance"):
+        if not t.get(key):
+            fail("task %r missing %s" % (t.get("id"), key))
+    tid = t.get("id")
+    if isinstance(tid, bool) or not isinstance(tid, int) or tid <= 0:
+        fail("task id must be a positive integer: %r" % (tid,))
+    if tid in seen:
+        fail("duplicate task id %r" % (tid,))
+    seen.add(tid)
+    acc = t.get("acceptance")
+    if (not isinstance(acc, list) or not acc
+            or not all(isinstance(a, str) and a.strip() for a in acc)):
+        fail("task %s acceptance must be a non-empty list of strings" % tid)
+PY
+  # Atomic replace: stage beside the snapshot, then rename. A failed read/parse
+  # can never truncate the last valid copy; a source that already is the
+  # snapshot is copied aside first, so it is never overwritten in place.
+  tmp="$dir/plan.json.tmp.$$"
+  if ! cp -f "$plan" "$tmp"; then
+    rm -f "$tmp"
+    echo "PIPELINE-WORKSPACE: cannot stage the refreshed plan" >&2
+    exit 1
+  fi
+  if ! mv -f "$tmp" "$dir/plan.json"; then
+    rm -f "$tmp"
+    echo "PIPELINE-WORKSPACE: cannot replace the plan snapshot" >&2
+    exit 1
+  fi
+  cd "$dir" && pwd
+  exit 0
+fi
+
 mkdir -p "$dir"
 printf '*\n' > "$base/.gitignore"
 # Working copy for the gates (route-next reads $dir/plan.json); the

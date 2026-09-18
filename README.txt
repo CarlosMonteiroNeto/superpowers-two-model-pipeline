@@ -223,7 +223,13 @@ skills/two-model-sdd-pipeline/scripts/:
                        default 2) to closing -> push+PR. Invokable anywhere,
                        no estrategista loop. Resumable: an already-allocated
                        task worktree (worktree-alloc exit 1, which still
-                       reports the paths) is reused, not a blocker
+                       reports the paths) is reused, not a blocker. F2: after
+                       every integrate that may have changed HEAD the workspace
+                       snapshot is refreshed from the tracked plan
+                       (pipeline-workspace --refresh, validated + atomic)
+                       before failed-task membership, task counts, the next
+                       wave or closing; an explicit TOTAL that differs from the
+                       refreshed count blocks before advancing
   touches-overlap      declared-touches pairwise disjointness decider (two
                        tasks share a wave only when their touches are
                        disjoint; exit 0 disjoint; 1 overlap; 2 usage)
@@ -264,10 +270,18 @@ skills/two-model-sdd-pipeline/scripts/:
                        orchestrator and owns the REVIEW/CORRECTIVE/ARBITRATE
                        branches until the task is APPROVED or blocked; runs
                        in the serial root or inside a wave worktree (exit 0
-                       complete; 1 blocked/escalated; 2 usage)
-  integrate            script-owned integration gate: require every task's
-                       shard to hold task_complete (else integration_failed
-                       not approved). An approved task that never committed
+                       complete; 1 blocked/escalated; 2 usage). F3: the
+                       ARBITRATE branch appends arbitrate_resolved only after
+                       the diretor returns AND the plan refresh succeeds (a
+                       failed refresh blocks); a ruling starts a new attempt
+  integrate            script-owned integration gate. F1 entry guard: refuses
+                       a dirty integration checkout (staged, unstaged tracked,
+                       or non-ignored untracked changes; a failing git status
+                       blocks too) before any merge/reset/release, ledgers
+                       integration_failed N "dirty worktree" per requested task
+                       and preserves HEAD, index, bytes, branches, worktrees.
+                       Require every task's shard to hold task_complete (else
+                       integration_failed not approved). An approved task that never committed
                        is a no-op: integrated "no-op (no commits)" + shard
                        folded + worktree released, nothing merged or gated
                        (ADR-0017). A wave of >=2 approved tasks is merged
@@ -283,7 +297,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        (exit 0 all integrated; 1 >=1 integration_failed;
                        2 usage)
   pipeline-workspace   create the per-plan git-ignored workspace (+ working
-                       plan.json copy)
+                       plan.json copy). F2: `--refresh PLAN` validates the
+                       tracked plan (required fields, positive unique ids,
+                       non-empty acceptance) and atomically replaces the
+                       existing snapshot, preserving ledger/partitions/briefs/
+                       sessions/reports; a failure keeps the last valid copy
   brief-scaffold       scaffold task briefs from plan tasks (statement,
                        acceptance, spec_refs and
                        machine-readable RED instructions). The RED order
@@ -303,7 +321,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        coder-gate. An interrupted dispatch (opencode-timed
                        rc=124) ledgers a terminal dispatch_interrupted entry;
                        run-pipeline reports BLOCKED instead of a silent EXIT,
-                       and a re-run resumes at the same task
+                       and a re-run resumes at the same task. F3: on the retry
+                       after a resolved arbitration it archives the prior
+                       attempt's coder/reviewer logs, parsed review and RED
+                       evidence into <ws>/attempt-<k>/ (never overwriting an
+                       earlier archive; session records kept) and resumes the
+                       toolchain-selected operador's own session
   coder-gate           owns the retry loop after the first dispatch: validates
                        the saved RED form with red-form-check, runs the gate
                        (auto-format before the Flutter check), ledgers
@@ -313,7 +336,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        unbounded until green; runs the keep-discard scope gate
                        before commit (scope_violation -> ARBITRATE); wires
                        interface-check post-commit; stops on TEST_DEFECT ->
-                       ARBITRATE (Agente diretor rules)
+                       ARBITRATE (Agente diretor rules). F4: on a green gate
+                       the generic commit plumbing is explicit - a git add
+                       error, a staged-diff inspection error, an empty index,
+                       or a failed git commit each exit 1 (blocker, no revisor
+                       dispatch, no commit/task_complete, changes preserved;
+                       never TEST_DEFECT, never an automatic empty commit)
   red-form-check       classify the operador's saved machine-readable RED
                        evidence (suite loaded, >=1 test executed, failed as
                        assertion/runtime; compile/load red -> exit 1)
@@ -351,9 +379,13 @@ skills/two-model-sdd-pipeline/scripts/:
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW).
-                       arbitrate_resolved re-scaffolds; a re-escalation is
-                       exit 1 "arbitration did not resolve"; scope_violation
-                       escalates; task count from JSON
+                       F3: the newest arbitrate_resolved is an execution-
+                       attempt boundary - an incomplete task ignores pre-
+                       ruling red_check/commit/verdict state, so after a
+                       ruling it emits BRIEF then RED (not CODER on a stale
+                       red); a re-escalation is exit 1 "arbitration did not
+                       resolve"; a completed task stays terminal;
+                       scope_violation escalates; task count from JSON
   keep-discard         the C2 scope gate: KEEP when partial work is in
                        touches (newly authored tests exempt); build output
                        (.freezed.dart/.g.dart/.gr.dart/.gen.dart/.mocks.dart)

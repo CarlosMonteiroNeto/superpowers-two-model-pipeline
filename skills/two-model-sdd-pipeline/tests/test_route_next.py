@@ -212,9 +212,10 @@ class TestRouteNextArbitrationResolution(RouteNextTestBase):
         r = run_route(self.ws, 3)
         self.assert_action(r, "BRIEF 3")
 
-    def test_brief_rescaffolded_after_resolution_falls_through(self):
-        """Once the brief is re-scaffolded the pre-ruling escalation is
-        consumed: normal flow resumes (no BRIEF loop)."""
+    def test_brief_rescaffolded_after_resolution_routes_red(self):
+        """F3: once the brief is re-scaffolded the ruling starts a NEW execution
+        attempt, so the pre-ruling red_check is history and the router must
+        dispatch a fresh coder (RED), not re-run coder-gate on stale evidence."""
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
@@ -223,7 +224,7 @@ class TestRouteNextArbitrationResolution(RouteNextTestBase):
             entry("brief_ready", 3, "rescaffolded"),
         ])
         r = run_route(self.ws, 3)
-        self.assert_action(r, "CODER 3")
+        self.assert_action(r, "RED 3")
 
     def test_second_escalation_after_resolution_is_human_blocker(self):
         self.ledger([

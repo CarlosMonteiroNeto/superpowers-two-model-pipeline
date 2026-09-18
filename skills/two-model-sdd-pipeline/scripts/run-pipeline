@@ -133,6 +133,25 @@ total_now() {
   task_ids | grep -c . || true
 }
 
+refresh_plan_snapshot() {
+  # F2: an integration may have merged a tracked-plan edit, so reload the
+  # tracked plan into the workspace snapshot before any task-count, failed-task,
+  # next-wave, or final-review decision. Validation + atomic replacement live in
+  # pipeline-workspace --refresh; a failure blocks and keeps the last snapshot.
+  "$SCRIPT_DIR/pipeline-workspace" --refresh "$PLAN" >/dev/null
+}
+
+check_total_fresh() {
+  # F2: an explicit TOTAL must not silently hide a changed task count. After a
+  # refresh, reject a TOTAL that differs from the current plan count.
+  if [ -n "$TOTAL_ARG" ]; then
+    cur=$(task_ids | grep -c . || true)
+    if [ "${cur:-0}" -ne "$TOTAL_ARG" ]; then
+      block "TOTAL=$TOTAL_ARG differs from the refreshed plan count ($cur)"
+    fi
+  fi
+}
+
 first_incomplete() {
   # NOTE: -c (not heredoc): inside a pipe, a heredoc would steal stdin and
   # this reader would parse its own program instead of plan_json's output.
@@ -277,6 +296,7 @@ if [ "$MAX_PARALLEL" -eq 1 ]; then
   task=$(first_incomplete)
   while true; do
     total=$(total_now)
+    check_total_fresh
     rc=0
     task_run_bin="${TASK_RUN_BIN:-$SCRIPT_DIR/task-run}"
     PLAN="$PLAN" "$task_run_bin" "$WS" "$task" "$total" || rc=$?
@@ -355,6 +375,10 @@ else
     done
     int_rc=0
     "$INTEGRATE_BIN" "$WS" $ids || int_rc=$?
+    # F2: integrate may have merged a tracked-plan edit; reload the snapshot
+    # before failed-task membership, task counts, or the next wave.
+    refresh_plan_snapshot || block "plan refresh failed after integration"
+    check_total_fresh
     if [ "$int_rc" -ne 0 ]; then
       # Bounded integration-failure recovery: a single re-integrate attempt per
       # failed task in its existing worktree. It is meaningful for an
@@ -393,6 +417,9 @@ else
         "$INTEGRATE_BIN" "$WS" "$n" || rc=$?
         [ "$rc" -eq 0 ] \
           || block "task $n still fails integration after one corrective"
+        refresh_plan_snapshot \
+          || block "plan refresh failed after recovery integration"
+        check_total_fresh
         say "task $n recovered and integrated"
       done
     fi
@@ -400,6 +427,9 @@ else
 fi
 
 # --- closing ---
+# F2: a final refresh guarantees final-gate and closing read the freshest plan.
+refresh_plan_snapshot || block "plan refresh failed before closing"
+check_total_fresh
 total=$(total_now)
 "$FINAL_GATE_BIN" "$WS" "$total" || block "final-gate lists blockers above"
 cd "$ROOT" || block "cannot cd to $ROOT"

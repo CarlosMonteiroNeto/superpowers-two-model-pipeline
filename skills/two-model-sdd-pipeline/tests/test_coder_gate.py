@@ -284,6 +284,9 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self._stubs(gate_log, dispatch_log)
         count_file = self._tmp / "gate.count"
         count_file.write_text("0", encoding="utf-8")
+        # A real green round produces a change to commit (F4 blocks a green
+        # suite with nothing staged, so the fixture must not be a no-op).
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
         r = run_script(
             "coder-gate", [str(self.ws), "1"],
             cwd=str(self.repo),

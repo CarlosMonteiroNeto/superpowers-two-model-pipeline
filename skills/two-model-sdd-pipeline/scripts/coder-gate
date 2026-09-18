@@ -30,8 +30,10 @@
 #
 # Usage: coder-gate WORKSPACE TASK
 # Exit codes: 0 = green, RED-evidence verified, committed, revisor dispatched;
-#             1 = internal error (commit/reviewer setup failed - nothing on
-#                 doubt is claimed green); 2 = TEST_DEFECT reported (escalated
+#             1 = blocking failure (empty/failed commit, staging or staged-diff
+#                 inspection error, or other internal error - nothing on doubt
+#                 is claimed green and the caller must stop, never re-route to
+#                 CODER on a passing suite); 2 = TEST_DEFECT reported (escalated
 #                 ledgered - route-next will emit ARBITRATE);
 #             3 = usage / missing gate or brief.
 set -euo pipefail
@@ -41,6 +43,9 @@ export PYTHONIOENCODING=utf-8
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 FLUTTER_GATE="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/green-gate"
+# GIT_BIN lets a caller/tests point the commit plumbing at a wrapper; the
+# default is the system git.
+GIT_BIN="${GIT_BIN:-git}"
 
 if [ $# -ne 2 ]; then
   echo "usage: coder-gate WORKSPACE TASK" >&2
@@ -66,7 +71,7 @@ analyze_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)
 # resume path below must use the same name.
 coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$lang")
 
-base=$(git rev-parse HEAD)
+base=$("$GIT_BIN" rev-parse HEAD)
 
 # Fixed workspace paths, overwritten every iteration: no round counting, no
 # failure tally. The loop just runs until the gate passes - each retry
@@ -228,31 +233,56 @@ PY
       # Flutter's green-gate owns the commit + revisor dispatch above. The
       # generic engine's run-gates deliberately never commits (it is a
       # check-only mirror) - Script CEO (this script) owns that step here.
-      # Scope gate first: never `git add -A` out-of-scope files.
+      # Scope gate first: never stage out-of-scope files.
       if ! scope_ok; then
         exit 2
       fi
-      git add -A
-      if git commit -m "task $task green" >/dev/null 2>&1; then
-        sha=$(git rev-parse --short HEAD)
-        "$SCRIPT_DIR/ledger-append" "$ledger" commit "$task" "green $sha" commits="$sha"
-        # H1: surface a touched cross-task interface for the revisor and the
-        # (future) wave scheduler. Advisory only - sequential ordering is
-        # already enforced by depends_on. exit 2 (no plan) is not a hit.
-        ic_rc=0
-        "$SCRIPT_DIR/interface-check" "$ws" "$task" "$base" >/dev/null 2>&1 || ic_rc=$?
-        if [ "$ic_rc" -eq 1 ]; then
-          "$SCRIPT_DIR/ledger-append" "$ledger" interface_touched "$task" \
-            "diff touches an interface another task consumes" || true
-        fi
-        pkg="$ws/task-$task-review-package.diff"
-        "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" "$task" || true
-        DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
-        "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
-          --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
-      else
-        echo "CODER-GATE: gate green but nothing to commit" >&2
+      # F4: gate success is not commit success. Staging, the staged-diff
+      # inspection, and the commit each have their own explicit barrier; any
+      # failure exits 1 (never TEST_DEFECT, never an auto empty commit, never a
+      # green verdict the caller could mistake for a completed task). The
+      # working tree/index are left untouched so the changes are preserved.
+      arc=0
+      "$GIT_BIN" add -A || arc=$?
+      if [ "$arc" -ne 0 ]; then
+        echo "CODER-GATE: staging failed (git add rc=$arc) - blocking; changes preserved" >&2
+        exit 1
       fi
+      # `git diff --cached --quiet` exits 0 when nothing is staged, 1 when a
+      # staged diff exists, and >1 on a git error - the three cases must not be
+      # conflated. (--quiet implies --exit-code.)
+      drc=0
+      "$GIT_BIN" diff --cached --quiet || drc=$?
+      if [ "$drc" -eq 0 ]; then
+        echo "CODER-GATE: gate green but nothing to commit (empty commit) - blocking" >&2
+        exit 1
+      fi
+      if [ "$drc" -gt 1 ]; then
+        echo "CODER-GATE: cannot inspect the staged diff (rc=$drc) - blocking; changes preserved" >&2
+        exit 1
+      fi
+      crc=0
+      "$GIT_BIN" commit -m "task $task green" >/dev/null 2>&1 || crc=$?
+      if [ "$crc" -ne 0 ]; then
+        echo "CODER-GATE: commit failed (rc=$crc) - blocking; changes preserved" >&2
+        exit 1
+      fi
+      sha=$("$GIT_BIN" rev-parse --short HEAD)
+      "$SCRIPT_DIR/ledger-append" "$ledger" commit "$task" "green $sha" commits="$sha"
+      # H1: surface a touched cross-task interface for the revisor and the
+      # (future) wave scheduler. Advisory only - sequential ordering is
+      # already enforced by depends_on. exit 2 (no plan) is not a hit.
+      ic_rc=0
+      "$SCRIPT_DIR/interface-check" "$ws" "$task" "$base" >/dev/null 2>&1 || ic_rc=$?
+      if [ "$ic_rc" -eq 1 ]; then
+        "$SCRIPT_DIR/ledger-append" "$ledger" interface_touched "$task" \
+          "diff touches an interface another task consumes" || true
+      fi
+      pkg="$ws/task-$task-review-package.diff"
+      "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" "$task" || true
+      DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+      "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
+        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
     fi
     exit 0
   fi
@@ -270,7 +300,7 @@ PY
 
   # Build the fix prompt: purely mechanical (file paths + the static
   # coder-prompt.md retry framing) - no LLM needed to construct it.
-  git diff > "$diff_file"
+  "$GIT_BIN" diff > "$diff_file"
   # B7: point the coder at every annex report that exists, otherwise
   # drift/analyze failures are invisible to a write-only operador.
   annex_lines="- Gate failure output: $report"

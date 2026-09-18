@@ -97,16 +97,23 @@ has_complete=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"task_complete
 last_review=$(printf '%s\n' "$task_entries" | grep -E '"type": *"review_outcome"' | tail -1 || true)
 review_verdict=$(printf '%s' "$last_review" | sed -n 's/.*"summary": *"\([^"]*\)".*/\1/p')
 
-# Arbitration resolution ordering (C1). A ruling the router cannot see loops
-# ARBITRATE forever at Strategic-tier cost. Position matters: esc_last is the
-# newest escalation marker (an `escalated` entry or a review_outcome ESCALATE),
-# res_last the newest `arbitrate_resolved`, brief_last the newest `brief_ready`.
+# Arbitration attempt boundary (C1 + F3). A ruling the router cannot see loops
+# ARBITRATE forever at Strategic-tier cost; once seen, the ruling starts a NEW
+# execution attempt for an incomplete task, so pre-ruling red_check/commit/
+# review/escalation state is history and must not advance it. esc_last is the
+# newest escalation marker (an `escalated` entry or a review_outcome ESCALATE);
+# res_last is the newest `arbitrate_resolved`; the cur_* flags count only
+# entries AFTER that ruling (equivalently all entries when there is no ruling).
 esc_last=-1
 res_last=-1
-brief_last=-1
+cur_brief=0
+cur_red=0
+cur_commit=0
+cur_esc=0
+cur_verdict="-"
 ordering=$(printf '%s\n' "$task_entries" | python3 -c '
 import json, sys
-esc_last = res_last = brief_last = -1
+entries = []
 for i, raw in enumerate(sys.stdin):
     raw = raw.strip()
     if not raw:
@@ -115,38 +122,37 @@ for i, raw in enumerate(sys.stdin):
         ev = json.loads(raw)
     except Exception:
         continue
-    if not isinstance(ev, dict):
-        continue
+    if isinstance(ev, dict):
+        entries.append((i, ev))
+esc_last = res_last = -1
+for i, ev in entries:
     t = ev.get("type")
     if t in ("escalated", "scope_violation"):
         esc_last = i
-    elif t == "arbitrate_resolved":
-        res_last = i
-    elif t == "brief_ready":
-        brief_last = i
     elif t == "review_outcome" and ev.get("summary") == "ESCALATE":
         esc_last = i
-print(esc_last, res_last, brief_last)
+    elif t == "arbitrate_resolved":
+        res_last = i
+cur_brief = cur_red = cur_commit = cur_esc = 0
+cur_verdict = "-"
+for i, ev in entries:
+    if i <= res_last:
+        continue
+    t = ev.get("type")
+    if t == "brief_ready":
+        cur_brief = 1
+    elif t == "red_check":
+        cur_red = 1
+    elif t == "commit":
+        cur_commit = 1
+    elif t in ("escalated", "scope_violation"):
+        cur_esc = 1
+    elif t == "review_outcome":
+        cur_verdict = ev.get("summary") or "-"
+print(esc_last, res_last, cur_brief, cur_red, cur_commit, cur_esc, cur_verdict)
 ' 2>/dev/null || true)
 if [ -n "$ordering" ]; then
-  read -r esc_last res_last brief_last <<< "$ordering"
-fi
-
-# A ruling newer than the last escalation re-scaffolds the brief (the diretor
-# edited the tracked plan); once the brief is re-scaffolded that pre-ruling
-# escalation is consumed and normal flow resumes. A re-escalation after a
-# ruling is a human blocker - a silent Strategic-tier spend is worse.
-escalation_consumed=0
-if [ "$has_complete" -eq 0 ] && [ "$esc_last" -ge 0 ] && [ "$res_last" -gt "$esc_last" ]; then
-  if [ "$brief_last" -gt "$res_last" ]; then
-    escalation_consumed=1
-  else
-    echo "BRIEF $task"
-    exit 0
-  fi
-elif [ "$has_complete" -eq 0 ] && [ "$res_last" -ge 0 ] && [ "$esc_last" -gt "$res_last" ]; then
-  echo "ROUTE-NEXT: arbitration did not resolve task $task" >&2
-  exit 1
+  read -r esc_last res_last cur_brief cur_red cur_commit cur_esc cur_verdict <<< "$ordering"
 fi
 
 next_task=$((task + 1))
@@ -164,10 +170,45 @@ if [ "$has_complete" -ge 1 ]; then
   exit 0
 fi
 
-# A consumed escalation (raised, ruled on, brief re-scaffolded) is skipped so
-# the task resumes normal flow instead of emitting ARBITRATE again.
-if [ -n "$review_verdict" ] \
-    && ! { [ "$escalation_consumed" = "1" ] && [ "$review_verdict" = "ESCALATE" ]; }; then
+# F3 attempt boundary: for an incomplete task, a resolved arbitration starts a
+# new execution attempt. A re-escalation after the ruling is a bounded human
+# blocker (a silent Strategic-tier spend is worse).
+if [ "$res_last" -ge 0 ]; then
+  if [ "$esc_last" -gt "$res_last" ]; then
+    echo "ROUTE-NEXT: arbitration did not resolve task $task" >&2
+    exit 1
+  fi
+  case "$cur_verdict" in
+    APPROVED)
+      need_total
+      if [ "$task" -ge "$total" ]; then echo "FINAL_REVIEW"; else echo "NEXT $next_task"; fi
+      exit 0 ;;
+    SEND_BACK)
+      echo "CORRECTIVE $task"; exit 0 ;;
+    ESCALATE)
+      echo "ARBITRATE $task"; exit 0 ;;
+    "-") ;;
+    *)
+      echo "ROUTE-NEXT: unknown review verdict: $cur_verdict" >&2
+      exit 1 ;;
+  esac
+  if [ "$cur_esc" -ge 1 ] && [ "$cur_commit" -eq 0 ]; then
+    echo "ARBITRATE $task"; exit 0
+  fi
+  if [ "$cur_commit" -ge 1 ]; then
+    echo "REVIEW $task"; exit 0
+  fi
+  if [ "$cur_red" -ge 1 ]; then
+    echo "CODER $task"; exit 0
+  fi
+  if [ "$cur_brief" -ge 1 ]; then
+    echo "RED $task"; exit 0
+  fi
+  echo "BRIEF $task"; exit 0
+fi
+
+# Normal flow (no arbitration boundary): the whole attempt is the current one.
+if [ -n "$review_verdict" ]; then
   case "$review_verdict" in
     APPROVED)
       need_total
@@ -185,7 +226,7 @@ if [ -n "$review_verdict" ] \
   esac
 fi
 
-if [ "$has_escalated" -ge 1 ] && [ "$has_commit" -eq 0 ] && [ "$escalation_consumed" != "1" ]; then
+if [ "$has_escalated" -ge 1 ] && [ "$has_commit" -eq 0 ]; then
   echo "ARBITRATE $task"
   exit 0
 fi

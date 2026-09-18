@@ -1,0 +1,106 @@
+{
+  "feature": "Repair dirty integration rollback, stale integrated plans, arbitration retries, and generic commit failure loops.",
+  "spec_doc": "docs/superpowers/specs/2026-09-17-pipeline-recovery-hardening-design.md",
+  "global_constraints": [
+    "All artifacts, test names, comments, diagnostics, and documentation are English-only.",
+    "No new production dependencies, provider calls in tests, or changes to model selection.",
+    "Preserve public CLI arguments and existing successful execution paths; mechanical failures must propagate nonzero exit codes.",
+    "Preserve append-only ledger history through ledger-append, including its per-task partitions; never rewrite old events to manufacture progress.",
+    "Never stash, discard, clean, force-remove, or commit user changes as a recovery mechanism.",
+    "Keep changes limited to the four findings and their regression coverage and documentation.",
+    "touches contains implementation and documentation paths only; author new test files outside touches, as required by brief-scaffold and keep-discard.",
+    "Existing committed tests remain unchanged; add regression modules and reuse their fixture conventions without weakening existing assertions.",
+    "Keep Bash/Git Bash and native Python path compatibility, including repository paths containing spaces.",
+    "The executor records real RED evidence before implementing each behavior and runs the authoritative gates afterward.",
+    "Read spec sections 5 and 6 for validation and self-host bootstrap: use explicit Python/Bash gates, real machine-readable RED evidence, and a validated external controller or task-by-task execution.",
+    "Use scripts/cmd for LLM-facing commands; retain full reports. Workers do not commit under Script CEO. This handoff does not authorize publication, pushing, or PR creation."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Reject dirty integration checkouts before mutation",
+      "summary": "Add a fail-closed entry guard to integrate so batch rollback cannot delete pre-existing edits. Author test_integrate_dirty_guard.py in skills/two-model-sdd-pipeline/tests using disposable Git repositories and gate stubs.",
+      "spec_refs": ["§1.1", "§2", "§3.1", "§5", "§6"],
+      "touches": ["skills/two-model-sdd-pipeline/scripts/integrate"],
+      "depends_on": [],
+      "acceptance": [
+        "Staged changes, unstaged tracked edits, or non-ignored untracked files cause integrate to exit 1 before merging, resetting, releasing, or recording success, on both single-task and batch paths including approved no-op branches.",
+        "A rejected call preserves HEAD, staged blobs, tracked and untracked file bytes, task branches, and task worktrees; stderr identifies the dirty checkout and each requested task receives an integration_failed event with that reason.",
+        "A failed git status command blocks integration instead of treating absent output as a clean checkout.",
+        "Ignored pipeline artifacts alone do not block integration, and a clean batch whose gate fails still uses the existing fallback without losing independently valid sibling tasks.",
+        "The new regression module demonstrates the original data loss or missing guard in RED and passes after the fix; existing integration/worktree tests remain unchanged and pass."
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Refresh and validate the plan after integration",
+      "summary": "Keep the integration workspace snapshot synchronized with the tracked plan after normal, partial, and recovery integration. Author test_plan_refresh_after_integration.py in skills/two-model-sdd-pipeline/tests and exercise real scheduling after a merged plan edit.",
+      "spec_refs": ["§1.1", "§2", "§3.2", "§4", "§5", "§6"],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/run-pipeline",
+        "skills/two-model-sdd-pipeline/scripts/pipeline-workspace"
+      ],
+      "depends_on": [1],
+      "acceptance": [
+        "After every integration attempt that may change HEAD, refresh the plan before failed-task membership, task counts, the next wave, or final-review decisions; cover partial nonzero results and successful recovery integration.",
+        "When a task merges a tracked plan containing a new incomplete task, the next wave schedules that task and does not emit FINAL_REVIEW; merged dependency and acceptance changes also appear in the refreshed snapshot.",
+        "Snapshot replacement validates the minimum schema in spec section 3.2 and is atomic; missing, unreadable, malformed, duplicate-ID, or unusable plans block without destroying the previous snapshot or proceeding on stale data.",
+        "Refresh preserves ledger history and partitions, session records, briefs, and reports; source-equals-destination and paths containing spaces work.",
+        "With TOTAL omitted, task counts follow the refreshed plan; an explicit TOTAL differing from the current count blocks before task advancement or closing, including serial execution.",
+        "The new regression module fails against stale-plan behavior and passes after the fix; existing scheduler, workspace, and run-pipeline behavior remains compatible."
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Start a new execution attempt after arbitration",
+      "summary": "Use the latest successful arbitration resolution as the boundary for incomplete-task routing, and resume the correct coder with the refreshed brief before evaluating gates. Author test_arbitration_execution_retry.py in skills/two-model-sdd-pipeline/tests with realistic dispatch events and preserved historical ledgers.",
+      "spec_refs": ["§1.1", "§2", "§3.3", "§4", "§5", "§6"],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/task-run",
+        "skills/two-model-sdd-pipeline/scripts/route-next",
+        "skills/two-model-sdd-pipeline/scripts/red-gate"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Append arbitrate_resolved only after director success and successful plan refresh; a refresh failure blocks without claiming the ruling is ready for execution.",
+        "An incomplete task routes BRIEF then RED after resolution, ignoring pre-resolution red_check, commit, and review state for current-attempt progress; completed tasks keep their terminal behavior.",
+        "Before the new dispatch, archive active coder/reviewer logs, parsed review, and RED evidence without overwriting an existing attempt archive or removing per-agent session records.",
+        "The toolchain-selected coder receives the corrected brief and resumes its own session when available, otherwise starts fresh; no reviewer session is used for coder execution and Flutter continues through the existing delegating shim.",
+        "Both TEST_DEFECT before commit and review ESCALATE after commit can reach a fresh gate, fresh reviewer result, and approval without replaying old failures; stale RED evidence and old verdicts cannot satisfy the new attempt.",
+        "An interrupted dispatch propagates its error without entering coder-gate; a genuine subsequent escalation remains a bounded blocker, not an unbounded director loop.",
+        "The regression module covers global-only and partitioned histories, preserved implementation work and archives, successful retry, interrupted retry, and genuine repeated escalation."
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Block explicitly on empty or failed generic commits",
+      "summary": "Separate test success from commit success in the generic coder gate and preserve actionable Git diagnostics. Author test_coder_commit_outcomes.py in skills/two-model-sdd-pipeline/tests, including a task-run check proving commit failures terminate rather than cycle.",
+      "spec_refs": ["§1.1", "§2", "§3.4", "§4", "§5", "§6"],
+      "touches": ["skills/two-model-sdd-pipeline/scripts/coder-gate"],
+      "depends_on": [3],
+      "acceptance": [
+        "A generic gate with valid RED evidence and green tests but no staged changes exits 1 with an explicit empty-commit blocker, without reviewer dispatch or a commit/task_complete event.",
+        "Staging errors, staged-diff inspection errors, and real commit failures exit 1 with useful diagnostics and preserve the working tree/index rather than reporting nothing to commit.",
+        "Git diff exit status for changed content is distinguished from a command error; successful staging and commits retain their normal commit event, review-package generation, and reviewer dispatch.",
+        "Neither empty nor failed commits are converted to TEST_DEFECT, an automatic empty commit, or task approval.",
+        "The real orchestrator/task-run path stops on failed or empty commits without repeating gates or provider calls; any coder_round PASS records only gate success and does not mask the nonzero return.",
+        "The new module covers clean-tree, failed-hook, staging-error, inspection-error, and successful-commit cases; existing generic and Flutter gate tests remain compatible."
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Verify composed recovery and document the corrected contracts",
+      "summary": "Author test_recovery_hardening_e2e.py in skills/two-model-sdd-pipeline/tests to verify the composed fixes with real routing, refresh, ledger propagation, and disposable Git integration. Update human and agent documentation to match the implemented blockers and recovery progression.",
+      "spec_refs": ["§2", "§3.1", "§3.2", "§3.3", "§3.4", "§4", "§5", "§6"],
+      "touches": ["README.txt", "README-LLM.md", "CONTEXT.md"],
+      "depends_on": [1, 2, 3, 4],
+      "acceptance": [
+        "A composed scenario arbitrates a task, incorporates a director-added later task, obtains fresh coder/reviewer approval, integrates and refreshes the plan, and executes the added task before closing.",
+        "Composed dirty-integration and generic-commit-failure scenarios stop before closing without losing edits or entering retry loops; provider calls remain stubbed and bounded by test timeouts.",
+        "README.txt, README-LLM.md, and CONTEXT.md accurately document dirty-tree rejection, tracked-plan refresh, arbitration attempt boundaries/session reuse, and explicit generic commit blockers without promising automatic no-op approval.",
+        "Both complete Python unittest suites listed in spec section 5 pass, targeted shell lint and syntax checks pass, and git diff --check passes; environment or pre-existing failures are reported separately and are never hidden by weakening checks.",
+        "The final committed checkpoint passes doc-check, the four original reproduction scenarios are covered, and the handoff report records verification evidence and any residual limitations without publishing or pushing."
+      ]
+    }
+  ]
+}

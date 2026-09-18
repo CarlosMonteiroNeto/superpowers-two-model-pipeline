@@ -179,3 +179,44 @@ pub.dev dependency-research target in Phase 2a.
   `route-next`'s `has_complete` rule fires before `SEND_BACK`, so an injected
   episode would be inert; changing that order means changing the reviewed router
   and is out of scope.
+
+## Recovery hardening (2026-09-17)
+
+Four reproduced defects were repaired; each is an entry barrier, not a new
+protocol.
+
+- **Dirty integration checkout (F1).** `integrate` refuses to run from a dirty
+  checkout before any merge/reset/release: staged changes, unstaged tracked
+  edits, and non-ignored untracked files block, and a failing `git status`
+  blocks too (fail closed). Rejection exits 1, identifies the dirty paths,
+  ledgers `integration_failed N "dirty worktree"` for every requested task, and
+  preserves HEAD, index, bytes, branches, and worktrees. The tracked plan is
+  expected to be committed before a run (spec §6).
+- **Stale scheduling snapshot (F2).** The tracked plan at `PLAN` is
+  authoritative; `$WS/plan.json` is a derived snapshot. After every `integrate`
+  that may change HEAD (including a partial nonzero batch and a successful
+  recovery) `run-pipeline` refreshes the snapshot via `pipeline-workspace
+  --refresh` before failed-task membership, task counts, the next wave, or
+  closing. The refresh validates the minimum schema and replaces the snapshot
+  atomically; a failure blocks and keeps the last valid copy. An explicit
+  `TOTAL` that differs from the refreshed count blocks before advancing.
+- **Resolved arbitration (F3).** The newest `arbitrate_resolved` is an
+  execution-attempt boundary for an incomplete task: pre-boundary `red_check`,
+  `commit`, review verdict, or failure log never advances the new attempt.
+  `task-run` appends `arbitrate_resolved` only after the diretor returns and the
+  refresh succeeds; the router then emits BRIEF then RED; `red-gate` archives
+  the prior attempt's evidence into `<ws>/attempt-<k>/` (never overwriting an
+  existing archive, keeping per-agent session records) and resumes the
+  toolchain-selected coder. A fresh review may not parse the archived verdict,
+  and a re-escalation after a ruling remains a bounded human blocker.
+- **Gate vs commit success (F4).** In the generic `coder-gate`, a green suite is
+  not commit success: a `git add` error, a staged-diff inspection error, an
+  empty index, and a failed `git commit` each exit 1 with an explicit blocker,
+  no revisor dispatch, no `commit`/`task_complete`, and the changes preserved.
+  It is never converted to TEST_DEFECT, never an automatic empty commit, and
+  approval is never inferred from a green suite; the exit stops
+  `orchestrator`/`task-run` instead of re-routing to CODER.
+
+Bounded re-escalation is preserved: a genuine second escalation after a ruling
+still exits 1 (`arbitration did not resolve`), so the new attempt cannot become
+an unbounded director loop.

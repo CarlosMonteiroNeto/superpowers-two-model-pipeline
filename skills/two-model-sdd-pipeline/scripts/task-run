@@ -88,7 +88,19 @@ dispatch_task_generator() {
     --prompt-file "$1" --log "$2"
 }
 
-refresh_plan() { "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null || true; }
+# A refresh copies the tracked plan into the workspace snapshot. When PLAN
+# already is the workspace plan there is nothing to copy (a self-copy is not a
+# refresh). refresh_plan is best-effort; refresh_plan_strict propagates failure
+# so an arbitration ruling is only recorded once the snapshot is valid.
+refresh_plan() {
+  if [ "$PLAN" = "$WS/plan.json" ]; then return 0; fi
+  "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null || true
+}
+
+refresh_plan_strict() {
+  if [ "$PLAN" = "$WS/plan.json" ]; then return 0; fi
+  "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null
+}
 
 task_json() {
   # task_json TASK ; prints the full task object, or nothing if absent.
@@ -292,7 +304,10 @@ print(max(cands) if cands else '')
         dispatch_task_generator "$WS/diretor-arbitrate-$n.md" \
           "$WS/task-generator-arbitrate-$n.log" \
           || block "diretor dispatch failed"
-        refresh_plan
+        # F3: a ruling is only an execution boundary once the refreshed plan is
+        # valid. A failed refresh blocks; it must never be recorded as resolved.
+        refresh_plan_strict \
+          || block "plan refresh failed after arbitration for task $n"
         # Observable resolution (C1): route-next must see that the ruling
         # happened, or it re-emits ARBITRATE on every iteration. The plan hash
         # records whether the diretor actually changed the tracked plan.

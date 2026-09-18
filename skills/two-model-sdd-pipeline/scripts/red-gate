@@ -44,6 +44,45 @@ lang=$(grep -E '"type": *"gate"' "$ledger" 2>/dev/null | tail -1 \
   | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$lang")
 
+# F3: a resolved arbitration starts a new execution attempt. Archive the prior
+# attempt's active evidence (coder/reviewer logs, parsed review, RED evidence)
+# so the new attempt is judged only on fresh artifacts; never overwrite an
+# earlier archive, and keep the per-agent session records for resume. Then
+# resume the toolchain-selected coder's own session when one exists.
+resume_args=()
+resolved=0
+if [ -f "$ledger" ]; then
+  resolved=$(grep -E '"type": *"arbitrate_resolved"' "$ledger" 2>/dev/null \
+    | grep -cE "\"task\": *\"$task\"" || true)
+fi
+if [ "${resolved:-0}" -ge 1 ]; then
+  archive="$ws/attempt-$resolved"
+  j=1
+  while [ -e "$archive" ]; do
+    archive="$ws/attempt-$resolved-$j"
+    j=$((j + 1))
+  done
+  archived=0
+  for name in "task-$task-coder.log" "task-$task-reviewer.log" \
+              "task-$task-review.json" "task-$task-red.txt"; do
+    if [ -f "$ws/$name" ]; then
+      mkdir -p "$archive"
+      mv -f "$ws/$name" "$archive/$name"
+      archived=1
+    fi
+  done
+  if [ "$archived" -eq 1 ]; then
+    echo "RED-GATE: archived prior attempt evidence to $archive"
+  fi
+  session_file="$ws/task-$task-$coder_agent-session.txt"
+  if [ -f "$session_file" ]; then
+    session=$(cat "$session_file")
+    if [ -n "$session" ]; then
+      resume_args=(--continue "$session")
+    fi
+  fi
+fi
+
 echo "RED-GATE: brief scaffolded, dispatching operador"
 
 if [ -f "$ledger" ]; then
@@ -58,6 +97,7 @@ fi
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 set +e
 "$DISPATCH_BIN" --agent "$coder_agent" --task "$task" \
+  "${resume_args[@]}" \
   --prompt-file "$brief" --log "$ws/task-$task-coder.log"
 dispatch_rc=$?
 set -e

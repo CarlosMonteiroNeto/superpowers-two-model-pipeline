@@ -26,6 +26,14 @@
 # its worktree, and a single keep-discard pass could only judge one task's
 # `touches`.
 #
+# Entry guard (F1): integration refuses to run from a dirty checkout. A staged
+# change, an unstaged tracked edit, or a non-ignored untracked file could be
+# destroyed by the batch fallback's `git reset --hard`; all block with exit 1
+# and an `integration_failed` dirty-worktree reason per requested task, leaving
+# HEAD, the index, working-tree bytes, branches, and worktrees untouched. A
+# failing `git status` blocks too (fail closed). Ignored pipeline workspaces do
+# not count as dirt.
+#
 # A task is integrated only when its worktree shard proves the task was
 # approved: the shard must contain a `task_complete`. coder-gate commits BEFORE
 # the revisor runs, so a post-commit failure leaves a committed-but-unapproved
@@ -61,6 +69,32 @@ analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)"
 lang=$(printf '%s' "$gate_line" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 
 slug="${WS_SLUG:-$(basename "$ws")}"
+
+# F1 entry guard (recovery hardening): refuse to integrate from a dirty
+# checkout. Merging, and especially the batch fallback's `git reset --hard`,
+# could otherwise destroy unrelated tracked or untracked work. Staged changes,
+# unstaged tracked edits, and non-ignored untracked files all block; ignored
+# pipeline workspaces do not. Fail closed: a status command failure also
+# blocks, so empty output is never mistaken for a clean checkout.
+dirty_rc=0
+dirty=$(git status --porcelain 2>/dev/null) || dirty_rc=$?
+if [ "$dirty_rc" -ne 0 ]; then
+  echo "INTEGRATE: cannot verify a clean integration checkout (git status rc=$dirty_rc) - refusing to integrate" >&2
+  for n in "$@"; do
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" \
+      "dirty worktree (status unavailable, rc=$dirty_rc)" || true
+  done
+  exit 1
+fi
+if [ -n "$dirty" ]; then
+  echo "INTEGRATE: refusing to integrate from a dirty checkout:" >&2
+  printf '%s\n' "$dirty" >&2
+  for n in "$@"; do
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" \
+      "dirty worktree" || true
+  done
+  exit 1
+fi
 
 shard_of() { printf '%s' "$root/.superpowers/two-model/worktrees/task-$1/.superpowers/two-model/$slug/ledger.jsonl"; }
 

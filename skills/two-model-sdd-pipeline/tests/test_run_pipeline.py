@@ -64,6 +64,12 @@ class RunPipelineTestBase(unittest.TestCase):
     def write_plan(self, tasks):
         self.plan.write_text(json.dumps({"feature": "t", "tasks": tasks}),
                              encoding="utf-8")
+        # The tracked plan is committed before a run: integrate refuses a dirty
+        # checkout (F1), matching production, where the plan is carried into the
+        # checkout before any task worktree is allocated.
+        subprocess.run(["git", "add", "-A"], cwd=str(self.repo), check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "plan"],
+                       cwd=str(self.repo), capture_output=True)
 
     def write_gate(self, *extra):
         ws = self.ws()
@@ -224,7 +230,7 @@ exit 0
         # `_timeout` is a test-only knob (not an env var): it guards against a
         # regression that turns a failure path into an unbounded loop, which
         # must fail as a TimeoutExpired error, never hang the suite.
-        timeout = extra_env.pop("_timeout", 30)
+        timeout = extra_env.pop("_timeout", 90)
         env = dict(os.environ)
         env.update(extra_env)
         out = self._tmp / "run-pipeline.out"
@@ -378,8 +384,10 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self._assert_punctual_dispatch("ESCALATE")
 
     def test_arbitrate_resolves_once_then_blocks(self):
-        """C1: the ARBITRATE branch must ledger an observable resolution and
-        terminate - never re-dispatch the task-generator on every iteration."""
+        """C1/F3: the ARBITRATE branch must ledger an observable resolution and
+        terminate - never re-dispatch the task-generator on every iteration.
+        After the ruling the task starts a fresh attempt (BRIEF -> RED); an
+        interrupted retry blocks loudly instead of replaying the stale verdict."""
         self.write_plan([dict(FULL_TASK)])
         self.write_gate(
             {"ts": "x", "type": "commit", "task": "1", "summary": "green",
@@ -388,15 +396,17 @@ class TestRunPipelineFlow(RunPipelineTestBase):
              "summary": "ESCALATE", "findings": "1"},
         )
         self.write_reviewer_log(1, "ESCALATE")
+        interrupted = write_stub(self.stub_dir, "red-gate-interrupting",
+                                 "exit 124\n")
         r = self.run_pipeline(
             "--no-push",
             "--max-parallel", "1",
+            RED_GATE_BIN=interrupted,
             DISPATCH_BIN=self.fake_dispatch(),
             STUB_DISPATCH_LOG=str(self.dispatch_log),
             LEDGER_APPEND_BIN=str(SCRIPTS / "ledger-append"),
         )
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("did not resolve task 1", r.stderr)
         entries = [
             json.loads(line)
             for line in (self.ws() / "ledger.jsonl").read_text(
@@ -406,6 +416,10 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         resolved = [e for e in entries if e["type"] == "arbitrate_resolved"]
         self.assertEqual(len(resolved), 1, entries)
         self.assertIn("plan_sha", resolved[0])
+        # F3: the retry re-scaffolds the brief and routes to RED afterward.
+        types = [e["type"] for e in entries]
+        self.assertGreater(types.index("brief_ready", types.index(
+            "arbitrate_resolved") + 1), types.index("arbitrate_resolved"))
         dcalls = self.dispatch_log.read_text(encoding="utf-8")
         self.assertEqual(dcalls.count("two-model-task-generator"), 1, dcalls)
 
