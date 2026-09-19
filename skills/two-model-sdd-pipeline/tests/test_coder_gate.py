@@ -655,6 +655,34 @@ class TestGenericRedGate(CoderGateTestBase):
                       self.ledger_path.read_text(encoding="utf-8"))
         self.assertNotIn("CODER-GATE", r.stderr + r.stdout)
 
+    def test_interrupted_dispatch_retries_then_chains_coder_gate(self):
+        """D11: a transient dispatch failure (rc=124) is retried by
+        dispatch-retry before red-gate decides anything; when a later attempt
+        succeeds the task proceeds to coder-gate with no interruption."""
+        (self.ws / "task-1-brief.md").write_text("# Task 1 Brief\n", encoding="utf-8")
+        count = self._tmp / "d.count"
+        count.write_text("0", encoding="utf-8")
+        dispatch_stub = write_stub(
+            self.stub_dir, "dispatch",
+            'n=$(cat "%s" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "%s"\n'
+            'if [ "$n" -eq 1 ]; then exit 124; fi\n'
+            'exit 0\n' % (str(count).replace("\\", "/"),
+                          str(count).replace("\\", "/")))
+        coder_gate_stub = write_stub(
+            self.stub_dir, "coder-gate", "exit 0\n")
+        r = run_script(
+            "red-gate", [str(self.ws), "1"],
+            cwd=str(self.repo),
+            env_extra={
+                "DISPATCH_BIN": dispatch_stub,
+                "CODER_GATE": coder_gate_stub,
+                "RTK_ENABLED": "0",
+            },
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn(
+            "dispatch_interrupted", self.ledger_path.read_text(encoding="utf-8"))
+
     def test_missing_test_cmd_and_no_ledger_is_usage(self):
         brief = self.ws / "task-1-brief.md"
         brief.write_text("RED-TESTS:\nnone -> none\n\nEXPECTED-RED:\nx\n", encoding="utf-8")

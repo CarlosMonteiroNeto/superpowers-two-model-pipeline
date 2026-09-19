@@ -74,11 +74,6 @@ plan_sha() {
   python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest()[:12])" "$WS/plan.json" 2>/dev/null || echo unknown
 }
 
-gate_lang() {
-  grep -E '"type": *"gate"' "$LEDGER" 2>/dev/null | tail -1 \
-    | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p'
-}
-
 dispatch_task_generator() {
   # dispatch_task_generator PROMPT_FILE LOG_FILE ; always fresh. The
   # task-generator is punctual: one dispatch per corrective/arbitrate
@@ -263,15 +258,16 @@ print(max(cands) if cands else '')
         # Resume the OPERADOR's own per-agent session (never a generic record:
         # after the revisor dispatch the generic one points at the REVIEWER).
         # The agent variant is derived from the branch's toolchain lang (C3).
-        coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$(gate_lang)")
+        coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$("$SCRIPT_DIR/task-lang" "$WS" "$m")")
         orig_session=$(cat "$WS/task-$n-$coder_agent-session.txt" 2>/dev/null || true)
+        DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
         if [ -n "$orig_session" ]; then
-          "$DISPATCH_BIN" --agent "$coder_agent" --task "$m" \
+          "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$m" \
             --continue "$orig_session" --prompt-file "$WS/task-$m-brief.md" \
             --log "$WS/task-$m-coder.log" \
             || block "operador dispatch failed for corrective task $m"
         else
-          "$DISPATCH_BIN" --agent "$coder_agent" --task "$m" \
+          "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$m" \
             --prompt-file "$WS/task-$m-brief.md" \
             --log "$WS/task-$m-coder.log" \
             || block "operador dispatch failed for corrective task $m"

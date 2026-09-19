@@ -93,6 +93,21 @@ class TestKeepDiscard(KeepDiscardBase):
         r = self.run_it()
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
+    def test_corrective_may_edit_a_committed_test_file(self):
+        """A corrective (`corrects` set) remediates review findings that can
+        point at a test an earlier task committed; blocking those edits would
+        turn every such finding into an unrecoverable escalation."""
+        self.plan["tasks"] = [
+            {"id": 3, "title": "t", "summary": "s", "touches": ["src/a.dart"],
+             "depends_on": [], "corrects": {"task": 1, "finding": "fix test"}}
+        ]
+        (self.ws / "plan.json").write_text(json.dumps(self.plan, indent=2), encoding="utf-8")
+        (self.repo / "src" / "a.dart").write_text("void a() { x(); }\n", encoding="utf-8")
+        (self.repo / "test" / "task_3_test.dart").write_text(
+            "corrective edit\n", encoding="utf-8")
+        r = self.run_it()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_generated_build_output_is_exempt(self):
         """C3: codegen output is derived, not authored scope. A whole-project
         generator run rewrites every drifted .freezed.dart/.g.dart; those must

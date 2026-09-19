@@ -134,6 +134,38 @@ class CoderCommitOutcomesTest(unittest.TestCase):
         self.assertEqual(self.gate_log.read_text(encoding="utf-8").count("\n"),
                          1, "the gate must run once, not loop")
 
+    def test_verify_only_task_allows_empty_commit(self):
+        """An empty-but-green gate is expected for a verify_only task (a check
+        task owns an existing surface, it does not change it): record the
+        intentional empty commit and proceed to the reviewer."""
+        (self.ws / "plan.json").write_text(json.dumps({
+            "feature": "f",
+            "tasks": [{"id": 1, "title": "v", "touches": ["file.txt"],
+                       "verify_only": True, "depends_on": []}],
+        }), encoding="utf-8")
+        r = self.run_coder_gate()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("commit", self.ledger_types())
+        self.assertIn("two-model-reviewer", self.dispatch_calls())
+        self.assertEqual(self.commits().count("\n"), 2)  # base + verify
+        self.assertIn("verify",
+                      subprocess.run(["git", "log", "--pretty=%s"],
+                                     cwd=str(self.repo), capture_output=True,
+                                     text=True).stdout.lower())
+
+    def test_verify_only_false_still_blocks_empty_commit(self):
+        """The flag must be present, not merely its absence tolerated: a task
+        whose plan does not declare verify_only keeps the hard barrier."""
+        (self.ws / "plan.json").write_text(json.dumps({
+            "feature": "f",
+            "tasks": [{"id": 1, "title": "v", "touches": ["file.txt"],
+                       "verify_only": False, "depends_on": []}],
+        }), encoding="utf-8")
+        r = self.run_coder_gate()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("nothing to commit", (r.stdout + r.stderr).lower())
+        self.assertEqual(self.commits().count("\n"), 1)  # base only
+
     def test_commit_failure_blocks_and_preserves_changes(self):
         (self.repo / "file.txt").write_text("green change\n", encoding="utf-8")
         hook = self.repo / ".git" / "hooks" / "pre-commit"

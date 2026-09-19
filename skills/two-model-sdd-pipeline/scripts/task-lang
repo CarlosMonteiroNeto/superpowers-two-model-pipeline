@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Per-task language resolution (rec #3): in a multi-ecosystem repo the last
+# `gate` ledger entry is a branch-level guess; the language a task's tests
+# actually run in is decided by where its `touches` files live. This walks each
+# touched path's ancestors (closest ancestor first, up to ROOT) looking for the
+# same ecosystem markers resolve-toolchain recognises, so a Firebase-functions
+# task resolves node even when the branch's last ledger entry says flutter.
+#
+# Falls back to the branch-level gate entry (the last `gate` line's lang) when
+# no marker is found - the pre--all single-toolchain behavior.
+#
+# Usage: task-lang WORKSPACE TASK [ROOT]
+#   WORKSPACE  pipeline workspace (holds plan.json, ledger.jsonl)
+#   TASK       task id
+#   ROOT       project root to stop climbing at (default: git top-level)
+#
+# Prints: the language on stdout; never fails on missing state (empty output).
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+ws=$1
+task=$2
+root=${3:-}
+
+if [ -z "$root" ]; then
+  root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+fi
+
+lang=$(python3 - "$ws" "$task" "$root" <<'PY'
+import json, os, sys
+ws, task, root = sys.argv[1], sys.argv[2], sys.argv[3] or ""
+
+markers = ("pubspec.yaml", "Cargo.toml", "go.mod",
+           "package.json", "pyproject.toml", "requirements.txt")
+langs = {"pubspec.yaml": "flutter", "Cargo.toml": "rust", "go.mod": "go",
+         "package.json": "node", "pyproject.toml": "python",
+         "requirements.txt": "python"}
+
+try:
+    with open(os.path.join(ws, "plan.json"), encoding="utf-8",
+              errors="replace") as fh:
+        data = json.load(fh)
+except Exception:
+    print("")
+    sys.exit(0)
+
+touch = ""
+for t in data.get("tasks", []):
+    if str(t.get("id")) == task:
+        touches = t.get("touches") or t.get("touch_files") or []
+        if touches:
+            touch = touches[0]
+        break
+
+if not touch:
+    print("")
+    sys.exit(0)
+
+# Closest ancestor marker wins over one higher up (and over the branch fallback).
+# `touches` are repo-relative paths: climb from ROOT, not the process cwd.
+root_abs = os.path.abspath(root) if root else None
+if root_abs:
+    touch_path = os.path.join(root_abs, touch)
+else:
+    touch_path = os.path.abspath(touch)
+d = os.path.dirname(touch_path) or touch_path
+while True:
+    for marker in markers:
+        if os.path.isfile(os.path.join(d, marker)):
+            print(langs[marker])
+            sys.exit(0)
+    if root_abs and os.path.abspath(d) == root_abs:
+        break
+    parent = os.path.dirname(d)
+    if parent == d:
+        break
+    d = parent
+print("")
+PY
+)
+
+if [ -z "$lang" ]; then
+  lang=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null | tail -1 \
+    | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+fi
+
+printf '%s\n' "$lang"

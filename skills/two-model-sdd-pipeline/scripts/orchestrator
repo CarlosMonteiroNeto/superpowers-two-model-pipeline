@@ -87,14 +87,12 @@ case "$action" in
     # loop. Then re-route and report.
     #
     # Which red-gate runs is itself a script decision, not an LLM one: read
-    # the `lang` recorded by resolve-toolchain's ledger `gate` entry (or
-    # RED_GATE_BIN, if the caller already knows) and pick the Flutter
-    # binary only for lang=flutter; every other detected/manual lang uses
-    # this skill's own generic red-gate, which reads TEST_CMD from the same
-    # ledger entry.
+    # the task's resolved language (task-lang - walk the plan's `touches`)
+    # and pick the Flutter binary only for lang=flutter; every other
+    # detected/manual lang uses this skill's own generic red-gate, which
+    # reads TEST_CMD from the same ledger entry (gate-entry-for).
     if [ -z "${RED_GATE_BIN:-}" ]; then
-      gate_lang=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null | tail -1 \
-        | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+      gate_lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
       if [ "$gate_lang" = "flutter" ]; then
         RED_GATE_BIN="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate"
       else

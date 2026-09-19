@@ -60,7 +60,11 @@ brief="$ws/task-$task-brief.md"
 [ -f "$ledger" ] || { echo "CODER-GATE: no ledger: $ledger" >&2; exit 3; }
 [ -f "$brief" ] || { echo "CODER-GATE: no brief: $brief" >&2; exit 3; }
 
-gate_entry=$(grep -E '"type":"gate"|"type": *"gate"' "$ledger" | tail -1)
+# The gate entry a task must use is per-language: resolve-toolchain --all can
+# preinstall one entry per ecosystem marker, so read the entry for the task's
+# own language (script/task-lang walks the plan's `touches`), not tail -1.
+task_lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
+gate_entry=$("$SCRIPT_DIR/gate-entry-for" "$ws" "$task_lang")
 [ -n "$gate_entry" ] || { echo "CODER-GATE: no gate entry - run resolve-toolchain first" >&2; exit 3; }
 lang=$(printf '%s' "$gate_entry" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 test_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
@@ -242,6 +246,20 @@ PY
       # failure exits 1 (never TEST_DEFECT, never an auto empty commit, never a
       # green verdict the caller could mistake for a completed task). The
       # working tree/index are left untouched so the changes are preserved.
+      # Exemption: a task whose plan entry declares verify_only (a check task
+      # owns an existing surface, it does not change it) may be green with no
+      # diff - that empty commit is intentional, so `--allow-empty` records it
+      # instead of halting. Absence of the flag (or of plan.json) keeps the
+      # hard barrier.
+      verify_only=0
+      if [ -f "$ws/plan.json" ]; then
+        if python3 -c 'import json,sys
+d=json.load(open(sys.argv[1],encoding="utf-8"))
+t=sys.argv[2]
+print(1 if any(str(x.get("id"))==t and x.get("verify_only") for x in d.get("tasks",[])) else 0)' "$ws/plan.json" "$task" | grep -qx 1; then
+          verify_only=1
+        fi
+      fi
       arc=0
       "$GIT_BIN" add -A || arc=$?
       if [ "$arc" -ne 0 ]; then
@@ -253,19 +271,33 @@ PY
       # conflated. (--quiet implies --exit-code.)
       drc=0
       "$GIT_BIN" diff --cached --quiet || drc=$?
+      committed=0
       if [ "$drc" -eq 0 ]; then
-        echo "CODER-GATE: gate green but nothing to commit (empty commit) - blocking" >&2
-        exit 1
+        if [ "$verify_only" -eq 1 ]; then
+          echo "CODER-GATE: gate green with no diff on verify_only task - recording intentional empty commit" >&2
+          vrc=0
+          "$GIT_BIN" commit -m "task $task verify" --allow-empty >/dev/null 2>&1 || vrc=$?
+          if [ "$vrc" -ne 0 ]; then
+            echo "CODER-GATE: empty commit failed (rc=$vrc) - blocking; changes preserved" >&2
+            exit 1
+          fi
+          committed=1
+        else
+          echo "CODER-GATE: gate green but nothing to commit (empty commit) - blocking" >&2
+          exit 1
+        fi
       fi
       if [ "$drc" -gt 1 ]; then
         echo "CODER-GATE: cannot inspect the staged diff (rc=$drc) - blocking; changes preserved" >&2
         exit 1
       fi
-      crc=0
-      "$GIT_BIN" commit -m "task $task green" >/dev/null 2>&1 || crc=$?
-      if [ "$crc" -ne 0 ]; then
-        echo "CODER-GATE: commit failed (rc=$crc) - blocking; changes preserved" >&2
-        exit 1
+      if [ "$committed" -eq 0 ]; then
+        crc=0
+        "$GIT_BIN" commit -m "task $task green" >/dev/null 2>&1 || crc=$?
+        if [ "$crc" -ne 0 ]; then
+          echo "CODER-GATE: commit failed (rc=$crc) - blocking; changes preserved" >&2
+          exit 1
+        fi
       fi
       sha=$("$GIT_BIN" rev-parse --short HEAD)
       "$SCRIPT_DIR/ledger-append" "$ledger" commit "$task" "green $sha" commits="$sha"
@@ -280,8 +312,8 @@ PY
       fi
       pkg="$ws/task-$task-review-package.diff"
       "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" "$task" || true
-      DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
-      "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
+      DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
+      "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
         --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
     fi
     exit 0
@@ -335,14 +367,14 @@ FIXEOF
   # and must match the variant selected above.
   session_file="$ws/task-$task-$coder_agent-session.txt"
   [ -f "$session_file" ] && session=$(cat "$session_file")
-  DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+  DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
 
   if [ -n "$session" ]; then
-    "$DISPATCH_BIN" --agent "$coder_agent" --task "$task" \
+    "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$task" \
       --continue "$session" --prompt-file "$fix_prompt" --log "$log"
   else
     echo "CODER-GATE: no session recorded - dispatching fresh (context reset)" >&2
-    "$DISPATCH_BIN" --agent "$coder_agent" --task "$task" \
+    "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$task" \
       --prompt-file "$fix_prompt" --log "$log"
   fi
   # loop: re-check the gate on the resumed session's output.

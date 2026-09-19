@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Bounded retry wrapper for the headless dispatch launcher (ADR-0001/D11).
+# A transient opencode start-up failure (provider timeout rc=124, dropped
+# connection, ...) used to stop the whole task: red-gate ledgered
+# dispatch_interrupted and exited, coder-gate's fix loop blocked, task-run
+# blocked on the corrective path. This wrapper retries those transient codes a
+# bounded number of times; permanent verdicts pass through unchanged - a hiccup
+# never burns a task, a genuine blocker still surfaces with its original code.
+#
+# retryable = any exit code not in {0, 2, 3}:
+#   0  dispatched                - success, do not retry
+#   2  usage / missing prompt    - caller bug, retrying would fail identically
+#   3  wrong-agent refusal       - a mode: subagent definition; permanent
+#   everything else              - opencode's own exit code; retry
+#
+# Usage: dispatch-retry <dispatch args...>
+#   All arguments are forwarded verbatim to DISPATCH_BIN, so the wrapper is
+#   a drop-in at every dispatch call site.
+#
+# Env:
+#   DISPATCH_BIN             command to retry (default: this dir's dispatch)
+#   DISPATCH_MAX_TRIES       total attempts before giving up (default: 3)
+#   DISPATCH_RETRY_BACKOFF   seconds between attempts (default: 0)
+#
+# Exit codes: same as DISPATCH_BIN - the first permanent code, or the last
+#             attempt's code when the retries are exhausted.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+MAX_TRIES="${DISPATCH_MAX_TRIES:-3}"
+BACKOFF="${DISPATCH_RETRY_BACKOFF:-0}"
+
+args=("$@")
+
+# --task/--log locate the ledger for the dispatch_retry records. The forwarded
+# argument list is copied first and never modified.
+task=""
+log=""
+i=0
+while [ $i -lt ${#args[@]} ]; do
+  case "${args[$i]}" in
+    --task) task=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
+    --log) log=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
+    *) i=$((i + 1)) ;;
+  esac
+done
+
+attempt=0
+rc=1
+while [ "$attempt" -lt "$MAX_TRIES" ]; do
+  attempt=$((attempt + 1))
+  set +e
+  "$DISPATCH_BIN" "${args[@]}"
+  rc=$?
+  set -e
+  case "$rc" in
+    0|2|3) break ;;
+  esac
+  [ "$attempt" -lt "$MAX_TRIES" ] || break
+  # Ledger the failed attempt (best effort, like the rest of the retry): a
+  # run that had to retry is observable state, not a silent in-memory decision.
+  if [ -n "$task" ] && [ -n "$log" ]; then
+    ledger_dir=$(dirname "$log")
+    mkdir -p "$ledger_dir"
+    "$SCRIPT_DIR/ledger-append" "$ledger_dir/ledger.jsonl" dispatch_retry "$task" \
+      "dispatch attempt $attempt failed rc=$rc" >/dev/null 2>&1 || true
+  fi
+  if [ "$BACKOFF" -gt 0 ] 2>/dev/null; then
+    sleep "$BACKOFF"
+  fi
+  echo "DISPATCH-RETRY: attempt $attempt failed (rc=$rc) - retrying (max $MAX_TRIES)" >&2
+done
+
+exit "$rc"

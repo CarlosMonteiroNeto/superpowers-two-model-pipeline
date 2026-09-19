@@ -8,7 +8,12 @@ Mechanical DISCARD triggers (first match wins):
   1. No partial work since HEAD (empty diff, nothing staged, no untracked).
   2. Any changed file outside this task's `touches` (plan.json), EXCEPT:
      - a test file that is newly authored (not present in HEAD); a modified
-       committed test file is tampering and stays a violation;
+       committed test file is tampering and stays a violation, UNLESS the task
+       is a corrective (`corrects` set in the plan): a corrective remediates
+       review findings that can point at tests an earlier task committed, so
+       blocking those edits would turn every such finding into an unrecoverable
+       escalation. The revisor still reviews the test changes and the gate's
+       full suite must still pass;
      - a code-generated file (`.freezed.dart`, `.g.dart`, `.gr.dart`,
        `.gen.dart`, `.mocks.dart`): build output, not authored scope, and a
        whole-project generator run rewrites every drifted generated file;
@@ -73,9 +78,11 @@ def main():
     with open(plan, "r", encoding="utf-8", errors="replace") as fh:
         plan_data = json.load(fh)
     touches = set()
+    is_corrective = False
     for t in plan_data.get("tasks", []):
         if str(t.get("id")) == str(task):
             touches = set(t.get("touches", []))
+            is_corrective = bool(t.get("corrects"))
             break
 
     changed = set()
@@ -93,8 +100,10 @@ def main():
         if c in touches:
             continue
         # A newly authored test file is expected (tests are changed - touches);
-        # a modified committed test file is tampering, not authoring.
-        if is_test_path(c) and not in_head(c):
+        # a modified committed test file is tampering, not authoring. A
+        # corrective may edit a committed test: its findings legitimately live
+        # there and the revisor reviews that diff.
+        if is_test_path(c) and (is_corrective or not in_head(c)):
             continue
         # Build output (codegen): derived, not authored scope (C3).
         if is_generated_path(c):

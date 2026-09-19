@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Resolved `gate` ledger entry lookup (rec #3): with several toolchains
+# preinstalled by `resolve-toolchain --all`, the entry a task's gates must read
+# is the one for that task's language - not whatever was appended last. This
+# prints the FIRST `gate` entry whose lang matches LANG, so the <<--all>> append
+# order (deterministic) does not matter and a later manual entry for the same
+# lang still loses to the preinstall (the pipeline never re-asks).
+#
+# Without LANG, returns the last `gate` entry (the branch default) - the exact
+# behavior every pre--all caller already had.
+#
+# Usage: gate-entry-for WORKSPACE [LANG]
+#   WORKSPACE  pipeline workspace (holds ledger.jsonl)
+#   LANG       optional; entry whose `lang` matches (first match wins)
+#
+# Prints: the matching gate entry JSON line, or nothing when no entry exists.
+set -euo pipefail
+
+ws=$1
+lang=${2:-}
+
+entry=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null | tail -1)
+if [ -n "$lang" ]; then
+  hit=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null \
+    | grep -F '"lang": "'"$lang"'"' | head -1 || true)
+  [ -n "$hit" ] || hit=$entry
+  entry=$hit
+fi
+
+printf '%s\n' "$entry"

@@ -34,13 +34,18 @@ ledger="$ws/ledger.jsonl"
 test_cmd=${3:-}
 if [ -z "$test_cmd" ]; then
   [ -f "$ledger" ] || { echo "RED-GATE: no TEST_CMD given and no ledger to read it from" >&2; exit 2; }
-  test_cmd=$(grep -E '"type": *"gate"' "$ledger" | tail -1 | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
+  lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
+  gate_entry=$("$SCRIPT_DIR/gate-entry-for" "$ws" "$lang")
+  test_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
   [ -n "$test_cmd" ] || { echo "RED-GATE: no test_cmd in ledger - run resolve-toolchain first" >&2; exit 2; }
 fi
 
 # C3: dispatch the operador variant whose bash allowlist covers this
 # ecosystem's test runner (the base definition only allowlists flutter/dart).
-lang=$(grep -E '"type": *"gate"' "$ledger" 2>/dev/null | tail -1 \
+# The language is per-task (task-lang), not the branch-level tail -1: with
+# several toolchains preinstalled the task's own touches decide its tests.
+lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
+[ -n "$lang" ] || lang=$(grep -E '"type": *"gate"' "$ledger" 2>/dev/null | tail -1 \
   | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$lang")
 
@@ -94,9 +99,9 @@ fi
 # scaffolded brief is sound by construction - Script CEO launches the
 # operador directly, no intermediation, no LLM approval of a check the
 # exit code already decided.
-DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
 set +e
-"$DISPATCH_BIN" --agent "$coder_agent" --task "$task" \
+"$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$task" \
   "${resume_args[@]}" \
   --prompt-file "$brief" --log "$ws/task-$task-coder.log"
 dispatch_rc=$?
