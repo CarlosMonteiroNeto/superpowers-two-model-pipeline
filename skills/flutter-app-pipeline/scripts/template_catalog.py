@@ -61,10 +61,13 @@ def upsert_template(conn, owner_repo, category, project, score_report, evidence=
             conn.execute("UPDATE templates SET triage_decision=NULL, triage_confidence=NULL, triage_policy_version=NULL, triage_actor=NULL, vector_identity=NULL WHERE owner_repo=?", (owner_repo,))
 
 
-def list_templates(conn, category=None):
+def list_templates(conn, category=None, *, include_rejected=False):
     query, args = "SELECT * FROM templates", ()
     if category is not None:
         query, args = query + " WHERE category=?", (category,)
+    if not include_rejected:
+        query += " AND " if " WHERE " in query else " WHERE "
+        query += "(triage_decision IS NULL OR triage_decision != 'reject')"
     return [dict(row) for row in conn.execute(query + " ORDER BY owner_repo", args)]
 
 

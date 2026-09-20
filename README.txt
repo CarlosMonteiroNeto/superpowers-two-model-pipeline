@@ -538,3 +538,6 @@ LICENSE
 -------
 
 MIT - see LICENSE file for details. Upstream: https://github.com/obra/superpowers
+Site 1 catalog triage
+---------------------
+template-triage consumes complete catalog evidence and Category Skeleton context. It only evaluates DEVELOPER_DECISION scoring results; AUTO_APPROVE and AUTO_REJECT keep their existing paths. Calibrated active Jev adopt/reject decisions affect shortlist metadata only and never select, clone, install, or download a project template. Off, shadow, unavailable, uncertain, and invalid evidence preserve developer handling and record a fallback reason.

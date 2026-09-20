@@ -37,6 +37,14 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 
 ## 2. Phase 2 — Research & Planning (project-level + per task)
 
+Site 1 catalog triage is advisory shortlist handling. `scripts/template-triage`
+accepts complete evidence and Category Skeleton context, and only invokes Jev
+for `DEVELOPER_DECISION` scoring results. AUTO_APPROVE and AUTO_REJECT retain
+their existing paths. Active adopt/reject decisions require calibrated policy
+and high confidence; they never select, clone, install, or download a project
+template. Off, shadow, missing evidence, failed constraints, uncertainty, and
+provider failures preserve the existing developer path and record provenance.
+
 ### 2a. Solution research
 
 **Package search** — same task-level cycle as before:

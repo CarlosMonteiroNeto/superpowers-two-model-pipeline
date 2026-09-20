@@ -460,3 +460,6 @@ skills/skill-scripter/SKILL.md    <- audits a skill/stage for prose decisions th
    through `scripts/cmd`.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.
+### Site 1 catalog triage
+
+The Flutter pipeline exposes `template-triage EVIDENCE_FILE CONTEXT_FILE --workspace DIR --output REPORT` for shortlist triage. It requires complete evidence and all Category Skeleton fields, only evaluates `DEVELOPER_DECISION` scoring results, and keeps AUTO_APPROVE/AUTO_REJECT on their existing paths. Jev adopt/reject outcomes are shortlist metadata under calibrated active policy; they never select, clone, install, or download a project template. Off, shadow, unavailable, uncertain, and invalid evidence fall back to the existing developer path with an explicit reason.
