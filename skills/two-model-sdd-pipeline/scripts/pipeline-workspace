@@ -40,6 +40,9 @@ slug=${slug%.md}
   || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
 
 root=$(git rev-parse --show-toplevel)
+if command -v cygpath >/dev/null 2>&1; then
+  root=$(cygpath -u "$root")
+fi
 base="$root/.superpowers/two-model"
 dir="$base/$slug"
 mkdir -p "$dir"

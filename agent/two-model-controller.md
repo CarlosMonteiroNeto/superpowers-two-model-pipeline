@@ -1,8 +1,9 @@
 ---
-description: Strategic fallback of the two-model pipeline (DeepSeek v4.1 Flash). Used only for final-branch review or arbitration when the interactive session (B) is unavailable.
+description: Strategic fallback of the two-model pipeline (GPT-5.6 Sol, high reasoning). Used only for final-branch review or arbitration when the interactive session (B) is unavailable.
 mode: all
 hidden: true
-model: opencode-go/deepseek-v4.1-flash
+model: opencode/gpt-5.6-sol
+variant: high
 permission:
   edit: deny
   read: allow

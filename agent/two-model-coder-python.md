@@ -1,7 +1,8 @@
 ---
 description: Operational tier of the two-model pipeline (Python). Owns the RED/GREEN loop - authors RED tests, runs them to save the runner's machine-readable evidence, declares and confirms the reason before implementing; may run test/analyze/format, never git.
 mode: all
-model: opencode-go/deepseek-v4.1-flash
+model: opencode/gpt-5.6-terra
+variant: low
 permission:
   edit: allow
   read: allow
