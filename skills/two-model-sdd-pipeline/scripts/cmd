@@ -23,6 +23,9 @@
 # Exit codes: the command's own exit code; 2 = usage error.
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+. "$SCRIPT_DIR/lib/path-normalize.sh"
+
 full_file=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,6 +53,7 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 
+full_file=$(normalize_posix_path "$full_file")
 mkdir -p "$(dirname "$full_file")"
 
 RTK_BIN="${RTK_BIN:-rtk}"

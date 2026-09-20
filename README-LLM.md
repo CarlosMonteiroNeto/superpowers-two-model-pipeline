@@ -376,6 +376,12 @@ The model and reasoning variant are selected by each agent definition. The
 repo mirrors these definitions under `agent/` for versioning, so syncing the
 checkout also keeps the tier assignment stable across Codex sessions.
 
+On Git Bash for Windows, `pipeline-workspace` and `cmd` normalize native
+Windows paths through their shared `lib/path-normalize.sh` helper before
+passing them to POSIX filesystem tools. This keeps workspaces and full command
+logs inside the selected checkout, including paths with spaces, instead of
+asking MSYS `mkdir` to create a literal `C:` directory.
+
 ## 12. Repository layout
 
 ```

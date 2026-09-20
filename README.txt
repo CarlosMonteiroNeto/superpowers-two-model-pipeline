@@ -473,6 +473,11 @@ coder definitions use opencode/gpt-5.6-terra with the low variant. Strategic
 director, reviewer and controller definitions use opencode/gpt-5.6-sol with
 the high variant; the Flutter orchestrator uses the same Sol/high pairing.
 
+On Git Bash for Windows, pipeline-workspace and cmd normalize native paths
+through their shared lib/path-normalize.sh helper before POSIX filesystem
+operations. This supports checkout and output paths with spaces and prevents
+MSYS from attempting to create a literal C: directory.
+
 TESTS
 -----
 
