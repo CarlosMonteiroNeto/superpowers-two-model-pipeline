@@ -55,6 +55,21 @@ valid finite dimensions; missing databases, malformed vectors, and invalid
 arguments are setup errors rather than silent misses. Recall never downloads,
 selects, or adopts a template, and it never calls the network.
 
+Site 2 suitability is a separate optional step after deterministic recall:
+`scripts/recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR
+--output REPORT`. It sends the full eligible shortlist and Category
+Skeleton/intended-use/dependency state in one Choice batch, bounded at 32
+questions and 64 KiB without truncating evidence. Each question names a
+candidate state path and chooses `suitable`, `unsuitable`, or `needs_review`.
+Off and shadow preserve the deterministic shortlist. Calibrated active mode
+keeps only confident suitable candidates; all unsuitable or uncertain active
+results remain a MISS for the normal live-search fallback. Provider failures
+fall back to deterministic recall with explicit unavailable telemetry, while
+per-answer uncertainty is recorded separately. `template-recall` invokes the
+existing Phase 2a `template-search` after an active MISS when specific and
+generic queries are supplied. This layer never changes freshness, score
+verdicts, timestamps, or catalog membership.
+
 ### 2a. Solution research
 
 **Package search** — same task-level cycle as before:

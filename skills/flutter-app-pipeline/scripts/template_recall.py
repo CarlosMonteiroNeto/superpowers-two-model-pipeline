@@ -13,6 +13,7 @@ import datetime
 import json
 import math
 import os
+import subprocess
 import sqlite3
 import sys
 
@@ -207,6 +208,28 @@ def recall(
     return ("HIT", eligible[:top_n]) if eligible else ("MISS", [])
 
 
+def _run_live_search(specific, generic, workspace):
+    """Invoke the existing Phase 2a search only after an explicit MISS.
+
+    The recall boundary remains offline when no search queries are supplied.
+    The caller receives the search output as telemetry; this function never
+    changes the deterministic recall verdict or catalog.
+    """
+    script = os.path.join(os.path.dirname(__file__), "template-search")
+    shell = os.environ.get("BASH")
+    if not shell:
+        candidate = r"C:\Program Files\Git\bin\bash.exe"
+        shell = candidate if os.name == "nt" and os.path.exists(candidate) else "bash"
+    result = subprocess.run(
+        [shell, script, "--specific", specific, "--generic", generic],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        env=dict(os.environ),
+    )
+    return {"exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("category")
@@ -217,6 +240,13 @@ def main(argv=None):
     parser.add_argument("--query-vector", help="JSON list or vector record")
     parser.add_argument("--query-source-hash")
     parser.add_argument("--vector-identity")
+    parser.add_argument("--workspace")
+    parser.add_argument("--policy")
+    parser.add_argument("--suitability-context")
+    parser.add_argument("--suitability-output")
+    parser.add_argument("--live-search", action="store_true")
+    parser.add_argument("--specific")
+    parser.add_argument("--generic")
     args = parser.parse_args(argv)
 
     # Recall is read-only and must never create an empty catalog as a side
@@ -244,7 +274,35 @@ def main(argv=None):
             query_source_hash=args.query_source_hash,
             query_vector_identity=args.vector_identity,
         )
-        print(json.dumps({"status": status, "results": rows}, ensure_ascii=False, allow_nan=False))
+        report = {"status": status, "results": rows}
+        if args.suitability_context:
+            if not args.workspace:
+                return 1
+            with open(args.suitability_context, encoding="utf-8") as handle:
+                context = json.load(handle)
+            if status == "SETUP_ERROR":
+                # Preserve the deterministic setup error and avoid invoking
+                # an optional Jev hook on malformed catalog/embedding state.
+                report["verdict"] = "SETUP_ERROR"
+            else:
+                try:
+                    from recall_suitability import assess
+                except ImportError:
+                    from .recall_suitability import assess
+                report = assess(report, context, workspace=args.workspace, policy_path=args.policy)
+                if report.get("verdict") == "MISS":
+                    specific = args.specific or context.get("specific_query")
+                    generic = args.generic or context.get("generic_query")
+                    if specific and generic:
+                        report["live_search"] = _run_live_search(specific, generic, args.workspace)
+                    elif args.live_search:
+                        report["live_search"] = {"exit_code": 2, "stdout": "", "stderr": "missing specific/generic query"}
+            if args.suitability_output:
+                with open(args.suitability_output, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle, ensure_ascii=False, allow_nan=False, sort_keys=True)
+            print(json.dumps(report, ensure_ascii=False, allow_nan=False))
+            return {"HIT": 0, "MISS": 2, "SETUP_ERROR": 1}[report.get("verdict", "SETUP_ERROR")]
+        print(json.dumps(report, ensure_ascii=False, allow_nan=False))
         return {"HIT": 0, "MISS": 2, "SETUP_ERROR": 1}[status]
     except (OSError, ValueError, TypeError, sqlite3.DatabaseError, json.JSONDecodeError):
         return 1

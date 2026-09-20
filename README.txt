@@ -41,6 +41,16 @@ model, vector identity, source evidence hash, dimensions, and finite values;
 invalid arguments, missing databases, malformed vectors, and missing embedding
 setup are setup errors rather than silent MISS results. Recall never downloads,
 selects, or adopts a template.
+`recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR --output REPORT`
+is the optional Site 2 Choice layer. It evaluates the complete shortlist and
+project context in one batch of at most 32 questions and 64 KiB. Questions
+choose suitable, unsuitable, or needs_review by explicit candidate state path.
+Off and shadow preserve deterministic recall; calibrated active mode keeps only
+confident suitable candidates. Per-answer uncertainty and provider failure are
+separate telemetry, and provider failure falls back to deterministic recall.
+An active MISS is marked for live search; template-recall invokes the existing
+Phase 2a template-search when both category queries are available. Suitability
+never changes freshness, score verdicts, timestamps, or catalog membership.
 =====================================
 
 A fork of obra/superpowers (MIT) that turns it into a deterministic,

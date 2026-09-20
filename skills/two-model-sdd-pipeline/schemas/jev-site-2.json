@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Site 2 recall suitability",
+  "version": "site2-v1",
+  "model": "jev",
+  "budget": {
+    "max_questions": 32,
+    "max_payload_bytes": 65536
+  },
+  "questions": {
+    "candidate_0": {
+      "type": "choice",
+      "instructions": "Assess the candidate at state.candidates.candidate_0 for the current project. Use the Category Skeleton, intended use, declared dependencies, and the candidate's stored scoring evidence. Judge suitability for this project, not freshness.",
+      "criteria": {
+        "suitable": "The candidate fits the current project and its stated constraints.",
+        "unsuitable": "The candidate does not fit the current project or violates a stated constraint.",
+        "needs_review": "The available evidence is insufficient or ambiguous for a confident suitability judgment."
+      }
+    }
+  },
+  "question_template": {
+    "type": "choice",
+    "instructions": "Assess the candidate at state.candidates.{candidate_id} for the current project. Use the current Category Skeleton, intended use, declared dependencies, and the candidate's stored scoring evidence. Judge suitability for this project, not freshness.",
+    "criteria": {
+      "suitable": "The candidate fits the current project and its stated constraints.",
+      "unsuitable": "The candidate does not fit the current project or violates a stated constraint.",
+      "needs_review": "The available evidence is insufficient or ambiguous for a confident suitability judgment."
+    }
+  }
+}

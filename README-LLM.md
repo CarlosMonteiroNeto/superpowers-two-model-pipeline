@@ -45,6 +45,19 @@ source evidence hash, dimensions, and finite values match the query and row.
 Missing databases, malformed vectors, invalid top/age arguments, and missing
 embedding setup are setup errors, never silent MISS results.
 
+`recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR --output REPORT`
+is the optional Site 2 semantic layer. It sends the complete deterministic
+shortlist and Category Skeleton/intended-use/dependency context as one Choice
+batch, with at most 32 candidate questions and a 64 KiB request budget. Each
+question names its candidate state path and returns `suitable`, `unsuitable`,
+or `needs_review`. Off and shadow modes preserve deterministic recall; active
+mode requires a matching calibrated policy and keeps only confident suitable
+candidates. Uncertainty is recorded per answer, while provider failure is
+recorded separately and falls back to the deterministic shortlist. An active
+MISS carries a live-search reason; `template-recall` invokes the existing
+Phase 2a `template-search` only when specific and generic queries are present.
+Site 2 never changes freshness, scoring, timestamps, or catalog membership.
+
 This file gives any LLM agent (or coding agent) a complete mental model of
 this repository and the development harness it provides. Read it before doing
 work. It describes the architecture, the tools, the pipeline phases, the
