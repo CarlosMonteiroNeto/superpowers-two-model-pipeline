@@ -368,11 +368,13 @@ On the reference machine the tiers are fixed agent definitions (both
 
 | Tier | Agent | Model |
 |---|---|---|
-| Strategic (D, B-side judgment) | `two-model-reviewer` | `opencode-go/deepseek-v4.1-flash` |
-| Operational (C) | `two-model-coder` | `opencode-go/deepseek-v4.1-flash` |
+| Strategic (director, reviewer, and controller) | `two-model-task-generator`, `two-model-reviewer`, `two-model-controller` | `opencode/gpt-5.6-sol`, `variant: high` |
+| Operational (coder and language variants) | `two-model-coder*` | `opencode/gpt-5.6-terra`, `variant: low` |
+| Flutter orchestrator | `flutter-pipeline` | `opencode/gpt-5.6-sol`, `variant: high` |
 
-No `variants` block is used; the model is selected by the agent definition.
-The repo mirrors these definitions under `agent/` for versioning.
+The model and reasoning variant are selected by each agent definition. The
+repo mirrors these definitions under `agent/` for versioning, so syncing the
+checkout also keeps the tier assignment stable across Codex sessions.
 
 ## 12. Repository layout
 

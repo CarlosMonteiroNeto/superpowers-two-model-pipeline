@@ -467,10 +467,11 @@ or take it as the first argument):
   scripts/install-superpowers  full clone when not installed (refuses to clobber)
 
 The agent runs check-superpowers at session start and, if behind or not
-installed, syncs/installs and asks you to restart OpenCode. Tier models
-(mirrored under `agent/`, both `mode: all` so they can be dispatched
-headlessly): Strategic (Agente diretor / Agente revisor) and Operational
-(Agente operador) = opencode-go/deepseek-v4.1-flash.
+installed, syncs/installs and asks you to restart OpenCode. Tier models are
+mirrored under `agent/` and use `mode: all` for headless dispatch. Operational
+coder definitions use opencode/gpt-5.6-terra with the low variant. Strategic
+director, reviewer and controller definitions use opencode/gpt-5.6-sol with
+the high variant; the Flutter orchestrator uses the same Sol/high pairing.
 
 TESTS
 -----
