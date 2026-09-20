@@ -76,6 +76,26 @@ operador, route tasks, or write the authoritative ledger. Compare full director
 usage and observed outcomes before claiming savings: a smaller prompt file
 alone is not evidence of savings.
 
+### Site 4 reviewer depth guidance
+
+`review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` is the shared Site 4
+preparation boundary used by generic `coder-gate` and Flutter `green-gate`. It
+keeps the complete task brief and full review diff, including tests and any
+available interface-touch or corrective context, then runs the optional
+`review-guidance` hook once. An active, calibrated Site 4 policy with
+confidence at least `0.9` may append procedural `focused_review` guidance;
+standard review remains the default for off, shadow, unavailable, uncertain,
+oversized/incomplete evidence, corrective tasks, `fused_from`, and
+`interface_touched`. Shadow records a hypothetical depth but dispatches the
+same standard review.
+
+Both guidance variants retain all four reviewer duties, the complete evidence,
+the existing JSON verdict schema, and approval criteria. The reviewer remains
+the sole semantic approval authority. Jev does not predict a verdict, replace
+an agent/model, skip the reviewer, change routing, or write authoritative
+ledger entries. Offline evaluation separates recommendation agreement from
+executed reviewer outcomes and never activates a policy automatically.
+
 This file gives any LLM agent (or coding agent) a complete mental model of
 this repository and the development harness it provides. Read it before doing
 work. It describes the architecture, the tools, the pipeline phases, the
@@ -234,7 +254,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` (both through `cmd` — M6) + commit. No format gate (M8: coder-gate auto-applies the formatter first, so it could never fire). On commit: appends the `commit` ledger entry (including the validated `tree=` hash that `integrate` compares to skip a provably redundant post-merge suite; ADR-0013), advisory `interface-check`, then review package + **dispatches revisor**; the C2 scope gate runs first via `keep-discard`. `--no-commit` never commits/never dispatches | exit 0 green (+commit +revisor); 1 tests; 2 analyze; 4 scope violation |
 | `rtk-run [--ws WS --task N] <red\|test\|analyze> [ARGS...]` (flutter) | The Agente operador's SCOPED runner (T1, ADR-0016). It accepts only three modes and delegates to `cmd`, so the operador's test output is RTK-compressed while the FULL output lands on disk: `red` runs `flutter test --machine` and writes `WS/task-N-red.txt` (the exact path `red-form-check` reads), `test` runs `flutter test`, `analyze` runs `flutter analyze`. It is OFFERED by the brief, not mandated — the operador may run the project runner directly instead and redirect the evidence itself. Its allowlist entry is an install-independent two-sided wildcard (`*flutter-app-pipeline/scripts/rtk-run*`, permission `*` matches any character), so it matches from any checkout and however the shell wraps the call (`& "<path>"`, `bash "<path>"`, or bare). The coder definition ships platform-generic READ-ONLY allowances (Windows cmdlets `Get-ChildItem`/`Get-Content`/… and POSIX `ls`/`cat`/`grep`/…). It does NOT allow the generic interpreters (`bash*`/`python*`), which would be arbitrary execution — the measured saving comes from the read-only set, not from them. A per-machine override is what let install-specific paths leak into the mirror, so the LIVE definition and the mirror are kept identical | the wrapped command's exit code; 2 usage |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW). An `arbitrate_resolved` newer than the last escalation re-scaffolds (`BRIEF`); a re-escalation after a ruling is exit 1 "arbitration did not resolve task N" (C1). `scope_violation` escalates like `escalated`. Task count from JSON, not an `"id"` grep (M5) | exit 0 routed; 1 inconsistent / arbitration failed; 2 usage |
-| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` ahead of the commit list so the revisor receives the brief in the single `--prompt-file` package | exit 0 wrote; 2 usage |
+| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff), inline `task-TASK-brief.md`, and run the shared Site 4 `review-guidance` preparation once. The hook preserves the full package and falls back to standard guidance on optional inference failure; mandatory reviewer dispatch and verdict parsing remain in the existing callers | exit 0 wrote; 2 usage |
 | `keep-discard WORKSPACE TASK` | The C2 scope gate (run before any commit): KEEP when the partial work is in `touches`; newly authored test files are exempt (H3, shared `is_test_path`), a modified committed test file is tampering; build output (`.freezed.dart`, `.g.dart`, `.gr.dart`, `.gen.dart`, `.mocks.dart`) and the tracked plan (`docs/superpowers/plans/*.json`) are exempt too — codegen is derived, not authored scope, and a whole-project generator run rewrites every drifted generated file (C3, ADR-0014) | exit 0 KEEP; 1 DISCARD out-of-scope/tampered; 2 usage; 3 DISCARD (no partial work) |
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json). Wired post-commit as an advisory ledger entry (`interface_touched`) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-closing: all complete + no unresolved verdicts + no blocking parked (structured `PARKED_SEVERITY` Critical/Important — M7, never prose) + tests/analyze green (skipped when the tree is unchanged since the last green checkpoint — HEAD equal to the newest `commit` OR `integrated` ledger sha, so the skip also fires after a wave's merge commit) + no pending worktree (`worktree_alloc` without `worktree_release`), no leftover `task/<N>` branch, no newest `integration_failed` after completion (parallel run) | exit 0 ready; 1 blockers; 2 usage |

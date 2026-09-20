@@ -208,6 +208,40 @@ exit "${STUB_DISPATCH_EXIT:-0}"
                              capture_output=True, text=True).stdout
         self.assertEqual(log.count("\n"), 2, log)
 
+    def test_missing_baseline_package_stops_reviewer_dispatch(self):
+        self.brief()
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        package = write_stub(self.stub_dir, "review-package-missing", "exit 19\n")
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
+        r = run_script(
+            "coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+            env_extra=self._env(STUB_GATE_EXIT="0", REVIEW_PACKAGE_BIN=package),
+        )
+        self.assertEqual(r.returncode, 19, r.stdout + r.stderr)
+        dcalls = dispatch_log.read_text(encoding="utf-8") if dispatch_log.exists() else ""
+        self.assertNotIn("two-model-reviewer", dcalls)
+
+    def test_stale_baseline_package_stops_reviewer_dispatch(self):
+        self.brief()
+        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        package = write_stub(self.stub_dir, "review-package-stale", "exit 0\n")
+        stale = self.ws / "task-1-review-package.diff"
+        stale.write_text("stale package\n", encoding="utf-8")
+        (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
+        r = run_script(
+            "coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+            env_extra=self._env(STUB_GATE_EXIT="0", REVIEW_PACKAGE_BIN=package),
+        )
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        dcalls = dispatch_log.read_text(encoding="utf-8") if dispatch_log.exists() else ""
+        self.assertNotIn("two-model-reviewer", dcalls)
+
     def test_gate_failure_retries_until_green(self):
         """The Coder loop is unbounded: repeated gate failures keep
         redispatching the Coder with fresh fix prompts (no hand-back to the

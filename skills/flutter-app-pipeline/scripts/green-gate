@@ -131,8 +131,17 @@ fi
 if [ -n "$ws" ] && [ -n "$task" ]; then
   base=${base:-HEAD~1}
   pkg="$ws/task-$task-review-package.diff"
-  "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/review-package" \
-    "$ws" "$base" HEAD "$pkg" "$task" || true
+  # The review package is required evidence for the mandatory reviewer.
+  # Remove any previous artifact so a failed reconstruction cannot dispatch a
+  # reviewer against stale contents. The package script itself handles an
+  # optional guidance-hook failure by retaining standard guidance.
+  REVIEW_PACKAGE_BIN="${REVIEW_PACKAGE_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/review-package}"
+  rm -f "$pkg"
+  "$REVIEW_PACKAGE_BIN" "$ws" "$base" HEAD "$pkg" "$task"
+  [ -s "$pkg" ] || {
+    echo "GREEN-GATE: review package missing after construction - refusing reviewer dispatch" >&2
+    exit 1
+  }
 
   DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/dispatch}"
   "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \

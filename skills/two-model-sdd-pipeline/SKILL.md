@@ -37,6 +37,27 @@ the route, or writes authoritative ledger entries. Compare full director usage
 and observed outcomes before claiming savings; a smaller prompt file alone is
 not evidence of savings.
 
+### Site 4 reviewer depth guidance
+
+`scripts/review-package` is the shared preparation boundary used by the
+generic `coder-gate` and Flutter `green-gate`. It preserves the complete task
+brief and full review diff, including tests and available interface-touch or
+corrective context, then invokes `scripts/review-guidance` once. Site 4 may
+append procedural `focused_review` guidance only for an active policy with a
+matching calibration report and confidence at least `0.9`. Oversized (>64 KiB)
+or incomplete evidence, corrective tasks (`corrects`), tasks with
+`fused_from`, interface-touch advisories, off/shadow/unavailable/uncertain
+states, and hook failures use `standard_review`.
+
+Both variants retain all four reviewer duties, the full evidence, the same JSON
+verdict schema, and the same approval criteria. The reviewer remains the sole
+semantic approval authority: this hook never predicts a verdict, substitutes an
+agent/model, skips dispatch, changes routing, or writes authoritative ledger
+entries. Site 4 uses one ten-second classifier attempt when inference is
+eligible; shadow records the hypothetical depth while dispatching standard
+review. Offline evaluation must keep recommendation agreement separate from
+executed reviewer outcomes and cannot activate a policy.
+
 Custom fork of superpowers:subagent-driven-development. A deterministic
 orchestrator (**Script CEO**) owns state, gates, dispatch, and routing; every LLM
 call is an isolated, stateless invocation fed exactly the context it needs. The

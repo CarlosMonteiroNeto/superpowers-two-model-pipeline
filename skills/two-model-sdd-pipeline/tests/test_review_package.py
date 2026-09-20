@@ -15,6 +15,16 @@ else:
     BASH = "bash"
 
 
+def write_stub(directory, name, body):
+    path = pathlib.Path(directory) / name
+    path.write_text("#!/usr/bin/env bash\n" + body, encoding="utf-8")
+    if os.name == "nt":
+        subprocess.run([BASH, "-c", "chmod +x '{}'".format(path)], check=True)
+    else:
+        path.chmod(0o755)
+    return str(path)
+
+
 def run_script(script, args, cwd, env_extra):
     env = dict(os.environ)
     env.update(env_extra)
@@ -90,6 +100,20 @@ class TestReviewPackage(ReviewPackageTestBase):
         text = out.read_text(encoding="utf-8")
         self.assertNotIn("## Task Brief", text)
         self.assertIn("## Commits", text)
+
+    def test_guidance_hook_failure_keeps_baseline_package_successful(self):
+        head = self._change_and_commit()
+        out = self._tmp / "pkg.diff"
+        guidance = write_stub(self._tmp, "guidance-fails", "exit 19\n")
+        r = run_script(
+            "review-package", [str(self.ws), self.base, head, str(out), "3"],
+            cwd=str(self.repo), env_extra={"REVIEW_GUIDANCE_BIN": guidance},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("optional review guidance unavailable", r.stderr)
+        text = out.read_text(encoding="utf-8")
+        self.assertIn("## Commits", text)
+        self.assertIn("## Diff", text)
 
     def test_usage_with_too_many_args(self):
         r = run_script("review-package", ["a", "b", "c", "d", "e", "f"],

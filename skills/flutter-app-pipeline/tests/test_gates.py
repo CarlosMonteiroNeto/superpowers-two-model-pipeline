@@ -230,6 +230,41 @@ class TestGreenGate(GateTestBase):
         # review package built into the workspace
         self.assertTrue((ws / "task-3-review-package.diff").exists())
 
+    def test_missing_baseline_package_stops_reviewer_dispatch(self):
+        repo = self._git_repo()
+        (repo / "lib" / "app.dart").write_text("void main() { print('done'); }\n", encoding="utf-8")
+        ws = self._ws_with_plan()
+        d_log = pathlib.Path(self._tmp) / "d.log"
+        package = write_stub(self.stub_dir, "review-package-missing", "exit 19\n")
+        r = run_script(
+            "green-gate",
+            ["-m", "Task 3: done", "-w", str(ws), "-t", "3", "-b", "HEAD"],
+            cwd=repo,
+            env_extra={**self.env, "STUB_DISPATCH_LOG": str(d_log),
+                       "REVIEW_PACKAGE_BIN": package},
+        )
+        self.assertEqual(r.returncode, 19, r.stdout + r.stderr)
+        dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
+        self.assertNotIn("two-model-reviewer", dcalls)
+
+    def test_stale_baseline_package_stops_reviewer_dispatch(self):
+        repo = self._git_repo()
+        (repo / "lib" / "app.dart").write_text("void main() { print('done'); }\n", encoding="utf-8")
+        ws = self._ws_with_plan()
+        d_log = pathlib.Path(self._tmp) / "d.log"
+        package = write_stub(self.stub_dir, "review-package-stale", "exit 0\n")
+        (ws / "task-3-review-package.diff").write_text("stale package\n", encoding="utf-8")
+        r = run_script(
+            "green-gate",
+            ["-m", "Task 3: done", "-w", str(ws), "-t", "3", "-b", "HEAD"],
+            cwd=repo,
+            env_extra={**self.env, "STUB_DISPATCH_LOG": str(d_log),
+                       "REVIEW_PACKAGE_BIN": package},
+        )
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        dcalls = d_log.read_text(encoding="utf-8") if d_log.exists() else ""
+        self.assertNotIn("two-model-reviewer", dcalls)
+
     def test_no_commit_skips_reviewer_dispatch(self):
         """--no-commit validation changes nothing, so it must not dispatch
         the reviewer."""

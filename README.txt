@@ -70,6 +70,26 @@ entries. Compare full director usage and observed outcomes before claiming
 savings; a smaller prompt file alone is not evidence of savings.
 =====================================
 
+SITE 4 REVIEWER DEPTH GUIDANCE
+------------------------------
+`review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` is the shared
+preparation boundary used by generic `coder-gate` and Flutter `green-gate`.
+It preserves the complete task brief and full review diff, including tests,
+interface-touch context, and corrective context, then invokes
+`review-guidance` once. Only an active calibrated Site 4 policy with
+confidence >= 0.9 may select procedural `focused_review`. Off, shadow,
+unavailable, uncertain, oversized/incomplete evidence, corrective tasks,
+`fused_from`, and `interface_touched` use `standard_review`; shadow records
+the hypothetical depth while dispatching standard review.
+
+Both variants retain all four reviewer duties, the full evidence, the same JSON
+verdict schema, and approval criteria. The reviewer remains the sole semantic
+approval authority. Jev cannot predict a verdict, substitute an agent/model,
+skip the reviewer, change routing, or write authoritative ledger entries.
+Offline evaluation separates recommendation agreement from executed reviewer
+outcomes and never activates a policy automatically.
+=====================================
+
 A fork of obra/superpowers (MIT) that turns it into a deterministic,
 two-tier development pipeline for AI coding agents, with a Flutter/Dart
 layer on top.
@@ -420,9 +440,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        (two-model-coder-{python,node,rust,go}) that can run
                        that ecosystem's tests; shared by the gates
   run-gates            generic green approval: full suite + analysis via cmd
-  review-package       build a review bundle (commits + diff); with a TASK
-                       arg, inlines the task brief so the
-                       revisor gets it in the single package file
+  review-package       build a review bundle (commits + diff), inline the
+                       task brief, and run the shared Site 4 review-guidance
+                       preparation once; the full package is preserved and
+                       optional inference failure falls back to standard
+                       guidance while reviewer dispatch stays mandatory
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW).

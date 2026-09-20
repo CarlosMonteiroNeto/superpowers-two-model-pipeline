@@ -16,6 +16,7 @@
 # Usage: review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]
 # Default OUTFILE: <workspace>/review-<base7>..<head7>.diff
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ $# -lt 3 ] || [ $# -gt 5 ]; then
   echo "usage: review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]" >&2
@@ -60,6 +61,30 @@ brief="$ws/task-$task-brief.md"
   echo "## Diff"
   git diff -U10 "${base}..${head}"
 } > "$out"
+
+# Site 4 preparation is shared by every reviewer path.  The hook only appends
+# procedural guidance to the already-required package; it never owns reviewer
+# dispatch, verdict parsing, routing, or ledger state.  A provider/config
+# failure therefore falls back inside the hook, while a failure to construct
+# the baseline package above remains a real error under `set -e`.
+if [ -n "$task" ]; then
+  guidance_bin="${REVIEW_GUIDANCE_BIN:-$SCRIPT_DIR/review-guidance}"
+  guidance_args=("$out" --workspace "$ws" --task "$task")
+  if [ -n "${JEV_POLICY_FILE:-}" ]; then
+    guidance_args+=(--policy "$JEV_POLICY_FILE")
+  fi
+  guidance_rc=0
+  if [ -x "$guidance_bin" ]; then
+    "$guidance_bin" "${guidance_args[@]}" || guidance_rc=$?
+  elif [ -f "$guidance_bin" ]; then
+    bash "$guidance_bin" "${guidance_args[@]}" || guidance_rc=$?
+  else
+    guidance_rc=127
+  fi
+  if [ "$guidance_rc" -ne 0 ]; then
+    echo "review-package: optional review guidance unavailable; using standard review" >&2
+  fi
+fi
 
 commits=$(git rev-list --count "${base}..${head}")
 echo "wrote ${out}: ${commits} commit(s), $(wc -c < "$out" | tr -d ' ') bytes"
