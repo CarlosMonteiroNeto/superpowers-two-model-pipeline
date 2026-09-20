@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Site 1 catalog triage",
+  "type": "object",
+  "required": ["model", "questions"],
+  "properties": {
+    "model": {"type": "string", "minLength": 1},
+    "questions": {
+      "type": "object",
+      "required": ["triage"],
+      "properties": {"triage": {"type": "object", "required": ["type", "instructions", "criteria"]}}
+    }
+  }
+}

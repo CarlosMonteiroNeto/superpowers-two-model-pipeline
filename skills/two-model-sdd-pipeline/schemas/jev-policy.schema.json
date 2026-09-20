@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Jev site policy",
+  "type": "object",
+  "required": ["site", "mode"],
+  "properties": {
+    "site": {"enum": ["site1", "site2", "site3", "site4", "site5"]},
+    "mode": {"type": "string"},
+    "model": {"type": "string"},
+    "schema_hash": {"type": "string"},
+    "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "evaluator": {"type": "string"},
+    "calibration_report": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"site": {"const": "site5"}}, "required": ["site"]},
+      "then": {"properties": {"mode": {"enum": ["shadow", "selected-apply"]}}},
+      "else": {"properties": {"mode": {"enum": ["off", "shadow", "active"]}}}
+    },
+    {
+      "if": {"properties": {"mode": {"const": "active"}}, "required": ["mode"]},
+      "then": {"required": ["model", "schema_hash", "threshold", "evaluator", "calibration_report"],
+               "properties": {"calibration_report": {"type": "object", "required": ["site", "model", "schema_hash", "threshold", "evaluator"], "additionalProperties": true}}}
+    }
+  ],
+  "additionalProperties": false
+}

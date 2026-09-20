@@ -311,7 +311,16 @@ print(1 if any(str(x.get("id"))==t and x.get("verify_only") for x in d.get("task
           "diff touches an interface another task consumes" || true
       fi
       pkg="$ws/task-$task-review-package.diff"
-      "$SCRIPT_DIR/review-package" "$ws" "$base" HEAD "$pkg" "$task" || true
+      # A reviewer must never receive a missing or stale baseline package.
+      # Remove any previous artifact before constructing this required one;
+      # review-package's own optional guidance hook handles advisory failure.
+      REVIEW_PACKAGE_BIN="${REVIEW_PACKAGE_BIN:-$SCRIPT_DIR/review-package}"
+      rm -f "$pkg"
+      "$REVIEW_PACKAGE_BIN" "$ws" "$base" HEAD "$pkg" "$task"
+      [ -s "$pkg" ] || {
+        echo "CODER-GATE: review package missing after construction - refusing reviewer dispatch" >&2
+        exit 1
+      }
       DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
       "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
         --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true

@@ -37,6 +37,39 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 
 ## 2. Phase 2 — Research & Planning (project-level + per task)
 
+Site 1 catalog triage is advisory shortlist handling. `scripts/template-triage`
+accepts complete evidence and Category Skeleton context, and only invokes Jev
+for `DEVELOPER_DECISION` scoring results. AUTO_APPROVE and AUTO_REJECT retain
+their existing paths. Active adopt/reject decisions require calibrated policy
+and high confidence; they never select, clone, install, or download a project
+template. Off, shadow, missing evidence, failed constraints, uncertainty, and
+provider failures preserve the existing developer path and record provenance.
+
+Site 2 template recall is a deterministic, read-only shortlist service. The
+`scripts/template-refresh` command collects complete evidence before a
+transactional upsert; a failed or incomplete collection leaves the existing
+catalog unchanged. `scripts/template-recall` applies category, freshness,
+score-verdict, package-overlap, and optional cosine-vector filters. Injected
+vectors require a matching model, vector identity, source evidence hash, and
+valid finite dimensions; missing databases, malformed vectors, and invalid
+arguments are setup errors rather than silent misses. Recall never downloads,
+selects, or adopts a template, and it never calls the network.
+
+Site 2 suitability is a separate optional step after deterministic recall:
+`scripts/recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR
+--output REPORT`. It sends the full eligible shortlist and Category
+Skeleton/intended-use/dependency state in one Choice batch, bounded at 32
+questions and 64 KiB without truncating evidence. Each question names a
+candidate state path and chooses `suitable`, `unsuitable`, or `needs_review`.
+Off and shadow preserve the deterministic shortlist. Calibrated active mode
+keeps only confident suitable candidates; all unsuitable or uncertain active
+results remain a MISS for the normal live-search fallback. Provider failures
+fall back to deterministic recall with explicit unavailable telemetry, while
+per-answer uncertainty is recorded separately. `template-recall` invokes the
+existing Phase 2a `template-search` after an active MISS when specific and
+generic queries are supplied. This layer never changes freshness, score
+verdicts, timestamps, or catalog membership.
+
 ### 2a. Solution research
 
 **Package search** — same task-level cycle as before:
@@ -59,6 +92,7 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 - No code is downloaded or implemented here. Only a version-conflict check + lockfile update (`scripts/pub-sync`) for what was decided.
 - If the developer adopted a template in 2b: **clone** the template and produce a **template gap analysis** by reading its structure directly (pubspec, layout, what the template provides / what to strip / what is missing → dependency search or from-scratch). This gap analysis seeds the plan tasks. The "no code downloaded" invariant is relaxed **only** for the adopted template (clone); package downloads stay lockfile-only in 2c.
 - Output feeds the Controller's `plan.json` for the two-model loop.
+- Before that handoff, a complete draft may use Site 5 `plan-fusion propose` for shadow-only recommendations and `plan-fusion apply` only with an explicit strategist selection. Application writes a separate pre-runtime plan; it is never automatic and does not modify the running pipeline plan.
 
 Phase 2 is pure planning and documentation. Nothing is implemented yet.
 
@@ -112,7 +146,7 @@ outputs; dispatch is owned by scripts):
 2. **RED gate — `scripts/red-gate`** (deterministic, no LLM judgment; a thin shim over the generic two-model red-gate). Verifies the scaffolded brief exists (statement, acceptance, spec_refs, and the machine-readable RED instructions `brief-scaffold` writes — never hand-written), ledgers `red_check`, dispatches the lang-selected operador headlessly (`coder-agent-for` maps `flutter` → `two-model-coder` via `scripts/dispatch`), then chains into `coder-gate`. Agente operador authors the RED tests, RUNS them itself, saves the runner's machine-readable output, and declares/confirms the expected reason; `coder-gate` validates that saved RED **form** with `red-form-check` (suite loaded, ≥1 test executed, failed as assertion/runtime) — never an `expected_red` substring (coder-owned RED, ADR-0007).
 3. **Operador RED/GREEN loop** — Operational tier (`two-model-coder`). Owns its RED/GREEN loop: runs the RED tests to confirm the expected failure, then implements and runs them green (ADR-0007). Script CEO runs the authoritative gate (task tests → full suite → `flutter analyze`) by exit code and feeds failures back. Unbounded retries until green via `--continue --session`; the loop never hands back for help — only `TEST_DEFECT` (acceptance unsatisfiable) escalates to `ARBITRATE` (Agente diretor rules).
 4. **Green gate — `scripts/green-gate`** (deterministic, no LLM judgment). Chains the full suite + `flutter analyze` (both through `scripts/cmd`) + commit in one script. There is no format step: `coder-gate` auto-applies the formatter before the gate, so drift never reaches it (M8). The `keep-discard` scope gate runs first (C2). Green (RED form already verified) → commits, appends the `commit` ledger entry, wires the advisory `interface-check`, builds the review package, and **dispatches Agente revisor headlessly** (Item 3 — `scripts/dispatch --agent two-model-reviewer`). Not green → writes a failure report, exit ≠ 0, no commit. Failing analysis is a finding for review, never a silent fix. `--no-commit` validates only (no commit, no dispatch).
-5. **Agente revisor** — `two-model-reviewer`, Strategic, reviews compiler-approved code only (Item 2 — never runs test/analyze) plus test-vs-acceptance fit. Returns a structured JSON verdict (APPROVED / SEND_BACK / ESCALATE + findings + minors). Context kept within the task's correction loops (ADR-0003); minors PARKED for closing.
+5. **Agente revisor** — `two-model-reviewer`, Strategic, reviews compiler-approved code only (Item 2 — never runs test/analyze) plus test-vs-acceptance fit. Returns a structured JSON verdict (APPROVED / SEND_BACK / ESCALATE + findings + minors). Context kept within the task's correction loops (ADR-0003); minors PARKED for closing. The shared `review-package` preparation used by `green-gate` also supplies Site 4's mandatory-review guidance. The reviewer always runs: active calibrated confidence at least `0.9` may select `focused_review`; off, shadow, unavailable, uncertain, oversized/incomplete evidence, corrective tasks, `fused_from`, and `interface_touched` use `standard_review`. Both variants preserve the full brief and diff, all four duties, the verdict schema, and approval criteria. Jev cannot predict the verdict, replace the reviewer, skip dispatch, change routing, or write the authoritative ledger.
 6. **RTK compression invariant — every command line runs through `scripts/cmd`.** The two-model engine's generic runner (`skills/two-model-sdd-pipeline/scripts/cmd`) wraps every LLM-invoked command (`flutter test`, `flutter analyze`, git ops): it saves the FULL output to a workspace file and prints the RTK-compressed view on stdout. `flutter test` → `rtk test` and `flutter analyze` → `rtk err` wrapper derivation (verdict always from the raw run — RTK wrappers mask child exit codes). Gates keep reading full files — nothing a verdict depends on is ever compressed. `RTK_ENABLED=0` disables compression; `RTK_BIN` overrides the binary.
 7. **No knowledge graph.** The pipeline runs with no graph stage: no script builds, updates, or queries a code graph. Briefs are scaffolded from plan tasks; the revisor reviews brief + diff only.
 8. **Isolation rule** — parallel subagents work on separate branches; merge sequentially or lock shared files.

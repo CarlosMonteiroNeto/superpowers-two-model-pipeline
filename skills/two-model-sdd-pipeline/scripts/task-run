@@ -52,6 +52,10 @@ TOTAL=$3
 PLAN="${PLAN:-$WS/plan.json}"
 LEDGER="$WS/ledger.jsonl"
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
+# Site 3 is an optional prompt-selection hook.  The director dispatch below
+# remains the authoritative action even when this binary is unavailable.
+DIRECTOR_PROMPT_BIN="${DIRECTOR_PROMPT_BIN:-$SCRIPT_DIR/director-prompt}"
+JEV_POLICY_FILE="${JEV_POLICY_FILE:-}"
 # CODER_GATE is a legacy alias; the orchestrator and this script now share the
 # single CODER_GATE_BIN name.
 CODER_GATE_BIN="${CODER_GATE_BIN:-${CODER_GATE:-$SCRIPT_DIR/coder-gate}}"
@@ -95,6 +99,21 @@ refresh_plan() {
 refresh_plan_strict() {
   if [ "$PLAN" = "$WS/plan.json" ]; then return 0; fi
   "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null
+}
+
+prepare_director_prompt() {
+  # prepare_director_prompt MODE TASK BASELINE OUTPUT ; Jev may only select a
+  # hint.  Its failure is handled by the caller so set -e cannot skip the
+  # mandatory director dispatch.
+  local mode=$1 task=$2 baseline=$3 output=$4
+  if [ -n "$JEV_POLICY_FILE" ]; then
+    "$DIRECTOR_PROMPT_BIN" --mode "$mode" --workspace "$WS" --task "$task" \
+      --plan "$PLAN" --baseline "$baseline" --output "$output" \
+      --policy "$JEV_POLICY_FILE"
+  else
+    "$DIRECTOR_PROMPT_BIN" --mode "$mode" --workspace "$WS" --task "$task" \
+      --plan "$PLAN" --baseline "$baseline" --output "$output"
+  fi
 }
 
 task_json() {
@@ -231,7 +250,9 @@ PY
         [ -f "$findings" ] || block "no review findings for task $n"
         target=$(task_json "$n")
         [ -n "$target" ] || block "task $n not found in plan"
-        cat > "$WS/diretor-corrective-$n.md" <<EOF
+        baseline="$WS/diretor-corrective-$n-baseline.md"
+        selected="$WS/diretor-corrective-$n.md"
+        if ! cat > "$baseline" <<EOF
 Mode: CORRECTIVE. Target task: $n
 Plan: $PLAN
 Findings: $findings
@@ -239,7 +260,14 @@ Target task: $target
 Append ONE corrective task (next integer id, "corrects": $n), scoped to
 the findings only. Reply: the new task id.
 EOF
-        dispatch_task_generator "$WS/diretor-corrective-$n.md" \
+        then
+          block "cannot write baseline prompt for corrective task $n"
+        fi
+        if ! prepare_director_prompt CORRECTIVE "$n" "$baseline" "$selected" || [ ! -s "$selected" ]; then
+          say "director prompt preparation failed for CORRECTIVE task $n; using baseline prompt"
+          cp "$baseline" "$selected" || block "cannot write baseline prompt fallback for corrective task $n"
+        fi
+        dispatch_task_generator "$selected" \
           "$WS/task-generator-corrective-$n.log" \
           || block "diretor dispatch failed"
         refresh_plan
@@ -285,19 +313,30 @@ print(max(cands) if cands else '')
         ;;
       ARBITRATE)
         n=$2
-        esc=$(grep -E '"type": *"escalated"' "$LEDGER" 2>/dev/null | tail -1 || true)
+        esc=$(grep -E '"type": *"(escalated|scope_violation)"' "$LEDGER" 2>/dev/null | tail -1 || true)
+        if [ -z "$esc" ]; then
+          esc=$(grep -E '"type": *"review_outcome".*"summary": *"ESCALATE"' "$LEDGER" 2>/dev/null | tail -1 || true)
+        fi
         rev="$WS/task-$n-review.json"
         target=$(task_json "$n")
         [ -n "$target" ] || block "task $n not found in plan"
-        {
+        baseline="$WS/diretor-arbitrate-$n-baseline.md"
+        selected="$WS/diretor-arbitrate-$n.md"
+        if ! {
           echo "Mode: ARBITRATE for task $n."
           echo "Plan: $PLAN"
           echo "Target task: $target"
           echo "Escalation: ${esc:-none}"
           [ -f "$rev" ] && echo "Review: $rev"
           echo "Rule on task viability: fix the task in the tracked plan, or re-plan. Reply: what changed."
-        } > "$WS/diretor-arbitrate-$n.md"
-        dispatch_task_generator "$WS/diretor-arbitrate-$n.md" \
+        } > "$baseline"; then
+          block "cannot write baseline prompt for arbitration task $n"
+        fi
+        if ! prepare_director_prompt ARBITRATE "$n" "$baseline" "$selected" || [ ! -s "$selected" ]; then
+          say "director prompt preparation failed for ARBITRATE task $n; using baseline prompt"
+          cp "$baseline" "$selected" || block "cannot write baseline prompt fallback for arbitration task $n"
+        fi
+        dispatch_task_generator "$selected" \
           "$WS/task-generator-arbitrate-$n.log" \
           || block "diretor dispatch failed"
         # F3: a ruling is only an execution boundary once the refreshed plan is

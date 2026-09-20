@@ -1,4 +1,93 @@
 SUPERPOWERS - TWO-MODEL PIPELINE FORK
+
+JEV ADVISORY CLASSIFIER
+-----------------------
+`skills/two-model-sdd-pipeline/scripts/jev-classify` is a Choice-only
+TypeSafe adapter. It reads schema and state JSON and requires `--workspace`
+and `--site`. It uses `TYPESAFE_API_KEY` only for live requests and never
+prints or stores the key. Exit 0 means all valid answers meet threshold; 1
+means low confidence or an open circuit; 2 means invalid local input; 3 means
+unavailable setup, transport, or provider data. Cache and circuit records are
+isolated by workspace and site. Sites 1-4 default to shadow and active mode
+requires a bound calibration report. Site 5 only supports selected-apply.
+Jev cannot approve work, route tasks, or write the ledger.
+
+Site 5 plan fusion is advisory during plan authoring. `plan-fusion propose` writes a shadow recommendation report; `plan-fusion apply` requires an explicit strategist selection and writes a separate pre-runtime plan. It never applies a recommendation automatically or changes runtime plan consumers. Keep shadow-agreement evidence separate from outcomes of actually executed fused tasks.
+
+`jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` reports recommendation
+agreement and observed executions separately. It is offline only: it cannot
+activate policies or claim counterfactual outcomes.
+
+TEMPLATE CATALOG EVIDENCE
+-------------------------
+`template-evidence OWNER/REPO --output FILE` records the score report, README,
+pubspec, tree, explicit SDK/license constraints, and a content hash. Missing
+text remains null. `template-catalog add|list|outcome` is transactional: exit 0
+means success, 1 means domain or write failure, and 2 means usage or invalid
+local input. Score
+verdicts remain independent from Jev triage, confidence, policy, actor, vector
+identity, and adoption history. Changing source evidence clears only derived
+triage/vector data. Catalog writes never clone, install, select, or adopt a
+project template.
+
+SITE 2 DETERMINISTIC TEMPLATE RECALL
+------------------------------------
+`template-refresh OWNER/REPO --database DB --category CATEGORY --project NAME`
+collects complete evidence before replacing a catalog row. Failed or incomplete
+collection returns an error and preserves the prior row. `template-recall`
+performs an offline, read-only shortlist using freshness, AUTO_APPROVE status,
+package overlap, and optional cosine vectors. Injected vectors must match the
+model, vector identity, source evidence hash, dimensions, and finite values;
+invalid arguments, missing databases, malformed vectors, and missing embedding
+setup are setup errors rather than silent MISS results. Recall never downloads,
+selects, or adopts a template.
+`recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR --output REPORT`
+is the optional Site 2 Choice layer. It evaluates the complete shortlist and
+project context in one batch of at most 32 questions and 64 KiB. Questions
+choose suitable, unsuitable, or needs_review by explicit candidate state path.
+Off and shadow preserve deterministic recall; calibrated active mode keeps only
+confident suitable candidates. Per-answer uncertainty and provider failure are
+separate telemetry, and provider failure falls back to deterministic recall.
+An active MISS is marked for live search; template-recall invokes the existing
+Phase 2a template-search when both category queries are available. Suitability
+never changes freshness, score verdicts, timestamps, or catalog membership.
+
+SITE 3 DIRECTOR PROMPT SELECTION
+--------------------------------
+`director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID --plan
+PLAN --baseline PROMPT --output OUTPUT [--policy FILE]` is the advisory hook at
+the existing task-run director prompt boundary. It classifies the complete
+plan, target task, structured findings or escalation, cited constraints/spec
+material, and an episode/worktree identity. Runtime inference uses one
+ten-second attempt and falls back to the baseline on uncertainty,
+provider/config/cache failure, or unavailable policy.
+Only active calibrated confident `local_mechanical_correction` focuses a
+CORRECTIVE prompt. ARBITRATE may receive a hint but retains full viability
+context and leaves the ruling to the director. `task-run` always dispatches
+the existing `two-model-task-generator`, including when the hook fails. Jev
+never retries the operador, changes routing, or writes authoritative ledger
+entries. Compare full director usage and observed outcomes before claiming
+savings; a smaller prompt file alone is not evidence of savings.
+=====================================
+
+SITE 4 REVIEWER DEPTH GUIDANCE
+------------------------------
+`review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` is the shared
+preparation boundary used by generic `coder-gate` and Flutter `green-gate`.
+It preserves the complete task brief and full review diff, including tests,
+interface-touch context, and corrective context, then invokes
+`review-guidance` once. Only an active calibrated Site 4 policy with
+confidence >= 0.9 may select procedural `focused_review`. Off, shadow,
+unavailable, uncertain, oversized/incomplete evidence, corrective tasks,
+`fused_from`, and `interface_touched` use `standard_review`; shadow records
+the hypothetical depth while dispatching standard review.
+
+Both variants retain all four reviewer duties, the full evidence, the same JSON
+verdict schema, and approval criteria. The reviewer remains the sole semantic
+approval authority. Jev cannot predict a verdict, substitute an agent/model,
+skip the reviewer, change routing, or write authoritative ledger entries.
+Offline evaluation separates recommendation agreement from executed reviewer
+outcomes and never activates a policy automatically.
 =====================================
 
 A fork of obra/superpowers (MIT) that turns it into a deterministic,
@@ -274,6 +363,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        ARBITRATE branch appends arbitrate_resolved only after
                        the diretor returns AND the plan refresh succeeds (a
                        failed refresh blocks); a ruling starts a new attempt
+  director-prompt     Site 3 advisory prompt selection at the existing
+                       CORRECTIVE/ARBITRATE director boundary: one 10-second
+                       attempt, active calibrated local-mechanical focus only,
+                       baseline fallback, and mandatory director dispatch
+                       preserved (exit 0 prepared; 1 baseline/read-write
+                       failure; 2 usage)
   integrate            script-owned integration gate. F1 entry guard: refuses
                        a dirty integration checkout (staged, unstaged tracked,
                        or non-ignored untracked changes; a failing git status
@@ -373,9 +468,11 @@ skills/two-model-sdd-pipeline/scripts/:
                        (two-model-coder-{python,node,rust,go}) that can run
                        that ecosystem's tests; shared by the gates
   run-gates            generic green approval: full suite + analysis via cmd
-  review-package       build a review bundle (commits + diff); with a TASK
-                       arg, inlines the task brief so the
-                       revisor gets it in the single package file
+  review-package       build a review bundle (commits + diff), inline the
+                       task brief, and run the shared Site 4 review-guidance
+                       preparation once; the full package is preserved and
+                       optional inference failure falls back to standard
+                       guidance while reviewer dispatch stays mandatory
   route-next           deterministic router: reads the ledger and emits
                        the next action (BRIEF / RED / CODER / REVIEW /
                        CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW).
@@ -504,6 +601,11 @@ installed, syncs/installs and asks you to restart OpenCode. Tier models
 headlessly): Strategic (Agente diretor / Agente revisor) and Operational
 (Agente operador) = opencode-go/deepseek-v4.1-flash.
 
+On Git Bash for Windows, pipeline-workspace and cmd normalize native paths
+through their shared lib/path-normalize.sh helper before POSIX filesystem
+operations. This supports checkout and output paths with spaces and prevents
+MSYS from attempting to create a literal C: directory.
+
 TESTS
 -----
 
@@ -535,3 +637,23 @@ LICENSE
 -------
 
 MIT - see LICENSE file for details. Upstream: https://github.com/obra/superpowers
+Site 1 catalog triage
+---------------------
+template-triage consumes complete catalog evidence and Category Skeleton context. It only evaluates DEVELOPER_DECISION scoring results; AUTO_APPROVE and AUTO_REJECT keep their existing paths. Calibrated active Jev adopt/reject decisions affect shortlist metadata only and never select, clone, install, or download a project template. Off, shadow, unavailable, uncertain, and invalid evidence preserve developer handling and record a fallback reason.
+
+Site 1 provenance uses the shared workspace/site advisory store with episode,
+schema, policy, cache, action, fallback, and timing fields. Active catalog
+updates are transactional and strict; missing storage, row-count mismatches,
+and SQLite failures preserve the existing developer path and never report a
+successful Jev adopt/reject action.
+
+Site 3 director prompt selection
+-------------------------------
+`task-run` invokes `director-prompt` before both CORRECTIVE and ARBITRATE
+director dispatches. The hook preserves complete plan/target/findings or
+escalation/spec context, uses one ten-second runtime attempt, and falls back to
+the original baseline on any optional failure. Only active calibrated confident
+local mechanical correction can focus CORRECTIVE; ARBITRATE retains full
+viability context. Jev never retries the operador or writes the authoritative
+ledger. Full director usage and observed outcomes must be measured before
+claiming savings; a smaller prompt file does not prove savings.

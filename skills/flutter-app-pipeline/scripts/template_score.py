@@ -159,7 +159,7 @@ def _days_ago(iso):
     return (datetime.datetime.now(datetime.timezone.utc) - dt).days
 
 
-def _detect_flutter_ready(owner, repo, token):
+def _detect_flutter_ready(owner, repo, token, fetch_json=None, strict=False):
     """Detect Flutter readiness from pubspec.yaml SDK constraint.
 
     Returns 'current' if the SDK lower bound is >= 2.12 (null-safe),
@@ -168,7 +168,8 @@ def _detect_flutter_ready(owner, repo, token):
     import base64
     import re
     try:
-        pubspec_resp = _fetch_json(
+        fetch = fetch_json or _fetch_json
+        pubspec_resp = fetch(
             "{}/repos/{}/{}/contents/pubspec.yaml".format(GH_API, owner, repo), token
         )
         if not pubspec_resp or not pubspec_resp.get("content"):
@@ -186,16 +187,21 @@ def _detect_flutter_ready(owner, repo, token):
             return "dated"
         return "none"
     except Exception:
+        if strict:
+            raise
         return "none"
 
 
-def gather_data(owner, repo, token):
+def gather_data(owner, repo, token, fetch_json=None, strict=False):
     """Fetch GitHub data for a template repository."""
     data = {"template": "{}/{}".format(owner, repo)}
+    fetch = fetch_json or _fetch_json
 
     try:
         # Get repo info for stars and license
-        repo_info = _fetch_json("{}/repos/{}/{}".format(GH_API, owner, repo), token)
+        repo_info = fetch("{}/repos/{}/{}".format(GH_API, owner, repo), token)
+        if strict and not isinstance(repo_info, dict):
+            raise ValueError("repository response is not an object")
         data["stars"] = repo_info.get("stargazers_count", 0)
 
         # Get license info
@@ -213,27 +219,31 @@ def gather_data(owner, repo, token):
             data["license"] = "none"
 
         # Get last commit for recency
-        commits = _fetch_json(
+        commits = fetch(
             "{}/repos/{}/{}/commits?per_page=1".format(GH_API, owner, repo), token
         )
+        if strict and not isinstance(commits, list):
+            raise ValueError("commit response is not a list")
         if commits:
             data["recency_days"] = _days_ago(commits[0]["commit"]["committer"]["date"])
         else:
             data["recency_days"] = 0
 
         # Get issues for ratio
-        open_q = _fetch_json(
+        open_q = fetch(
             "{}/search/issues?q=repo:{}/{}+type:issue+state:open&per_page=1".format(
                 GH_API, owner, repo
             ),
             token,
         )
-        closed_q = _fetch_json(
+        closed_q = fetch(
             "{}/search/issues?q=repo:{}/{}+type:issue+state:closed&per_page=1".format(
                 GH_API, owner, repo
             ),
             token,
         )
+        if strict and (not isinstance(open_q, dict) or not isinstance(closed_q, dict)):
+            raise ValueError("issue response is not an object")
         data["open_issues"] = open_q.get("total_count", 0)
         data["closed_issues"] = closed_q.get("total_count", 0)
 
@@ -246,11 +256,11 @@ def gather_data(owner, repo, token):
             data["stars_per_year"] = 0.0
 
         # Flutter readiness: detect from pubspec.yaml SDK constraint
-        data["flutter_ready"] = _detect_flutter_ready(owner, repo, token)
+        data["flutter_ready"] = _detect_flutter_ready(owner, repo, token, fetch, strict=strict)
 
         # Readme: best-effort from README contents API
         try:
-            readme_resp = _fetch_json(
+            readme_resp = fetch(
                 "{}/repos/{}/{}/readme".format(GH_API, owner, repo), token
             )
             if readme_resp and readme_resp.get("content"):
@@ -271,6 +281,8 @@ def gather_data(owner, repo, token):
             data["readme"] = "none"
 
     except Exception:
+        if strict:
+            raise
         # On any failure, return minimal data with defaults
         data.setdefault("stars", 0)
         data.setdefault("recency_days", 0)

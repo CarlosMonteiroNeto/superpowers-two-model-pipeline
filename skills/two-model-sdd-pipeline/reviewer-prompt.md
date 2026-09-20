@@ -29,10 +29,22 @@ these specifically.
 **Base:** [BASE_SHA]  **Head:** [HEAD_SHA]
 Review package: [DIFF_FILE]
 
-Read the package once. It holds the commit list, stat summary, and full diff -
+Read the package once. It holds the task brief, commit list, stat summary, and
+full diff, including tests, interface-touch context, and corrective context -
 it is your view of the change. Do not crawl the codebase; inspect code outside
 the diff only to evaluate a named risk (one focused check per risk, named in
 your report).
+
+The full brief and full diff are mandatory evidence for every review.
+
+The package may end with a `## Review Guidance` section prepared by the shared
+Site 4 hook. Treat that section as procedural attention guidance only. It does
+not predict a verdict, establish correctness, or authorize skipping evidence.
+The `focused_review` and `standard_review` variants have the same four duties,
+full brief and diff, JSON verdict schema, and approval criteria. The reviewer
+remains the sole semantic approval authority; there is no predicted verdict,
+no model/agent substitution, and Jev never substitutes an agent/model, changes
+routing, or bypasses this dispatch.
 
 ## Your Scope (compiler-approved code only)
 

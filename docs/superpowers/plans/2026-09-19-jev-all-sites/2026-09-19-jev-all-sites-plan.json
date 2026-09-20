@@ -1,0 +1,455 @@
+{
+  "feature": "Integrate Jev at all five pipeline decision sites, delivering selected Site 5 fusion first.",
+  "spec_doc": "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md",
+  "companion_specs": [
+    "docs/superpowers/specs/2026-09-19-jev-task-fusion-design.md"
+  ],
+  "status": "approved-for-pipeline-execution",
+  "global_constraints": [
+    "All messages, artifacts, diagnostics, comments and tests are English-only.",
+    "Execution is authorized in the isolated Git worktree. Do not push, create a PR, deploy, or install unreviewed dependencies. Live TypeSafe calls remain disabled for tests and default shadow-mode paths.",
+    "Site 5 remains shadow plus explicit strategist-selected fusion. Sites 1–4 default to shadow and require explicit calibrated policy to act. Never enable a mode because a sample count or confidence threshold was reached.",
+    "Jev cannot approve work, bypass the director/reviewer, modify routing or write authoritative ledger entries. Site 3 is Option A; Site 4 reviewer always runs.",
+    "Existing paths and gates remain authoritative. Optional Jev unavailability selects baseline runtime behavior; malformed required baseline evidence is not treated as success.",
+    "Use Choice only, complete evidence, per-answer confidence, content-addressed cache and site/workspace isolation. No credentials or live service calls in tests.",
+    "New tests belong outside touches under current brief-scaffold/keep-discard conventions; preserve existing committed tests.",
+    "Each task updates README-LLM.md and README.txt alongside its behavior. Their repeated touches are deliberate and ordered by depends_on; never hide actual documentation edits to claim parallelism.",
+    "All tasks are sequential because the requested rollout order and shared documentation boundaries matter. The plan is complete before execution and must not be fused by an unimplemented Site 5.",
+    "Use scripts/cmd for LLM-facing commands. Workers author RED evidence and implement; Script CEO owns commits and authoritative gates. Skill changes require skill-authoring verification.",
+    "Git Bash/Windows and native Python paths containing spaces must work. Avoid new mandatory dependencies; sentence-transformers remains optional for query-text embeddings.",
+    "Never install the ZIP wholesale. Package promotion, Site 3 bypass, automatic fusion and runtime router changes remain out of scope."
+  ],
+  "interfaces_note": "Task interfaces are duplicated in acceptance where required for brief-scaffold, which emits summary/acceptance/spec_refs rather than arbitrary plan metadata. Executors must read cited specs and this full plan.",
+  "execution_preflight": [
+    "Establish the intended Git checkout/revision and compare the inspected interfaces with that baseline before any modifications.",
+    "Use a stable external pipeline controller for self-hosted changes; do not run a controller from a checkout while its own task-run/review-package files are being modified.",
+    "Resolve Python/Bash test and analysis commands from the actual checkout. Multiple/unknown ecosystem markers require explicit toolchain resolution; do not assume Flutter commands for this pipeline repository.",
+    "Preserve these specs and plan together. Select the appropriate interpreter and run both existing script test families before execution to establish baseline failures separately from this change."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Provide the shared Jev classifier, site policies, and advisory records",
+      "summary": "Create the Choice-only HTTP adapter, persisted cache/circuit, and policy evaluator used by all five sites. Use Python standard-library transport, with injection for tests, and thin CLIs matching existing wrappers. Author new regression modules: skills/two-model-sdd-pipeline/tests/test_jev_classifier_contract.py, skills/two-model-sdd-pipeline/tests/test_jev_policy_and_store.py, skills/two-model-sdd-pipeline/tests/test_jev_evaluation.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#3-shared-boundaries-and-trust",
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#4-shared-transport-persistence-and-degradation",
+        "docs/superpowers/specs/2026-09-19-jev-task-fusion-design.md#6-classifier-transport-cache-and-fallback"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/jev-classify",
+        "skills/two-model-sdd-pipeline/scripts/jev_classify.py",
+        "skills/two-model-sdd-pipeline/scripts/jev_policy.py",
+        "skills/two-model-sdd-pipeline/scripts/jev_store.py",
+        "skills/two-model-sdd-pipeline/scripts/jev-evaluate",
+        "skills/two-model-sdd-pipeline/scripts/jev_evaluate.py",
+        "skills/two-model-sdd-pipeline/schemas/jev-policy.schema.json",
+        "skills/two-model-sdd-pipeline/SKILL.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "`jev-classify SCHEMA_FILE STATE_FILE --workspace DIR --site SITE [--threshold N] [--cache-key KEY] [--refresh] [--reset-circuit]` validates Choice-only questions and uses https://api.typesafe.ai/v1/systemone with TYPESAFE_API_KEY. No secret is emitted to logs, reports, errors, or cache keys.",
+        "Exit 0 means all valid answers meet the threshold; exit 1 means at least one is below threshold or circuit-open; exit 2 means invalid local input; exit 3 means unavailable setup/transport/remote response. The JSON envelope is {status, answers, model, usage, request_hash, cache_hit, error}; status is answered, unavailable, or circuit_open. Answers preserve provider choice, probabilities, and confidence. Missing optional model/usage is null only for unavailable outcomes.",
+        "Validate exact question/option sets, response types, finite numbers in [0,1], sums within 1e-6, selected maximal probability, and nonempty returned model. Reject a malformed batch entirely. Valid low-confidence batches retain individually usable answers; confidence is not represented as success probability.",
+        "Canonical request identity includes complete state, question semantics, requested model, endpoint, adapter version, and optional caller namespace. Store validated answers only. Threshold changes are evaluated locally. Changed state, schema, model, or endpoint cannot reuse stale answers; --refresh bypasses cache.",
+        "Site/workspace namespaces isolate cache and circuit state. Serialize writers, atomically replace records, reject corrupt cached data, and test concurrent writers and interruption. An unavailable invocation increments the persisted counter once; the third opens the circuit and later calls make no network requests until --reset-circuit. Network success resets the counter, cache hits do not.",
+        "Planning uses at most two 30-second attempts with at most two seconds before attempt two; retry only transport or 429/529/5xx failures. Sites 3 and 4 use one ten-second attempt. Authentication/request errors are not retried. Zero questions cause no network request.",
+        "read_policy(path, site) and select_action(policy, question_id, envelope, fallback) default to shadow for Sites 1–4; off sends no request; active requires an explicit valid calibration report bound to site, model, schema hash, threshold, and evaluator identity. A missing/mismatched report degrades to shadow and is reported. Site 5 has shadow/selected-apply only.",
+        "Advisory records include state/policy identity, decision, actual action, fallback, timing and usage; never append authoritative ledger entries. Runtime callers can catch optional adapter/config failures and select baseline behavior.",
+        "`jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` produces an offline JSON report with distinct recommendation-agreement and executed-outcome populations, counts, coverage, false-positive labels, observed usage/timing, and missing evidence. Input labels carry episode/request identity, actual decision/outcome, attribution and evidence references. It never infers counterfactual fused outcomes or activates policies.",
+        "Document resource profiles, exact exits and trust boundaries in both READMEs. New tests verify real CLI exits, cache invalidation, concurrency, retry bounds, per-answer handling, and no-network off/circuit paths. New skill instructions undergo skill-authoring verification."
+      ],
+      "interfaces": {
+        "produces": [
+          "jev_classify.classify(schema: dict, state: object, *, workspace: str, site: str, threshold: float=0.9, cache_key: str|None=None, refresh: bool=False) -> tuple[int, dict]",
+          "jev_policy.read_policy(path: str|None, site: str) -> dict",
+          "jev_policy.select_action(policy: dict, question_id: str, envelope: dict, fallback: str) -> str",
+          "jev_store.write_record(workspace: str, site: str, identity: str, record: dict) -> str"
+        ],
+        "consumes": [
+          "TypeSafe Choice HTTP API; no dispatched pipeline LLM"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_jev_classifier_contract.py",
+          "skills/two-model-sdd-pipeline/tests/test_jev_policy_and_store.py",
+          "skills/two-model-sdd-pipeline/tests/test_jev_evaluation.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Deliver Site 5 recommendations and selected plan fusion",
+      "summary": "Build complete draft validation, mechanical candidate selection, Jev proposal reports, and offline application with consecutive final IDs. Integrate the authoring step into writing-plans and Flutter Phase 2c. Do not use the feature to fuse its own implementation plan. Author new regression modules: skills/two-model-sdd-pipeline/tests/test_fusion_candidates.py, skills/two-model-sdd-pipeline/tests/test_fusion_application.py, skills/two-model-sdd-pipeline/tests/test_fusion_pipeline_compatibility.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-task-fusion-design.md#4-candidate-eligibility",
+        "docs/superpowers/specs/2026-09-19-jev-task-fusion-design.md#5-jev-judgment-and-request-construction",
+        "docs/superpowers/specs/2026-09-19-jev-task-fusion-design.md#7-selection-and-deterministic-plan-transformation",
+        "docs/superpowers/specs/2026-09-19-jev-task-fusion-design.md#8-audit-and-evaluation"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/plan-fusion",
+        "skills/two-model-sdd-pipeline/scripts/plan_fusion.py",
+        "skills/two-model-sdd-pipeline/scripts/fusion_candidates.py",
+        "skills/two-model-sdd-pipeline/scripts/fusion_apply.py",
+        "skills/two-model-sdd-pipeline/schemas/jev-site-5.json",
+        "skills/writing-plans/SKILL.md",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        1
+      ],
+      "acceptance": [
+        "Expose `plan-fusion propose DRAFT --workspace DIR --report REPORT` and `plan-fusion apply DRAFT --report REPORT --selection SELECTION --output OUTPUT [--overwrite]`. Exit 0 is a valid report/output including zero candidates; 1 is a domain/write failure; 2 is invalid arguments/input. Propose records service unavailability without altering the draft.",
+        "Validate unique positive integer IDs, nonempty task fields, canonical repository-relative touches, known acyclic dependencies, and pathclass test-path exclusions. Reject corrective/already-fused tasks from candidates. Reuse touches-overlap against the exact draft snapshot; exit 2 is an error, not eligibility.",
+        "Eligible pairs have disjoint touches, no transitive dependency in either direction, at most six distinct files and twelve combined acceptance entries. Group at most 32 questions and 64 KiB per request in stable pair order; do not truncate evidence. Zero eligible pairs sends no request.",
+        "Question instructions explicitly identify state paths and define same_shape_fuse versus keep_separate, including uncertainty as keep_separate. Record raw judgments; only valid same_shape_fuse with confidence >=0.9 is selectable. An unrelated low-confidence answer does not discard a valid recommendation.",
+        "Report includes draft_hash, policy_version, pairs, exclusions, request identities and source snapshot. Selection format is {draft_hash, report_hash, pairs:[{ids:[a,b], title, summary, rationale}]}. Apply is offline and rejects stale hashes, duplicate participation, nonqualifying pairs, unsupported metadata, changed policy or runtime plan input/output.",
+        "Merge acceptance by source-ID-ordered concatenation, touches/spec_refs by stable union, and dependencies through complete contraction mapping. Revalidate the global DAG and reject selections that collectively create cycles even when each pair is individually independent.",
+        "Stable topological sort with original ID tie-breaking yields output IDs 1..N; rewrite all depends_on values. Preserve original pair IDs in fused_from and all original-to-final IDs in source_id_map alongside immutable source hash. Test serial route-next and wave-next on output; no runtime consumer changes are allowed.",
+        "Preserve unrelated metadata and input bytes; write a separate output atomically. Refuse overwrite by default. Empty selection preserves source plan bytes. Reapplying the same selection to the same source produces identical output; no recursive fusion.",
+        "Regression scenarios include indirect dependencies, stale reports, oversized pairs, cycle-producing contractions, omitted spec refs, sparse source IDs, unknown selected-task metadata, and paths with spaces. New plan-authoring instructions explicitly distinguish shadow evidence from outcomes of executed fusions."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Task 1 classify/record interfaces",
+          "touches-overlap WORKSPACE ID ID",
+          "pathclass.is_test_path(path)"
+        ],
+        "produces": [
+          "fusion_candidates.validate_plan(plan: dict) -> None; raises ValueError on invalid input",
+          "fusion_candidates.build_candidates(plan: dict, workspace: str) -> dict",
+          "fusion_apply.apply_selection(plan: dict, report: dict, selection: dict) -> tuple[dict, dict]; returns output plan and source ID map"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_fusion_candidates.py",
+          "skills/two-model-sdd-pipeline/tests/test_fusion_application.py",
+          "skills/two-model-sdd-pipeline/tests/test_fusion_pipeline_compatibility.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Integrate catalog storage and complete scoring evidence",
+      "summary": "Adapt the ZIP catalog into a compatible foundation and add the missing scoring-evidence boundary. Preserve existing scoring behavior and database contents; do not integrate package promotion. Author new regression modules: skills/flutter-app-pipeline/tests/test_template_evidence_contract.py, skills/flutter-app-pipeline/tests/test_catalog_migration_and_evidence.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#6-template-foundation-and-site-1--catalog-triage"
+      ],
+      "touches": [
+        "skills/flutter-app-pipeline/scripts/template-catalog",
+        "skills/flutter-app-pipeline/scripts/template_catalog.py",
+        "skills/flutter-app-pipeline/scripts/template-evidence",
+        "skills/flutter-app-pipeline/scripts/template_evidence.py",
+        "skills/flutter-app-pipeline/scripts/template_score.py",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        2
+      ],
+      "acceptance": [
+        "`template-evidence OWNER/REPO --output FILE` emits {owner_repo, score_report, readme_text, pubspec_text, tree_text, constraints, evidence_hash, fetched_at}. Constraints distinguish known license/SDK results from unknown evidence. Existing template-score CLI and score calculation remain backward compatible.",
+        "Catalog migrations are transactional and preserve existing templates/outcomes. Store score verdict independently of Jev triage, confidence, evidence identity, policy version and actor. Neither triage adopt nor recorded outcome changes the original score verdict.",
+        "Expose catalog add/list/outcome with documented exits 0 success, 1 domain failure, 2 usage. Upserts are idempotent; source-evidence changes invalidate derived judgments and vector identity without deleting adoption history. Unknown owner outcomes are rejected.",
+        "`template_catalog.upsert_template(conn, owner_repo, category, project, score_report, evidence=None)` and `list_templates(conn, category=None)` preserve archived call compatibility; list results include explicit scoring and triage fields.",
+        "Persist all three Category Skeleton fields for decisions while retaining the existing category lookup. No cloning/installing/adoption occurs from catalog writes. Missing text remains explicitly missing, never synthetic.",
+        "Tests use archived fixtures as reference only, mocked GitHub data, old-schema migration fixtures, non-ASCII text, and rollback scenarios. Existing scoring tests continue to pass."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Existing template_score.gather_data/compute_score behavior",
+          "ZIP template_catalog.py as reference"
+        ],
+        "produces": [
+          "template_evidence.collect_evidence(owner_repo: str, github_token: str|None=None) -> dict",
+          "template_catalog._connect(path: str|None=None) -> sqlite3.Connection",
+          "template_catalog.upsert_template(conn, owner_repo, category, project, score_report, evidence=None) -> None",
+          "template_catalog.list_templates(conn, category=None) -> list[dict]"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/flutter-app-pipeline/tests/test_template_evidence_contract.py",
+          "skills/flutter-app-pipeline/tests/test_catalog_migration_and_evidence.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/flutter-app-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Deliver Site 1 catalog triage without project adoption",
+      "summary": "Add the catalog triage entry point, site-specific schema and Phase 2a wiring. The adopter decision here concerns shortlist membership, while Phase 2b project selection remains with the developer. Author new regression modules: skills/flutter-app-pipeline/tests/test_jev_catalog_triage.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#3-shared-boundaries-and-trust",
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#6-template-foundation-and-site-1--catalog-triage"
+      ],
+      "touches": [
+        "skills/flutter-app-pipeline/scripts/template-triage",
+        "skills/flutter-app-pipeline/scripts/template_triage.py",
+        "skills/two-model-sdd-pipeline/schemas/jev-site-1.json",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        3
+      ],
+      "acceptance": [
+        "`template-triage EVIDENCE_FILE CONTEXT_FILE --workspace DIR [--policy FILE] --output REPORT` uses Category Skeleton generic category, specific category and original implementations plus complete evidence. Exit 0 is a valid triage result/fallback; 1 is domain/write failure; 2 is invalid local input.",
+        "Only DEVELOPER_DECISION scoring results enter Jev triage. AUTO_APPROVE and AUTO_REJECT follow existing paths with zero Jev calls. Missing required evidence and explicit failed SDK/license constraints prohibit automatic positive triage.",
+        "Choice adopt/reject/needs_review uses explicit shortlist semantics. Active high-confidence adopt/reject persists separate triage metadata tagged decided_by=jev; rejected entries remain auditable but outside the default shortlist. No result changes score verdict or selects/downloads a project template.",
+        "Off and shadow preserve existing developer/strategist handling. Uncertainty, needs_review, unavailable inference and uncalibrated policy use that same handling, recording why. Shadow records hypothetical and observed decisions separately.",
+        "Changes in evidence invalidate previous Jev triage even with unchanged owner_repo. Existing Phase 2b selection remains documented and behaviorally tested. Tests cover threshold boundaries, disabled network paths, protected scoring verdicts, and failed evidence."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Tasks 1 and 3 interfaces"
+        ],
+        "produces": [
+          "template_triage.triage(evidence: dict, context: dict, *, workspace: str, policy_path: str|None=None) -> dict; fields decision, actor, fallback_reason, evidence_hash, judgment"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/flutter-app-pipeline/tests/test_jev_catalog_triage.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/flutter-app-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Integrate deterministic recall, optional embeddings, and refresh",
+      "summary": "Adapt the archive recall stack with corrected eligibility/ranking and vector freshness so Site 2 can rely on an honest deterministic baseline. Author new regression modules: skills/flutter-app-pipeline/tests/test_template_recall_foundation.py, skills/flutter-app-pipeline/tests/test_template_embedding_identity.py, skills/flutter-app-pipeline/tests/test_template_research_cli_integration.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#7-site-2--recall-suitability-after-deterministic-freshness-checks"
+      ],
+      "touches": [
+        "skills/flutter-app-pipeline/scripts/template-embed",
+        "skills/flutter-app-pipeline/scripts/template_embed.py",
+        "skills/flutter-app-pipeline/scripts/template-recall",
+        "skills/flutter-app-pipeline/scripts/template_recall.py",
+        "skills/flutter-app-pipeline/scripts/template-refresh",
+        "skills/flutter-app-pipeline/scripts/template_refresh.py",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        4
+      ],
+      "acceptance": [
+        "Preserve recall CLI exit semantics 0 HIT, 2 MISS, 1 setup/domain failure. Only fresh AUTO_APPROVE scoring results support HIT; Site 1 shortlist adoption does not qualify. Filter eligible candidates before top-N selection, using default freshness 180 days and explicit boundary tests.",
+        "Order eligible rows by package overlap descending, then optional semantic similarity descending, then owner_repo ascending. No query text requires no embedding model. Query text with missing required embedding setup returns setup error, not MISS.",
+        "Store vectors with model identity and source-evidence hash. Reject stale/mismatched/nonfinite vectors rather than comparing incompatible spaces; recomputation is explicit. Use injectable encoders in tests, never download models in test runs.",
+        "Expose template-refresh as an explicit planning operation, using the same scoring/evidence collection as Task 3. Refresh updates scores and invalidates derived judgments/vectors when content changes; it does not call Jev or mutate runtime ledgers.",
+        "Malformed/missing catalog, invalid dates, future timestamps, and invalid --top/age inputs have documented deterministic outcomes. Unknown dates never support HIT. Preserve catalog contents on failed refresh.",
+        "Add CLI integration tests across catalog/embed/recall/refresh against one temporary database, including the archived stale-candidate-before-top-N defect and primary overlap ranking. Embeddings remain an optional dependency and no package promotion is included."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Task 3 catalog/evidence API"
+        ],
+        "produces": [
+          "template_recall.recall(conn, category, packages=None, query_vector=None, top_n=3, max_age_days=180, model=None, evidence_hashes=None) -> tuple[str, list[dict]]",
+          "template_embed.embed_text(text: str, encoder=None) -> list[float]",
+          "template_refresh.refresh_one(conn, entry: dict, github_token=None) -> dict"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/flutter-app-pipeline/tests/test_template_recall_foundation.py",
+          "skills/flutter-app-pipeline/tests/test_template_embedding_identity.py",
+          "skills/flutter-app-pipeline/tests/test_template_research_cli_integration.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/flutter-app-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Deliver Site 2 suitability assessment with deterministic freshness",
+      "summary": "Add a semantic suitability step after recall eligibility and before final HIT presentation, preserving fresh-score requirements and the live-search fallback. Author new regression modules: skills/flutter-app-pipeline/tests/test_jev_recall_suitability.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#7-site-2--recall-suitability-after-deterministic-freshness-checks"
+      ],
+      "touches": [
+        "skills/flutter-app-pipeline/scripts/recall-suitability",
+        "skills/flutter-app-pipeline/scripts/recall_suitability.py",
+        "skills/two-model-sdd-pipeline/schemas/jev-site-2.json",
+        "skills/flutter-app-pipeline/scripts/template-recall",
+        "skills/flutter-app-pipeline/scripts/template_recall.py",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        5
+      ],
+      "acceptance": [
+        "`recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR [--policy FILE] --output REPORT` reads eligible recalled candidates and full Category Skeleton/intended-use/dependency context. Questions explicitly reference candidate state paths; options are suitable, unsuitable, needs_review.",
+        "Use the shared 32-question/64-KiB planning budget without dropping evidence. Unevaluated/uncertain candidates are marked explicitly. Site 2 never changes scored_at, scoring verdicts, freshness thresholds or the catalog's permanent membership.",
+        "In active mode, only confident suitable candidates support a semantic HIT. If none remain, return MISS with a reason for normal live search; unsuitable candidates are not deleted. With at least one suitable result return that shortlist.",
+        "In shadow/off mode preserve deterministic recall. Provider unavailability falls back to deterministic recall with explicit telemetry. Catalog/embedding setup failures retain their existing setup-error outcome. Per-answer uncertainty and whole-provider failure are distinguished.",
+        "template-recall presents the same 0/2/1 contract and Phase 2a wiring invokes live template-search after MISS, never treating stale entries as fresh or automatically adopting a template. Tests cover mixed candidate answers, all unsuitable, uncertainty, unavailable batches, oversized state, and zero eligible candidates."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Task 1 policies/classifier and Task 5 eligible recall output"
+        ],
+        "produces": [
+          "recall_suitability.assess(candidates: list[dict], context: dict, *, workspace: str, policy_path: str|None=None) -> dict; fields verdict, candidates, fallback_reason, judgments"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/flutter-app-pipeline/tests/test_jev_recall_suitability.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/flutter-app-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "title": "Deliver Site 3 director prompt selection with mandatory dispatch",
+      "summary": "Integrate Jev at task-run's actual CORRECTIVE/ARBITRATE prompt construction boundary. Preserve director dispatch and required evidence; compare real usage before claiming savings. Author new regression modules: skills/two-model-sdd-pipeline/tests/test_jev_director_selection.py, skills/two-model-sdd-pipeline/tests/test_jev_director_routing_invariants.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#8-site-3--director-prompt-selection-option-a",
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#4-shared-transport-persistence-and-degradation"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/director-prompt",
+        "skills/two-model-sdd-pipeline/scripts/director_prompt.py",
+        "skills/two-model-sdd-pipeline/schemas/jev-site-3.json",
+        "skills/two-model-sdd-pipeline/scripts/task-run",
+        "skills/two-model-sdd-pipeline/task-generator-prompt.md",
+        "skills/two-model-sdd-pipeline/SKILL.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        6
+      ],
+      "acceptance": [
+        "Create `director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID --plan PLAN --baseline PROMPT --output OUTPUT [--policy FILE]`. Exit 0 prepares a prompt including baseline fallback; 1 means required baseline artifact/write failure; 2 means invalid invocation. task-run preserves its existing director dispatch and handles optional inference failure explicitly under set -e.",
+        "State uses structured target task, actual findings/escalation, cited constraints and episode identity. Choice is local_mechanical_correction, architectural_disagreement, test_noise_or_unclear. Runtime request timeout is ten seconds, one attempt, with baseline fallback.",
+        "Only active, calibrated, confident local_mechanical_correction on CORRECTIVE selects focused instructions. ARBITRATE retains full viability context and director ruling for every answer. Both modes preserve access to complete plan, target task, original findings and cited spec material.",
+        "Off/shadow dispatch baseline prompts; shadow records hypothetical selection. All provider/config/cache failures preserve mandatory director dispatch using baseline when required artifacts are valid. Jev never retries the operator in place of the director or creates authoritative ledger events.",
+        "Director may reject the focus hint. Existing task creation, operator resume, arbitration bounds, and parent reconciliation remain unchanged. Regression tests assert dispatch count/agent and authoritative ledger sequence across every label, failure, shadow/off and threshold case.",
+        "Advisory identity distinguishes corrective/arbitration episodes and worktrees. Evaluation compares full director usage and observed outcomes, without claiming that smaller prompt files prove savings. Update both READMEs and director documentation with this exact limitation."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Task 1 classifier/policy/store",
+          "Existing task-run baseline prompt and dispatch_task_generator"
+        ],
+        "produces": [
+          "director_prompt.prepare(mode: str, workspace: str, task_id: int, plan_path: str, baseline_path: str, output_path: str, policy_path: str|None=None) -> dict"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_jev_director_selection.py",
+          "skills/two-model-sdd-pipeline/tests/test_jev_director_routing_invariants.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "title": "Deliver Site 4 review guidance and verify all-site behavior",
+      "summary": "Introduce shared review-package guidance used by both generic and Flutter paths. Keep complete evidence and the reviewer as the only semantic approval authority. Verify the assembled initiative and document handoff. Author new regression modules: skills/two-model-sdd-pipeline/tests/test_jev_review_guidance.py, skills/two-model-sdd-pipeline/tests/test_jev_all_sites_invariants.py, skills/flutter-app-pipeline/tests/test_jev_flutter_review_path.py. Read the cited spec sections and global constraints before implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#9-site-4--reviewer-depth-selection-never-pre-approval",
+        "docs/superpowers/specs/2026-09-19-jev-all-sites-design.md#10-verification-and-documentation"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/review-guidance",
+        "skills/two-model-sdd-pipeline/scripts/review_guidance.py",
+        "skills/two-model-sdd-pipeline/schemas/jev-site-4.json",
+        "skills/two-model-sdd-pipeline/scripts/review-package",
+        "skills/two-model-sdd-pipeline/reviewer-prompt.md",
+        "skills/two-model-sdd-pipeline/SKILL.md",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "docs/superpowers/adr/jev-third-tier-proposal.md",
+        "README-LLM.md",
+        "README.txt"
+      ],
+      "depends_on": [
+        7
+      ],
+      "acceptance": [
+        "Add a shared preparation hook in review-package so existing generic coder-gate and Flutter green-gate dispatches both receive the same guidance without duplicating dispatch logic. Preserve standard package construction and mandatory reviewer agent/verdict parsing.",
+        "State includes the full task brief and diff including tests, available interface advisory and corrective context. Over 64 KiB, incomplete evidence, corrective task, fused_from or interface_touched forces standard review without inference. Do not truncate evidence to make focused review eligible.",
+        "Choice focused_review/standard_review can select focused instructions only under active, calibrated confidence >=0.9. Off/shadow/unavailable/uncertain modes retain standard review. Runtime hook attempts once with ten-second timeout. Required baseline package failure remains a real error.",
+        "Both guidance variants retain all existing review duties, the full brief/diff, same JSON verdict schema and same approval criteria. Guidance contains no approval probability or predicted verdict. The reviewer may deepen inspection for a named risk. No agent/model substitution, automatic approval, skipped review or changed routing.",
+        "Test generic and Flutter preparation/dispatch paths, full-evidence byte preservation, all exclusions, threshold edges, optional hook failure, and identical authoritative ledger transitions for baseline/shadow/fallback. New all-site integration fixtures verify off makes no calls and shadow changes no decisions.",
+        "Run both existing pipeline test families and doc-check after the final changes. The all-site regression suite uses mocked inference, not vendor accuracy assumptions. Observe that policy/circuit state is isolated across sites and task workspaces.",
+        "Complete offline evaluation documentation distinguishing shadow agreement from acted outcomes; no automatic policy activation. Write a proposed trust-tier/no-bypass ADR without claiming acceptance or assigning an unchecked numbered ADR. Update READMEs and skill prompts to describe only implemented behavior."
+      ],
+      "interfaces": {
+        "consumes": [
+          "Task 1 classifier/policy/store",
+          "Existing review-package task brief/full diff and interface advisory"
+        ],
+        "produces": [
+          "review_guidance.prepare(package_path: str, *, workspace: str, task_id: int, policy_path: str|None=None) -> dict; returns guidance with standard fallback, never a review verdict"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_jev_review_guidance.py",
+          "skills/two-model-sdd-pipeline/tests/test_jev_all_sites_invariants.py",
+          "skills/flutter-app-pipeline/tests/test_jev_flutter_review_path.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Run the other pipeline test family after cross-layer changes.",
+          "Run scripts/doc-check in the implementation checkout.",
+          "Use mocked provider calls and disposable workspace/catalog fixtures; do not alter existing committed tests."
+        ]
+      }
+    }
+  ]
+}

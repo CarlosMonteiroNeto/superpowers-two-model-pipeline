@@ -5,6 +5,59 @@ description: Use instead of subagent-driven-development when the human partner o
 
 # Two-Model SDD Pipeline (Script-Autonomous Orchestration)
 
+## Jev advisory boundary
+
+Jev is optional semantic advice only. Use `scripts/jev-classify` with a
+Choice-only schema, an explicit workspace, and an explicit site. Keep Sites
+1–4 in `shadow` unless their policy contains a matching calibration report;
+Site 5 can only use `shadow` or strategist-selected application. Store
+telemetry through `jev_store.write_record`, never through `ledger-append`.
+On adapter/configuration failure, preserve the existing baseline behavior and
+record advisory failure separately. Tests must inject transport responses and
+must never use credentials or make live TypeSafe calls.
+
+### Site 3 director prompt selection
+
+`scripts/director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID
+--plan PLAN --baseline PROMPT --output OUTPUT [--policy FILE]` classifies the
+structured target task, findings or escalation, cited constraints, complete
+plan, and episode identity before the existing director dispatch. Runtime Site
+3 uses one ten-second attempt with no inline retry. Only an active policy bound
+to the Site 3 schema/model/calibration report and a confident
+`local_mechanical_correction` may append a focused hint on CORRECTIVE. ARBITRATE
+may receive a semantic focus hint, but always keeps the full viability context
+and leaves the ruling to the director. Off, shadow, uncertain, unavailable,
+malformed-policy, and cache-failure paths write the unchanged baseline.
+
+`task-run` invokes this hook immediately before both CORRECTIVE and ARBITRATE
+director dispatches. Hook failure is handled explicitly under `set -e` by
+copying the valid baseline and continuing the mandatory
+`two-model-task-generator` dispatch. Jev never retries the operador, changes
+the route, or writes authoritative ledger entries. Compare full director usage
+and observed outcomes before claiming savings; a smaller prompt file alone is
+not evidence of savings.
+
+### Site 4 reviewer depth guidance
+
+`scripts/review-package` is the shared preparation boundary used by the
+generic `coder-gate` and Flutter `green-gate`. It preserves the complete task
+brief and full review diff, including tests and available interface-touch or
+corrective context, then invokes `scripts/review-guidance` once. Site 4 may
+append procedural `focused_review` guidance only for an active policy with a
+matching calibration report and confidence at least `0.9`. Oversized (>64 KiB)
+or incomplete evidence, corrective tasks (`corrects`), tasks with
+`fused_from`, interface-touch advisories, off/shadow/unavailable/uncertain
+states, and hook failures use `standard_review`.
+
+Both variants retain all four reviewer duties, the full evidence, the same JSON
+verdict schema, and the same approval criteria. The reviewer remains the sole
+semantic approval authority: this hook never predicts a verdict, substitutes an
+agent/model, skips dispatch, changes routing, or writes authoritative ledger
+entries. Site 4 uses one ten-second classifier attempt when inference is
+eligible; shadow records the hypothetical depth while dispatching standard
+review. Offline evaluation must keep recommendation agreement separate from
+executed reviewer outcomes and cannot activate a policy.
+
 Custom fork of superpowers:subagent-driven-development. A deterministic
 orchestrator (**Script CEO**) owns state, gates, dispatch, and routing; every LLM
 call is an isolated, stateless invocation fed exactly the context it needs. The

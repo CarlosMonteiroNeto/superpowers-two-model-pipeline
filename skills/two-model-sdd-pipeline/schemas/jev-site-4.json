@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Site 4 reviewer depth guidance",
+  "version": "site4-v1",
+  "model": "jev",
+  "budget": {
+    "max_questions": 1,
+    "max_payload_bytes": 65536,
+    "attempts": 1,
+    "timeout_seconds": 10
+  },
+  "questions": {
+    "review_depth": {
+      "type": "choice",
+      "instructions": "Choose procedural review depth for the complete supplied task brief and full review diff. A focused choice only identifies a named risk for deeper inspection; it never predicts a verdict, approval, correctness, or whether the reviewer may omit a duty.",
+      "criteria": {
+        "focused_review": "Use concise procedural focus guidance to inspect a named risk first while retaining the complete evidence and every mandatory review duty.",
+        "standard_review": "Use the standard review instructions across the complete evidence and all mandatory review duties."
+      }
+    }
+  }
+}

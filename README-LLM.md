@@ -1,5 +1,107 @@
 # superpowers-two-model-pipeline — LLM/Agent README
 
+## Jev advisory classifier
+
+`skills/two-model-sdd-pipeline/scripts/jev-classify` is a Choice-only TypeSafe
+adapter. It reads a schema and state JSON file and requires `--workspace` and
+`--site`; it uses `TYPESAFE_API_KEY` only for a real request to
+`https://api.typesafe.ai/v1/systemone`. Its JSON output never contains the
+key. Exit `0` means every valid answer meets the threshold, `1` means a valid
+low-confidence answer or open circuit, `2` is invalid local input, and `3` is
+unavailable setup, transport, or provider data. Cache and circuit records are
+private to each workspace/site. Sites 1–4 default to shadow, require a bound
+calibration report for active action, and Site 5 only permits explicit
+`selected-apply`; Jev cannot approve, route, or write the authoritative ledger.
+
+## Site 5 plan fusion
+
+`plan-fusion propose DRAFT --workspace DIR --report REPORT` validates a complete draft and records shadow recommendations for independent, same-shape task pairs. `plan-fusion apply DRAFT --report REPORT --selection SELECTION --output OUTPUT` is offline and requires an explicit strategist selection of qualifying recommendations. It writes a distinct, consecutive-ID pre-runtime plan with provenance; it never fuses automatically or changes a runtime consumer. Shadow agreement and observed outcomes of executed fusions are evaluated separately.
+
+`jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` is offline reporting
+only. It separates recommendation agreement from observed executed outcomes
+and reports missing evidence; it cannot activate a policy or infer a
+counterfactual result.
+
+## Template catalog evidence
+
+`template-evidence OWNER/REPO --output FILE` collects the scoring report,
+README, `pubspec.yaml`, repository tree, explicit SDK/license constraints, and
+a content hash. Missing source text stays `null`. `template-catalog add|list|outcome`
+persists the evidence transactionally; exit 0 means success, 1 means domain or
+write failure, and 2 means usage or invalid local input. The score verdict is independent from
+Jev triage, confidence, policy, actor, vector identity, and adoption history;
+an evidence update clears only derived triage/vector fields. Catalog writes do
+not clone, install, select, or adopt a project template.
+
+### Site 2 deterministic template recall
+
+`template-refresh OWNER/REPO --database DB --category CATEGORY --project NAME`
+collects complete evidence and atomically refreshes one catalog row. Collection
+or validation failure returns a domain/setup error and preserves the previous
+row. `template-recall CATEGORY --database DB` is offline and read-only; it
+filters fresh AUTO_APPROVE rows by package overlap and optional injected-vector
+cosine similarity. A vector is eligible only when its model, vector identity,
+source evidence hash, dimensions, and finite values match the query and row.
+Missing databases, malformed vectors, invalid top/age arguments, and missing
+embedding setup are setup errors, never silent MISS results.
+
+`recall-suitability CANDIDATES_JSON CONTEXT_JSON --workspace DIR --output REPORT`
+is the optional Site 2 semantic layer. It sends the complete deterministic
+shortlist and Category Skeleton/intended-use/dependency context as one Choice
+batch, with at most 32 candidate questions and a 64 KiB request budget. Each
+question names its candidate state path and returns `suitable`, `unsuitable`,
+or `needs_review`. Off and shadow modes preserve deterministic recall; active
+mode requires a matching calibrated policy and keeps only confident suitable
+candidates. Uncertainty is recorded per answer, while provider failure is
+recorded separately and falls back to the deterministic shortlist. An active
+MISS carries a live-search reason; `template-recall` invokes the existing
+Phase 2a `template-search` only when specific and generic queries are present.
+Site 2 never changes freshness, scoring, timestamps, or catalog membership.
+
+Site 1 provenance is written through the shared workspace/site advisory store,
+with episode, schema, policy, cache, action, fallback, and timing identities.
+Active catalog updates are transactional and strict: a missing database/table,
+row-count mismatch, or SQLite write failure falls back to the existing path and
+cannot report a successful Jev adopt/reject action.
+
+### Site 3 director prompt selection
+
+`director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID --plan
+PLAN --baseline PROMPT --output OUTPUT [--policy FILE]` prepares the prompt at
+the existing director boundary. Its state includes the complete plan, target
+task, structured findings or escalation, cited constraints/spec material, and
+an episode/worktree identity. Runtime inference uses one ten-second attempt
+and falls back to the baseline on uncertainty, provider/config/cache failure,
+or unavailable policy.
+
+Only active, calibrated, confident `local_mechanical_correction` can focus a
+CORRECTIVE prompt. ARBITRATE may add a hint while retaining full viability
+context and the director's ruling. `task-run` always dispatches the existing
+`two-model-task-generator`, including after hook failure; Jev does not retry the
+operador, route tasks, or write the authoritative ledger. Compare full director
+usage and observed outcomes before claiming savings: a smaller prompt file
+alone is not evidence of savings.
+
+### Site 4 reviewer depth guidance
+
+`review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` is the shared Site 4
+preparation boundary used by generic `coder-gate` and Flutter `green-gate`. It
+keeps the complete task brief and full review diff, including tests and any
+available interface-touch or corrective context, then runs the optional
+`review-guidance` hook once. An active, calibrated Site 4 policy with
+confidence at least `0.9` may append procedural `focused_review` guidance;
+standard review remains the default for off, shadow, unavailable, uncertain,
+oversized/incomplete evidence, corrective tasks, `fused_from`, and
+`interface_touched`. Shadow records a hypothetical depth but dispatches the
+same standard review.
+
+Both guidance variants retain all four reviewer duties, the complete evidence,
+the existing JSON verdict schema, and approval criteria. The reviewer remains
+the sole semantic approval authority. Jev does not predict a verdict, replace
+an agent/model, skip the reviewer, change routing, or write authoritative
+ledger entries. Offline evaluation separates recommendation agreement from
+executed reviewer outcomes and never activates a policy automatically.
+
 This file gives any LLM agent (or coding agent) a complete mental model of
 this repository and the development harness it provides. Read it before doing
 work. It describes the architecture, the tools, the pipeline phases, the
@@ -134,6 +236,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG (observability) plus a live progress digest on stdout, records the session id for resume. The brief is passed as a positional so opencode auto-attaches it (never `--file` — this opencode version misparses the message when `--file` is present). The session id is extracted by the JSON digest filter (whitespace-tolerant) and written per-agent (`task-N-<agent>-session.txt`; the generic record was removed as a trap); a missing id ledgers `session_lost`. The not-a-primary-agent guard scans the non-JSON log lines (stderr/stdout interleave under buffering), so an embedded phrase inside a JSON event cannot false-trip it. On `--continue` (corrective round) the prompt explicitly tells the resumed model the brief has CHANGED and to re-read it fully. Refuses (exit 3) when the targeted agent is not `mode: all` | exit = opencode's exit; 2 usage; 3 not a primary agent |
 | `session-clean WS TASK\|all` (two-model) | Session hygiene: deletes the opencode sessions a task recorded (`task-N-*-session.txt`, per-agent only; the generic record was removed as a trap). The per-task loop keeps sessions so corrective rounds and debugging can resume them; a phase launcher runs `session-clean WS all` **after** `run-pipeline` returns, and a DB-maintenance tool (`~/.config/opencode/tools/db-maintenance.py prune-sessions`) prunes stragglers, so headless sessions cannot accumulate — they grew `opencode.db` to multi-GB and contributed to a 2026-09-14 freeze. Best-effort; `OPENCODE_BIN` overrides the binary | exit 0 best-effort; 2 usage |
 | `orchestrator WS TASK [TOTAL]` (two-model) | The single dispatch table: runs `route-next`, executes the script-owned emitted action (scaffold the BRIEF, run the lang-selected `red-gate`, or `coder-gate`), re-routes, and prints `OUTCOME:` for `run-pipeline`/the interactive session; hands CORRECTIVE/ARBITRATE/REVIEW/NEXT/FINAL_REVIEW back. `CODER_GATE_BIN` (legacy alias `CODER_GATE`) | exit 0 handoff; 1 inconsistent; 2 usage |
+| `director-prompt --mode MODE --workspace WS --task ID --plan PLAN --baseline PROMPT --output OUTPUT [--policy FILE]` (two-model) | Site 3 advisory selection at the real CORRECTIVE/ARBITRATE prompt boundary. Prepares a focused hint only for active calibrated confident local mechanical corrections; ARBITRATE keeps full viability context. One ten-second attempt; baseline fallback and mandatory director dispatch on every failure; never writes the authoritative ledger | exit 0 prompt prepared; 1 baseline/read-write failure; 2 invalid invocation |
 | `run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]` (two-model) | Top-level Script CEO driver, invokable anywhere: drives the plan serially (`N == 1`) or in plan-derived waves (`N > 1`, default 2: `wave-next` → `worktree-alloc` → `task-run` per worktree in parallel → `integrate`), then closing (final-gate + package + diretor assessment) → push+PR. **F2:** after every `integrate` that may change HEAD (including a partial nonzero batch and a successful recovery) it refreshes the workspace snapshot from the tracked plan (`pipeline-workspace --refresh`: strict validation + atomic replace) before failed-task membership, task counts, the next wave, or closing; refresh failure blocks and keeps the last snapshot. An explicit `TOTAL` that differs from the refreshed count blocks before advancing (serial included) | exit 0 closed; 1 blocked (fix + re-run continues); 2 usage |
 | `touches-overlap WORKSPACE ID [ID...]` (two-model) | Declared-`touches` pairwise disjointness decider: two tasks may share a wave only when their `touches` sets are disjoint (exact path equality). Pure read; consumed by `wave-next` | exit 0 disjoint (`TOUCHES-OVERLAP: disjoint`); 1 overlap (conflicting pairs on stderr); 2 usage / missing plan / unknown id / malformed plan |
 | `wave-next WORKSPACE [MAX_PARALLEL]` (two-model) | Plan-derived wave scheduler: reads `plan.json` + the merged ledger, prints `FINAL_REVIEW` when every task is done, else one `RUN <id>` per ready task (all `depends_on` done, not done, no open episode, `touches` pairwise-disjoint, capped at `MAX_PARALLEL`, default 2). A corrective or open-episode task is emitted alone. Selects fewest-touches-first (a wide low-id task must not wall out a schedulable pair) and prints every deferred task's conflicting files to stderr (`WAVE-DEFER`), so a collapsed wave is visible, not silent. In-flight episodes are only visible once `integrate` folds their shard in | exit 0 wave emitted / FINAL_REVIEW; 1 `WAVE_EMPTY` (nothing runnable, blocked); 2 usage |
@@ -157,7 +260,7 @@ cannot be targeted headlessly by `opencode run --agent`).
 | `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` (both through `cmd` — M6) + commit. No format gate (M8: coder-gate auto-applies the formatter first, so it could never fire). On commit: appends the `commit` ledger entry (including the validated `tree=` hash that `integrate` compares to skip a provably redundant post-merge suite; ADR-0013), advisory `interface-check`, then review package + **dispatches revisor**; the C2 scope gate runs first via `keep-discard`. `--no-commit` never commits/never dispatches | exit 0 green (+commit +revisor); 1 tests; 2 analyze; 4 scope violation |
 | `rtk-run [--ws WS --task N] <red\|test\|analyze> [ARGS...]` (flutter) | The Agente operador's SCOPED runner (T1, ADR-0016). It accepts only three modes and delegates to `cmd`, so the operador's test output is RTK-compressed while the FULL output lands on disk: `red` runs `flutter test --machine` and writes `WS/task-N-red.txt` (the exact path `red-form-check` reads), `test` runs `flutter test`, `analyze` runs `flutter analyze`. It is OFFERED by the brief, not mandated — the operador may run the project runner directly instead and redirect the evidence itself. Its allowlist entry is an install-independent two-sided wildcard (`*flutter-app-pipeline/scripts/rtk-run*`, permission `*` matches any character), so it matches from any checkout and however the shell wraps the call (`& "<path>"`, `bash "<path>"`, or bare). The coder definition ships platform-generic READ-ONLY allowances (Windows cmdlets `Get-ChildItem`/`Get-Content`/… and POSIX `ls`/`cat`/`grep`/…). It does NOT allow the generic interpreters (`bash*`/`python*`), which would be arbitrary execution — the measured saving comes from the read-only set, not from them. A per-machine override is what let install-specific paths leak into the mirror, so the LIVE definition and the mirror are kept identical | the wrapped command's exit code; 2 usage |
 | `route-next WORKSPACE TASK [TOTAL]` | Deterministic router: reads the ledger, emits the next action (BRIEF / RED / CODER / REVIEW / CORRECTIVE / ARBITRATE / NEXT / FINAL_REVIEW). The newest `arbitrate_resolved` is an **execution-attempt boundary** (F3/C1) for an incomplete task: pre-boundary `red_check`/`commit`/review verdict/escalation never advances the new attempt, so after a ruling the router emits `BRIEF` then `RED` (a re-scaffolded brief is not routed back to `CODER` on a stale red); a re-escalation after a ruling is exit 1 "arbitration did not resolve task N". A completed task keeps its terminal behavior. `scope_violation` escalates like `escalated`. Task count from JSON, not an `"id"` grep (M5) | exit 0 routed; 1 inconsistent / arbitration failed; 2 usage |
-| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff). When `TASK` is given, inlines `task-TASK-brief.md` ahead of the commit list so the revisor receives the brief in the single `--prompt-file` package | exit 0 wrote; 2 usage |
+| `review-package WORKSPACE BASE HEAD [OUTFILE] [TASK]` | Build a review bundle (commits + stat + diff), inline `task-TASK-brief.md`, and run the shared Site 4 `review-guidance` preparation once. The hook preserves the full package and falls back to standard guidance on optional inference failure; mandatory reviewer dispatch and verdict parsing remain in the existing callers | exit 0 wrote; 2 usage |
 | `keep-discard WORKSPACE TASK` | The C2 scope gate (run before any commit): KEEP when the partial work is in `touches`; newly authored test files are exempt (H3, shared `is_test_path`), a modified committed test file is tampering; build output (`.freezed.dart`, `.g.dart`, `.gr.dart`, `.gen.dart`, `.mocks.dart`) and the tracked plan (`docs/superpowers/plans/*.json`) are exempt too — codegen is derived, not authored scope, and a whole-project generator run rewrites every drifted generated file (C3, ADR-0014) | exit 0 KEEP; 1 DISCARD out-of-scope/tampered; 2 usage; 3 DISCARD (no partial work) |
 | `interface-check WORKSPACE TASK BASE` | Diff touched a file another task consumes (plan.json). Wired post-commit as an advisory ledger entry (`interface_touched`) | exit 0 clean; 1 interface changed; 2 usage |
 | `final-gate WORKSPACE TOTAL_TASKS` | Pre-closing: all complete + no unresolved verdicts + no blocking parked (structured `PARKED_SEVERITY` Critical/Important — M7, never prose) + tests/analyze green (skipped when the tree is unchanged since the last green checkpoint — HEAD equal to the newest `commit` OR `integrated` ledger sha, so the skip also fires after a wave's merge commit) + no pending worktree (`worktree_alloc` without `worktree_release`), no leftover `task/<N>` branch, no newest `integration_failed` after completion (parallel run) | exit 0 ready; 1 blockers; 2 usage |
@@ -374,6 +477,12 @@ On the reference machine the tiers are fixed agent definitions (both
 No `variants` block is used; the model is selected by the agent definition.
 The repo mirrors these definitions under `agent/` for versioning.
 
+On Git Bash for Windows, `pipeline-workspace` and `cmd` normalize native
+Windows paths through their shared `lib/path-normalize.sh` helper before
+passing them to POSIX filesystem tools. This keeps workspaces and full command
+logs inside the selected checkout, including paths with spaces, instead of
+asking MSYS `mkdir` to create a literal `C:` directory.
+
 ## 12. Repository layout
 
 ```
@@ -421,3 +530,19 @@ skills/skill-scripter/SKILL.md    <- audits a skill/stage for prose decisions th
    through `scripts/cmd`.
 4. Non-Flutter work: standard superpowers flow (brainstorming + TDD), no Flutter
    layer.
+### Site 1 catalog triage
+
+The Flutter pipeline exposes `template-triage EVIDENCE_FILE CONTEXT_FILE --workspace DIR --output REPORT` for shortlist triage. It requires complete evidence and all Category Skeleton fields, only evaluates `DEVELOPER_DECISION` scoring results, and keeps AUTO_APPROVE/AUTO_REJECT on their existing paths. Jev adopt/reject outcomes are shortlist metadata under calibrated active policy; they never select, clone, install, or download a project template. Off, shadow, unavailable, uncertain, and invalid evidence fall back to the existing developer path with an explicit reason.
+
+### Site 3 director prompt selection
+
+`task-run` runs `director-prompt` immediately before each CORRECTIVE and
+ARBITRATE director dispatch. The hook classifies the structured target task,
+findings/escalation, cited constraints, complete plan, and episode identity;
+runtime inference is one ten-second attempt. Only active calibrated confident
+`local_mechanical_correction` focuses CORRECTIVE. ARBITRATE retains the full
+viability context and director ruling. Off, shadow, uncertain, unavailable,
+and hook failure preserve the baseline and the mandatory
+`two-model-task-generator` dispatch. Jev never retries the operador or writes
+the ledger. Measure full director usage and observed outcomes before claiming
+savings; prompt-file size alone is not evidence.
