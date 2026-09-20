@@ -12,6 +12,8 @@ isolated by workspace and site. Sites 1-4 default to shadow and active mode
 requires a bound calibration report. Site 5 only supports selected-apply.
 Jev cannot approve work, route tasks, or write the ledger.
 
+Site 5 plan fusion is advisory during plan authoring. `plan-fusion propose` writes a shadow recommendation report; `plan-fusion apply` requires an explicit strategist selection and writes a separate pre-runtime plan. It never applies a recommendation automatically or changes runtime plan consumers. Keep shadow-agreement evidence separate from outcomes of actually executed fused tasks.
+
 `jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` reports recommendation
 agreement and observed executions separately. It is offline only: it cannot
 activate policies or claim counterfactual outcomes.

@@ -1,0 +1,13 @@
+{
+  "model": "jev",
+  "questions": {
+    "same_shape_fuse": {
+      "type": "choice",
+      "instructions": "Compare the two named task state paths and choose the safe planning recommendation.",
+      "criteria": {
+        "same_shape_fuse": "The concrete transformations share one coherent, independently testable pattern.",
+        "keep_separate": "The transformations differ, are unclear, or should remain independently reviewed."
+      }
+    }
+  }
+}

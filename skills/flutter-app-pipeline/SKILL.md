@@ -59,6 +59,7 @@ Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEX
 - No code is downloaded or implemented here. Only a version-conflict check + lockfile update (`scripts/pub-sync`) for what was decided.
 - If the developer adopted a template in 2b: **clone** the template and produce a **template gap analysis** by reading its structure directly (pubspec, layout, what the template provides / what to strip / what is missing → dependency search or from-scratch). This gap analysis seeds the plan tasks. The "no code downloaded" invariant is relaxed **only** for the adopted template (clone); package downloads stay lockfile-only in 2c.
 - Output feeds the Controller's `plan.json` for the two-model loop.
+- Before that handoff, a complete draft may use Site 5 `plan-fusion propose` for shadow-only recommendations and `plan-fusion apply` only with an explicit strategist selection. Application writes a separate pre-runtime plan; it is never automatic and does not modify the running pipeline plan.
 
 Phase 2 is pure planning and documentation. Nothing is implemented yet.
 

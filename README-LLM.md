@@ -13,6 +13,10 @@ private to each workspace/site. Sites 1–4 default to shadow, require a bound
 calibration report for active action, and Site 5 only permits explicit
 `selected-apply`; Jev cannot approve, route, or write the authoritative ledger.
 
+## Site 5 plan fusion
+
+`plan-fusion propose DRAFT --workspace DIR --report REPORT` validates a complete draft and records shadow recommendations for independent, same-shape task pairs. `plan-fusion apply DRAFT --report REPORT --selection SELECTION --output OUTPUT` is offline and requires an explicit strategist selection of qualifying recommendations. It writes a distinct, consecutive-ID pre-runtime plan with provenance; it never fuses automatically or changes a runtime consumer. Shadow agreement and observed outcomes of executed fusions are evaluated separately.
+
 `jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` is offline reporting
 only. It separates recommendation agreement from observed executed outcomes
 and reports missing evidence; it cannot activate a policy or infer a
