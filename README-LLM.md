@@ -1,5 +1,23 @@
 # superpowers-two-model-pipeline — LLM/Agent README
 
+## Jev advisory classifier
+
+`skills/two-model-sdd-pipeline/scripts/jev-classify` is a Choice-only TypeSafe
+adapter. It reads a schema and state JSON file and requires `--workspace` and
+`--site`; it uses `TYPESAFE_API_KEY` only for a real request to
+`https://api.typesafe.ai/v1/systemone`. Its JSON output never contains the
+key. Exit `0` means every valid answer meets the threshold, `1` means a valid
+low-confidence answer or open circuit, `2` is invalid local input, and `3` is
+unavailable setup, transport, or provider data. Cache and circuit records are
+private to each workspace/site. Sites 1–4 default to shadow, require a bound
+calibration report for active action, and Site 5 only permits explicit
+`selected-apply`; Jev cannot approve, route, or write the authoritative ledger.
+
+`jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` is offline reporting
+only. It separates recommendation agreement from observed executed outcomes
+and reports missing evidence; it cannot activate a policy or infer a
+counterfactual result.
+
 This file gives any LLM agent (or coding agent) a complete mental model of
 this repository and the development harness it provides. Read it before doing
 work. It describes the architecture, the tools, the pipeline phases, the

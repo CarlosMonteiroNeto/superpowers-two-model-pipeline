@@ -1,4 +1,20 @@
 SUPERPOWERS - TWO-MODEL PIPELINE FORK
+
+JEV ADVISORY CLASSIFIER
+-----------------------
+`skills/two-model-sdd-pipeline/scripts/jev-classify` is a Choice-only
+TypeSafe adapter. It reads schema and state JSON and requires `--workspace`
+and `--site`. It uses `TYPESAFE_API_KEY` only for live requests and never
+prints or stores the key. Exit 0 means all valid answers meet threshold; 1
+means low confidence or an open circuit; 2 means invalid local input; 3 means
+unavailable setup, transport, or provider data. Cache and circuit records are
+isolated by workspace and site. Sites 1-4 default to shadow and active mode
+requires a bound calibration report. Site 5 only supports selected-apply.
+Jev cannot approve work, route tasks, or write the ledger.
+
+`jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` reports recommendation
+agreement and observed executions separately. It is offline only: it cannot
+activate policies or claim counterfactual outcomes.
 =====================================
 
 A fork of obra/superpowers (MIT) that turns it into a deterministic,

@@ -5,6 +5,17 @@ description: Use instead of subagent-driven-development when the human partner o
 
 # Two-Model SDD Pipeline (Script-Autonomous Orchestration)
 
+## Jev advisory boundary
+
+Jev is optional semantic advice only. Use `scripts/jev-classify` with a
+Choice-only schema, an explicit workspace, and an explicit site. Keep Sites
+1–4 in `shadow` unless their policy contains a matching calibration report;
+Site 5 can only use `shadow` or strategist-selected application. Store
+telemetry through `jev_store.write_record`, never through `ledger-append`.
+On adapter/configuration failure, preserve the existing baseline behavior and
+record advisory failure separately. Tests must inject transport responses and
+must never use credentials or make live TypeSafe calls.
+
 Custom fork of superpowers:subagent-driven-development. A deterministic
 orchestrator (**Script CEO**) owns state, gates, dispatch, and routing; every LLM
 call is an isolated, stateless invocation fed exactly the context it needs. The
