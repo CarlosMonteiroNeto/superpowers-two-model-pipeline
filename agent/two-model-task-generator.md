@@ -1,9 +1,9 @@
 ---
-description: Strategic tier of the two-model pipeline (GPT-5.6 Sol, high reasoning). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
+description: Strategic tier of the two-model pipeline (GPT-5.6 Terra, medium reasoning). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
 mode: all
 hidden: true
-model: opencode/gpt-5.6-sol
-variant: high
+model: opencode/gpt-5.6-terra
+variant: medium
 permission:
   edit: allow
   read: allow

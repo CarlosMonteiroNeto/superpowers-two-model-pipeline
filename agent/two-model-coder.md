@@ -1,8 +1,8 @@
 ---
-description: Operational tier of the two-model pipeline (GPT-5.6 Terra, low reasoning). Owns the RED/GREEN loop - authors RED tests, runs them to save the runner's machine-readable evidence, then implements; may run test/analyze/format, never git.
+description: Operational tier of the two-model pipeline (GPT-5.6 Luna, low reasoning). Owns the RED/GREEN loop - authors RED tests, runs them to save the runner's machine-readable evidence, then implements; may run test/analyze/format, never git.
 mode: all
 hidden: true
-model: opencode/gpt-5.6-terra
+model: opencode/gpt-5.6-luna
 variant: low
 permission:
   edit: allow
