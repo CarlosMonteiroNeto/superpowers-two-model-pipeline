@@ -16,6 +16,27 @@ On adapter/configuration failure, preserve the existing baseline behavior and
 record advisory failure separately. Tests must inject transport responses and
 must never use credentials or make live TypeSafe calls.
 
+### Site 3 director prompt selection
+
+`scripts/director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID
+--plan PLAN --baseline PROMPT --output OUTPUT [--policy FILE]` classifies the
+structured target task, findings or escalation, cited constraints, complete
+plan, and episode identity before the existing director dispatch. Runtime Site
+3 uses one ten-second attempt with no inline retry. Only an active policy bound
+to the Site 3 schema/model/calibration report and a confident
+`local_mechanical_correction` may append a focused hint on CORRECTIVE. ARBITRATE
+may receive a semantic focus hint, but always keeps the full viability context
+and leaves the ruling to the director. Off, shadow, uncertain, unavailable,
+malformed-policy, and cache-failure paths write the unchanged baseline.
+
+`task-run` invokes this hook immediately before both CORRECTIVE and ARBITRATE
+director dispatches. Hook failure is handled explicitly under `set -e` by
+copying the valid baseline and continuing the mandatory
+`two-model-task-generator` dispatch. Jev never retries the operador, changes
+the route, or writes authoritative ledger entries. Compare full director usage
+and observed outcomes before claiming savings; a smaller prompt file alone is
+not evidence of savings.
+
 Custom fork of superpowers:subagent-driven-development. A deterministic
 orchestrator (**Script CEO**) owns state, gates, dispatch, and routing; every LLM
 call is an isolated, stateless invocation fed exactly the context it needs. The

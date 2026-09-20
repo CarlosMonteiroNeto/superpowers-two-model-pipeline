@@ -27,6 +27,17 @@ target task + its `spec_refs`. Rule on task viability: fix the task's
 acceptance in the tracked plan, or re-plan. Never blame the implementation.
 Reply with ONLY: what changed.
 
+## Site 3 advisory focus
+
+For CORRECTIVE and ARBITRATE episodes, the prompt may contain a Jev focus
+hint. It is semantic advice only: inspect the complete plan, target task,
+original findings or escalation, and cited spec material yourself. On
+CORRECTIVE, append a corrective task only when the evidence supports the
+existing scope; reject a local-mechanical focus when the correction is unsafe
+or architectural. On ARBITRATE, retain the complete viability context and
+make the ruling yourself for every Jev label. Jev never creates a task,
+approves work, retries the operador, or changes the ledger lifecycle.
+
 ## Closing (FINAL_REVIEW)
 
 One dispatch with the curated package: the plan + the spec ([SPEC_DOC] from
@@ -42,6 +53,9 @@ the plan — read it) + the consolidated diff + the full ledger. Assess:
 
 - Task text only, compact. The context is script-controlled and final: never
   ask for diffs, logs, or gate output.
+- The Site 3 hook is optional and falls back to the original prompt. Measure
+  full director usage and observed outcomes before claiming any savings; a
+  smaller prompt file does not prove savings.
 - TEST_DEFECT ruling: fix the task's acceptance, never blame the
   implementation.
 - English for all artifacts.

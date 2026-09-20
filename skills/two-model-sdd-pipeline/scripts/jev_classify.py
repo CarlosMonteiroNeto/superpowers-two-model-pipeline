@@ -24,9 +24,10 @@ def _identity(schema, state, cache_key):
     return hashlib.sha256(_canonical(body).encode("utf-8")).hexdigest()
 
 
-def _error(status, message, identity=None, schema_hash=None):
+def _error(status, message, identity=None, schema_hash=None, error_kind=None):
     return {"status": status, "answers": {}, "model": None, "usage": None, "request_hash": identity,
-            "cache_hit": False, "error": message, "schema_hash": schema_hash}
+            "cache_hit": False, "error": message, "schema_hash": schema_hash,
+            "error_kind": error_kind}
 
 
 def _validate_schema(schema, threshold):
@@ -37,7 +38,9 @@ def _validate_schema(schema, threshold):
     if not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError("threshold must be finite in [0, 1]")
     for qid, question in schema["questions"].items():
-        criteria = question.get("criteria") if isinstance(question, dict) else None
+        if not isinstance(question, dict):
+            raise ValueError("each Choice question must be an object")
+        criteria = question.get("criteria")
         if (not isinstance(qid, str) or not qid or question.get("type") != "choice"
                 or not isinstance(question.get("instructions"), str) or not question["instructions"].strip()
                 or not isinstance(criteria, dict) or len(criteria) < 2
@@ -115,11 +118,18 @@ def classify(schema, state, *, workspace, site, threshold=.9, cache_key=None, re
         identity = _identity(schema, state, cache_key)
         schema_hash = hashlib.sha256(_canonical(schema).encode("utf-8")).hexdigest()
     except ValueError as exc:
-        return 2, _error("unavailable", str(exc), schema_hash=None)
+        # Keep the public envelope status compatible with the classifier
+        # contract (unavailable), while making the local/setup nature of an
+        # exit-2 failure explicit to runtime advisory callers.
+        return 2, _error("unavailable", str(exc), schema_hash=None, error_kind="setup_error")
     if reset_circuit:
         jev_store.reset_circuit(workspace, site)
     if not refresh:
-        cached = jev_store.read_cache(workspace, site, identity)
+        try:
+            cached = jev_store.read_cache(workspace, site, identity)
+        except Exception as exc:
+            return 3, _error("cache_unavailable", str(exc) or "cache unavailable", identity,
+                             schema_hash, error_kind="cache_error")
         if cached:
             try:
                 answers = _validated_answers(schema, {"model": cached["model"], "usage": cached["usage"], "answers": cached["answers"]})
@@ -127,7 +137,11 @@ def classify(schema, state, *, workspace, site, threshold=.9, cache_key=None, re
                 return (0 if all(a["confidence"] >= threshold for a in answers.values()) else 1), cached
             except (KeyError, ValueError, TypeError):
                 pass
-    circuit = jev_store.circuit_state(workspace, site)
+    try:
+        circuit = jev_store.circuit_state(workspace, site)
+    except Exception as exc:
+        return 3, _error("cache_unavailable", str(exc) or "circuit state unavailable", identity,
+                         schema_hash, error_kind="cache_error")
     if circuit.get("failures", 0) >= 3:
         return 1, _error("circuit_open", "circuit is open", identity, schema_hash)
     if not schema["questions"]:
@@ -135,7 +149,8 @@ def classify(schema, state, *, workspace, site, threshold=.9, cache_key=None, re
     key = api_key if api_key is not None else os.environ.get("TYPESAFE_API_KEY")
     if transport is None and not key:
         jev_store.record_failure(workspace, site)
-        return 3, _error("unavailable", "TYPESAFE_API_KEY is unavailable", identity, schema_hash)
+        return 3, _error("unavailable", "TYPESAFE_API_KEY is unavailable", identity, schema_hash,
+                         error_kind="provider_unavailable")
     payload_questions = {}
     for qid, question in schema["questions"].items():
         payload_questions[qid] = {"type": "choice", "instructions": question["instructions"], "criteria": question["criteria"]}
@@ -146,11 +161,16 @@ def classify(schema, state, *, workspace, site, threshold=.9, cache_key=None, re
         answers = _validated_answers(schema, response)
     except (RuntimeError, ValueError, TypeError, KeyError) as exc:
         jev_store.record_failure(workspace, site)
-        return 3, _error("unavailable", str(exc) or "invalid response", identity, schema_hash)
+        return 3, _error("unavailable", str(exc) or "invalid response", identity, schema_hash,
+                         error_kind="provider_unavailable")
     jev_store.record_success(workspace, site)
     envelope = {"status": "answered", "answers": answers, "model": response["model"], "usage": response.get("usage"),
                 "request_hash": identity, "cache_hit": False, "error": None, "schema_hash": schema_hash}
-    jev_store.write_cache(workspace, site, identity, envelope)
+    try:
+        jev_store.write_cache(workspace, site, identity, envelope)
+    except Exception as exc:
+        return 3, _error("cache_unavailable", str(exc) or "cache unavailable", identity,
+                         schema_hash, error_kind="cache_error")
     return (0 if all(a["confidence"] >= threshold for a in answers.values()) else 1), envelope
 
 
@@ -170,7 +190,7 @@ def main(argv=None):
         with open(args.schema_file, encoding="utf-8") as h: schema = json.load(h)
         with open(args.state_file, encoding="utf-8") as h: state = json.load(h)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(json.dumps(_error("unavailable", str(exc))))
+        print(json.dumps(_error("unavailable", str(exc), error_kind="setup_error")))
         return 2
     code, envelope = classify(schema, state, workspace=args.workspace, site=args.site, threshold=args.threshold,
                               cache_key=args.cache_key, refresh=args.refresh, reset_circuit=args.reset_circuit)

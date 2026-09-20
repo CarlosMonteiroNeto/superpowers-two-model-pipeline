@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Site 3 director episode classification",
+  "version": "site3-v1",
+  "model": "jev",
+  "budget": {
+    "max_questions": 1,
+    "max_payload_bytes": 65536
+  },
+  "questions": {
+    "director_classification": {
+      "type": "choice",
+      "instructions": "Classify the structured director episode using the target task, actual findings or escalation, cited constraints, and episode identity. This is advisory context for the director and never a verdict.",
+      "criteria": {
+        "local_mechanical_correction": "The episode is likely a narrowly scoped mechanical correction whose safety can be checked against the supplied evidence.",
+        "architectural_disagreement": "The episode involves architecture, scope, viability, or a disagreement that needs the director's full judgment.",
+        "test_noise_or_unclear": "The available evidence is noisy, ambiguous, incomplete, or does not support a confident classification."
+      }
+    }
+  }
+}

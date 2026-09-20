@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import subprocess
+from unittest import mock
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -101,6 +102,34 @@ class ClassifierContractTests(unittest.TestCase):
         code, envelope = jev_classify.classify(schema(), {}, workspace=self.workspace, site="unknown", transport=self.transport)
         self.assertEqual(code, 2)
         self.assertEqual(envelope["status"], "unavailable")
+        self.assertEqual(envelope["error_kind"], "setup_error")
+
+    def test_malformed_question_is_a_setup_error(self):
+        code, envelope = jev_classify.classify(
+            {"model": "jev-test", "questions": {"q1": "not an object"}},
+            {}, workspace=self.workspace, site="site3", transport=self.transport,
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(envelope["error_kind"], "setup_error")
+
+    def test_cache_read_failure_is_explicit_and_does_not_call_provider(self):
+        with mock.patch.object(jev_classify.jev_store, "read_cache", side_effect=OSError("cache unreadable")):
+            code, envelope = jev_classify.classify(
+                schema(), {}, workspace=self.workspace, site="site3", transport=self.transport,
+            )
+        self.assertEqual(code, 3)
+        self.assertEqual(envelope["status"], "cache_unavailable")
+        self.assertEqual(envelope["error_kind"], "cache_error")
+        self.assertEqual(self.calls, [])
+
+    def test_cache_write_failure_is_explicit_after_valid_response(self):
+        with mock.patch.object(jev_classify.jev_store, "write_cache", side_effect=OSError("cache full")):
+            code, envelope = jev_classify.classify(
+                schema(), {}, workspace=self.workspace, site="site3", transport=self.transport,
+            )
+        self.assertEqual(code, 3)
+        self.assertEqual(envelope["status"], "cache_unavailable")
+        self.assertEqual(envelope["error_kind"], "cache_error")
 
     def test_envelope_includes_schema_hash(self):
         _, envelope = jev_classify.classify(schema(), {}, workspace=self.workspace, site="site5", transport=self.transport)

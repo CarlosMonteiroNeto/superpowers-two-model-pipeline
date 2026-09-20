@@ -51,6 +51,23 @@ separate telemetry, and provider failure falls back to deterministic recall.
 An active MISS is marked for live search; template-recall invokes the existing
 Phase 2a template-search when both category queries are available. Suitability
 never changes freshness, score verdicts, timestamps, or catalog membership.
+
+SITE 3 DIRECTOR PROMPT SELECTION
+--------------------------------
+`director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID --plan
+PLAN --baseline PROMPT --output OUTPUT [--policy FILE]` is the advisory hook at
+the existing task-run director prompt boundary. It classifies the complete
+plan, target task, structured findings or escalation, cited constraints/spec
+material, and an episode/worktree identity. Runtime inference uses one
+ten-second attempt and falls back to the baseline on uncertainty,
+provider/config/cache failure, or unavailable policy.
+Only active calibrated confident `local_mechanical_correction` focuses a
+CORRECTIVE prompt. ARBITRATE may receive a hint but retains full viability
+context and leaves the ruling to the director. `task-run` always dispatches
+the existing `two-model-task-generator`, including when the hook fails. Jev
+never retries the operador, changes routing, or writes authoritative ledger
+entries. Compare full director usage and observed outcomes before claiming
+savings; a smaller prompt file alone is not evidence of savings.
 =====================================
 
 A fork of obra/superpowers (MIT) that turns it into a deterministic,
@@ -317,6 +334,12 @@ skills/two-model-sdd-pipeline/scripts/:
                        branches until the task is APPROVED or blocked; runs
                        in the serial root or inside a wave worktree (exit 0
                        complete; 1 blocked/escalated; 2 usage)
+  director-prompt     Site 3 advisory prompt selection at the existing
+                       CORRECTIVE/ARBITRATE director boundary: one 10-second
+                       attempt, active calibrated local-mechanical focus only,
+                       baseline fallback, and mandatory director dispatch
+                       preserved (exit 0 prepared; 1 baseline/read-write
+                       failure; 2 usage)
   integrate            script-owned integration gate: require every task's
                        shard to hold task_complete (else integration_failed
                        not approved). An approved task that never committed
@@ -563,3 +586,14 @@ MIT - see LICENSE file for details. Upstream: https://github.com/obra/superpower
 Site 1 catalog triage
 ---------------------
 template-triage consumes complete catalog evidence and Category Skeleton context. It only evaluates DEVELOPER_DECISION scoring results; AUTO_APPROVE and AUTO_REJECT keep their existing paths. Calibrated active Jev adopt/reject decisions affect shortlist metadata only and never select, clone, install, or download a project template. Off, shadow, unavailable, uncertain, and invalid evidence preserve developer handling and record a fallback reason.
+
+Site 3 director prompt selection
+-------------------------------
+`task-run` invokes `director-prompt` before both CORRECTIVE and ARBITRATE
+director dispatches. The hook preserves complete plan/target/findings or
+escalation/spec context, uses one ten-second runtime attempt, and falls back to
+the original baseline on any optional failure. Only active calibrated confident
+local mechanical correction can focus CORRECTIVE; ARBITRATE retains full
+viability context. Jev never retries the operador or writes the authoritative
+ledger. Full director usage and observed outcomes must be measured before
+claiming savings; a smaller prompt file does not prove savings.
