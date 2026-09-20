@@ -57,6 +57,57 @@ class ClassifierContractTests(unittest.TestCase):
         self.assertEqual(envelope["status"], "unavailable")
         self.assertEqual(envelope["answers"], {})
 
+    def test_returned_model_mismatch_is_unavailable_and_not_cached(self):
+        calls = []
+
+        def mismatched(*args):
+            calls.append(args)
+            response = provider()
+            response["model"] = "jev-other"
+            return 200, response
+
+        code, envelope = jev_classify.classify(
+            schema(), {"state": 1}, workspace=self.workspace, site="site5", transport=mismatched,
+        )
+        self.assertEqual(code, 3)
+        self.assertEqual(envelope["status"], "unavailable")
+        self.assertEqual(envelope["error_kind"], "provider_unavailable")
+        self.assertEqual(envelope["answers"], {})
+        self.assertIsNone(envelope["model"])
+
+        code, recovered = jev_classify.classify(
+            schema(), {"state": 1}, workspace=self.workspace, site="site5", transport=self.transport,
+        )
+        self.assertEqual(code, 0)
+        self.assertFalse(recovered["cache_hit"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_cached_model_mismatch_is_ignored_per_site_and_cannot_be_selected(self):
+        code, cached = jev_classify.classify(
+            schema(), {"state": 1}, workspace=self.workspace, site="site5", transport=self.transport,
+        )
+        self.assertEqual(code, 0)
+        cache_path = jev_classify.jev_store.cache_path(
+            self.workspace, "site5", cached["request_hash"],
+        )
+        corrupted = json.loads(cache_path.read_text(encoding="utf-8"))
+        corrupted["model"] = "jev-other"
+        cache_path.write_text(json.dumps(corrupted), encoding="utf-8")
+
+        code, refreshed = jev_classify.classify(
+            schema(), {"state": 1}, workspace=self.workspace, site="site5", transport=self.transport,
+        )
+        self.assertEqual(code, 0)
+        self.assertFalse(refreshed["cache_hit"])
+
+        code, isolated = jev_classify.classify(
+            schema(), {"state": 1}, workspace=self.workspace, site="site3", transport=self.transport,
+        )
+        self.assertEqual(code, 0)
+        self.assertFalse(isolated["cache_hit"])
+        self.assertEqual(len(self.calls), 3)
+
     def test_third_failure_opens_persisted_circuit_without_network(self):
         def down(*_args):
             raise OSError("offline")

@@ -1,7 +1,7 @@
 # Jev-assisted task fusion during plan authoring
 
 Date: 2026-09-19
-Status: Draft for design review; option 1 selected, detailed contracts proposed. Companion to 2026-09-19-jev-all-sites-design.md following the expanded scope request.
+Status: Implemented and reviewed as part of the Jev all-sites rollout. The requirements below remain authoritative. Companion to 2026-09-19-jev-all-sites-design.md following the expanded scope request.
 
 ## 1. Objective and scope
 
@@ -9,7 +9,7 @@ Help the strategist combine small, independent, same-shape tasks before finalizi
 
 The developer selected shadow recommendations plus manually selected fusion. Here, manual selection means an explicit decision by the interactive strategist during plan authoring, with normal developer design review; it does not introduce a developer approval prompt for every pair or any runtime approval gate.
 
-This companion specifies Site 5 and its initial Choice-capable `jev-classify` foundation. The overall initiative now includes Sites 1–4 under 2026-09-19-jev-all-sites-design.md. Automatic fusion remains outside Site 5's first release. No implementation or pipeline execution is authorized by this planning artifact.
+This companion specifies Site 5 and its initial Choice-capable `jev-classify` foundation. The overall initiative now includes Sites 1–4 under 2026-09-19-jev-all-sites-design.md. The implementation and review are complete in the tracked checkout. Automatic fusion remains outside Site 5's first release, and this companion does not authorize automatic fusion or runtime plan mutation.
 
 ## 2. Evidence and current baseline
 
@@ -63,9 +63,9 @@ Exit codes: 0 = valid response and all question confidences meet threshold; 1 = 
 
 The Site 5 caller evaluates valid answers individually even when the aggregate exit is 1: an uncertain unrelated pair must not invalidate a confident pair. This deliberately refines the attachment's all-questions confidence contract and must be documented consistently in both CLI and caller tests. Unavailable batches contribute no selectable pairs; local input errors stop the command.
 
-Validate response question identity, Choice types, exact option sets, selected option membership and maximal probability, finite probabilities/confidence in [0,1], and probability sums within 1e-6 of 1. Reject malformed responses as unavailable; never partially trust a malformed batch.
+Validate response question identity, Choice types, exact option sets, selected option membership and maximal probability, finite probabilities/confidence in [0,1], probability sums within 1e-6 of 1, and exact returned-model identity against the requested schema model. Reject malformed or model-mismatched responses as unavailable; never partially trust a malformed batch or expose it as a selectable recommendation.
 
-Cache only validated answers. Identity includes canonical state, questions/criteria, requested model, endpoint, and adapter version; a caller-provided key is an additional namespace, not a replacement for content identity. Store the returned model and timestamp. Re-evaluate thresholds locally from cached judgments. Cache is confined to a planning workspace, with explicit refresh for new measurements or mutable model aliases.
+Cache only validated answers. Identity includes canonical state, questions/criteria, requested model, endpoint, and adapter version; a caller-provided key is an additional namespace, not a replacement for content identity. Store the returned model and timestamp. Cached model identity must still match the requested schema model; mismatched cached records are discarded and never selected. Re-evaluate thresholds locally from cached judgments. Cache is confined to a planning workspace, with explicit refresh for new measurements or mutable model aliases.
 
 Proposed timeout: 30 seconds per attempt, at most two attempts per invocation. Retry only transport failures and transient 429/529/5xx responses, with a bounded delay of at most two seconds before the second attempt. Do not retry authentication or request-validation errors. Persist a consecutive failed-invocation count atomically in the planning workspace's Site 5 namespace. On the third unavailable invocation return circuit-open fallback; later calls make no network request until explicit reset. A successful network response resets the count. Cache hits do not prove service recovery. This replaces the attachment's ambiguous branch-scoped fallback with an explicit pre-runtime scope. Runtime sites use the shorter timeout policy in the parent design.
 
@@ -101,11 +101,11 @@ Verification must cover classifier exits, malformed responses, partial confidenc
 
 Existing brief-scaffold and scheduling consumers must accept the resulting plan unchanged. New tests must prove observable behavior rather than mirror implementation. Follow the current pipeline's convention that newly authored tests are not listed in task touches. Skill edits require the skill-authoring verification workflow at implementation time.
 
-## 10. Design review and next artifact
+## 10. Implementation and review status
 
-The selected approach is settled. Detailed defaults and contracts above remain proposed until design review: pair/file/acceptance caps, per-answer handling of aggregate exit 1, explicit planning-workspace scope, retry/circuit policy, and strategist selection semantics.
+The selected approach and detailed defaults above were reviewed and implemented: pair/file/acceptance caps, per-answer handling of aggregate exit 1, explicit planning-workspace scope, retry/circuit policy, and strategist selection semantics.
 
-After design approval, write the complete plan.json with title, summary, acceptance, spec_refs, touches, and depends_on for every task; no expected_red. Plan creation does not start implementation.
+The complete plan.json records title, summary, acceptance, spec_refs, touches, and depends_on for every task; it contains no expected_red. Its task acceptance and the immutable requirements above remain unchanged by this status update.
 
 ## References
 

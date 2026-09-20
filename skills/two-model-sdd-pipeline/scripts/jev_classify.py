@@ -52,6 +52,8 @@ def _validate_schema(schema, threshold):
 def _validated_answers(schema, response):
     if not isinstance(response, dict) or not isinstance(response.get("model"), str) or not response["model"].strip():
         raise ValueError("response requires a model")
+    if response["model"] != schema["model"]:
+        raise ValueError("response model does not match requested model")
     if not isinstance(response.get("usage"), dict):
         raise ValueError("answered response requires usage")
     answers = response.get("answers")

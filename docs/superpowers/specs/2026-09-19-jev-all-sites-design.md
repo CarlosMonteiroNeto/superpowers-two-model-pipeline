@@ -1,7 +1,7 @@
 # Jev integration across all five decision sites
 
 Date: 2026-09-19
-Status: Expanded draft for design review. All-site scope and mandatory Site 4 reviewer confirmed by the developer; detailed contracts remain proposed.
+Status: Implemented and reviewed for the shared Jev foundation, template foundation, and Sites 1–4. Site 5 selected fusion is implemented and reviewed as part of the same rollout. The requirements below remain authoritative.
 
 ## 1. Confirmed scope and implementation order
 
@@ -17,7 +17,7 @@ Deliver in this order:
 
 The full implementation plan must describe every stage before execution; this ordering is not runtime plan expansion. Independent testable deliverables may have separate tasks and appropriate dependency edges.
 
-Do not implement Site 3 Option B, automatic task fusion, Jev-generated review approval, or an alternative runtime router. Package promotion is not a prerequisite of any Jev site and is excluded from the template foundation. No implementation, installation, live inference, or pipeline launch occurs during this analysis/design session.
+Do not implement Site 3 Option B, automatic task fusion, Jev-generated review approval, or an alternative runtime router. Package promotion is not a prerequisite of any Jev site and is excluded from the template foundation. Implementation and review are complete in the tracked checkout; live TypeSafe calls remain disabled for tests and default shadow-mode paths, and installation, publication, and pipeline launch remain outside this artifact.
 
 ## 2. Evidence and design deltas
 
@@ -35,7 +35,7 @@ Reviewer dispatch exists in both generic coder-gate and Flutter green-gate. A sh
 
 Jev supplies semantic judgments only. Scripts enforce rules, thresholds, artifact validity, and routing. The director continues to rule on all corrective/arbitration episodes; the reviewer remains the sole independent semantic approval authority. Jev cannot write authoritative review, task_complete, corrective-resolution, or gate-success entries.
 
-Implement Choice only initially; no site here requires a general framework for every TypeSafe primitive. Typed responses establish shape, not truth. The API adapter returns each selected option, its full distribution, confidence, returned model identity, and usage when available. Questions explicitly identify the state they concern; IDs alone do not convey context to Jev.
+Implement Choice only initially; no site here requires a general framework for every TypeSafe primitive. Typed responses establish shape, not truth. The API adapter returns each selected option, its full distribution, confidence, returned model identity, and usage when available. The returned model identity must exactly match the requested schema model for both live responses and cached envelopes; a mismatch is a provider/config/setup failure and yields no selectable recommendation. Questions explicitly identify the state they concern; IDs alone do not convey context to Jev.
 
 Every site has a versioned question schema and independent policy. Support off, shadow, and active modes for Sites 1–4. Default all four to shadow: compute observations while preserving existing decisions. Off makes no API calls. Active mode requires an explicit policy configuration bound to the evaluated model, question version, and a calibration report. That report records labeled cases, false-positive errors, coverage, latency, and cost; it does not claim a universal sample count proves safety. No observed-data threshold automatically activates a site.
 
@@ -45,7 +45,7 @@ Provisional active recommendation confidence is 0.9 for Sites 1–4 as well as S
 
 ## 4. Shared transport, persistence, and degradation
 
-Use the companion's classifier exit table, strict response validation, content-addressed cache, and explicit workspace argument. Add mandatory --site to isolate caches, schemas, and circuit state. Cache identity includes model, endpoint, question semantics, and complete state; caller keys never override that identity. Store raw responses privately in workspace artifacts, never API keys or Authorization headers. Do not transmit code, catalog text, or planning material until inference is actually invoked during the authorized implementation/use phase.
+Use the companion's classifier exit table, strict response validation, content-addressed cache, and explicit workspace argument. Add mandatory --site to isolate caches, schemas, and circuit state. Cache identity includes model, endpoint, question semantics, and complete state; caller keys never override that identity. Store raw responses privately in workspace artifacts, never API keys or Authorization headers. Reject a live or cached response whose model identity differs from the requested schema model, and treat it as unavailable setup/provider data. Do not transmit code, catalog text, or planning material until inference is actually invoked during the authorized implementation/use phase.
 
 Planning calls use the companion's bounded retry policy. Runtime Sites 3 and 4 use one attempt with a ten-second timeout and no inline retry, so an optional optimization does not create a minute-long delay before a mandatory dispatch. Timeouts and payload budgets are local defaults to be tested, not claims about provider limits.
 
@@ -127,11 +127,11 @@ Update the pipeline skills, README-LLM.md, README.txt, and relevant prompt docum
 
 Existing runtime verdicts and ledger routing types remain unchanged. Advisory telemetry is separate. Plan acceptance must explicitly cover these invariants rather than rely on a prose promise.
 
-## 11. Remaining design review
+## 11. Implementation and review status
 
-Review this expanded design before authoring the executable plan.json. In particular, confirm the proposed Site 2 suitability contract and the Site 1 definition of adopt as shortlist acceptance. Site 3 uses Option A. Site 4 reviewer preservation and Site 5 selected fusion are already confirmed and do not need to be re-approved as choices.
+The expanded design was reviewed before authoring the executable plan.json. The Site 2 suitability contract and Site 1 definition of adopt as shortlist acceptance were carried into the implementation and review. Site 3 uses Option A. Site 4 reviewer preservation and Site 5 selected fusion remain confirmed requirements.
 
-The plan must cover all stages with complete tasks, acceptance, spec_refs, exclusive implementation touches, and depends_on; no expected_red. Tests are tracked as verification requirements rather than test-like touches, following brief-scaffold's current contract. Establish an actual Git checkout/revision at execution handoff. This draft has not been committed because the source copy has no Git metadata.
+The complete plan covers all stages with tasks, acceptance, spec_refs, exclusive implementation touches, and depends_on; no expected_red. Tests remain verification requirements rather than test-like touches, following brief-scaffold's current contract. The shared foundation, template foundation, and Sites 1–4 are implemented and reviewed in the tracked checkout, with Site 5 selected fusion reviewed alongside them.
 
 ## Sources
 
