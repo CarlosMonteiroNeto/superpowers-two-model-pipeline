@@ -609,6 +609,12 @@ Site 1 catalog triage
 ---------------------
 template-triage consumes complete catalog evidence and Category Skeleton context. It only evaluates DEVELOPER_DECISION scoring results; AUTO_APPROVE and AUTO_REJECT keep their existing paths. Calibrated active Jev adopt/reject decisions affect shortlist metadata only and never select, clone, install, or download a project template. Off, shadow, unavailable, uncertain, and invalid evidence preserve developer handling and record a fallback reason.
 
+Site 1 provenance uses the shared workspace/site advisory store with episode,
+schema, policy, cache, action, fallback, and timing fields. Active catalog
+updates are transactional and strict; missing storage, row-count mismatches,
+and SQLite failures preserve the existing developer path and never report a
+successful Jev adopt/reject action.
+
 Site 3 director prompt selection
 -------------------------------
 `task-run` invokes `director-prompt` before both CORRECTIVE and ARBITRATE

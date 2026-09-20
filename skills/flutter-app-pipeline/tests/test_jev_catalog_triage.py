@@ -9,6 +9,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import template_triage
 
+SHARED = Path(__file__).resolve().parents[2] / "two-model-sdd-pipeline" / "scripts"
+sys.path.insert(0, str(SHARED))
+import jev_store
+
 
 def evidence(**overrides):
     value = {
@@ -58,6 +62,12 @@ class CatalogTriageTests(unittest.TestCase):
 
     def test_active_high_confidence_adopt_is_shortlist_only(self):
         with tempfile.TemporaryDirectory() as workspace, tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as policy:
+            database = Path(workspace) / "template-catalog.sqlite3"
+            conn = sqlite3.connect(database)
+            with conn:
+                conn.execute("CREATE TABLE templates (owner_repo TEXT PRIMARY KEY, score_verdict TEXT, triage_decision TEXT, triage_confidence REAL, triage_policy_version TEXT, triage_actor TEXT, evidence_hash TEXT)")
+                conn.execute("INSERT INTO templates(owner_repo, score_verdict, evidence_hash) VALUES ('acme/catalog', 'DEVELOPER_DECISION', 'e1')")
+            conn.close()
             json.dump({
                 "site": "site1", "mode": "active", "threshold": 0.9,
                 "model": "jev", "schema_hash": "schema", "evaluator": "eval", "calibration_report": {
@@ -69,7 +79,7 @@ class CatalogTriageTests(unittest.TestCase):
                 "triage": {"choice": "adopt", "confidence": 0.95}
             }}
             with patch.object(template_triage.jev_classify, "classify", return_value=(0, envelope)):
-                result = template_triage.triage(evidence(), context(), workspace=workspace, policy_path=policy.name)
+                result = template_triage.triage(evidence(), context(catalog_path=str(database)), workspace=workspace, policy_path=policy.name)
             self.assertEqual(result["decision"], "adopt")
             self.assertEqual(result["actor"], "jev")
             self.assertFalse(result["project_selected"])
@@ -132,20 +142,81 @@ class CatalogTriageTests(unittest.TestCase):
         self.assertEqual(result["inference_status"], "unavailable")
         self.assertEqual(result["provider_error"], "timeout")
 
-    def test_provider_failure_audit_preserves_provenance_and_existing_triage(self):
+    def test_site1_advisory_records_use_shared_store_and_isolate_episodes(self):
         with tempfile.TemporaryDirectory() as workspace:
-            template_triage.triage(evidence(), context(), workspace=workspace)
-            with patch.object(template_triage.jev_classify, "classify", return_value=(3, {
-                "status": "unavailable", "error": "timeout", "usage": {"input": 4}, "duration_ms": 123,
-                "model": "jev"
-            })):
-                result = template_triage.triage(evidence(), context(), workspace=workspace)
-            audit = json.loads((Path(workspace) / ".jev" / "site1-triage.json").read_text(encoding="utf-8"))["acme/catalog"]
+            with patch.object(template_triage.jev_classify, "classify", side_effect=[
+                (0, {"model": "jev", "schema_hash": "schema", "answers": {"triage": {"choice": "reject", "confidence": .95}}, "usage": {"input": 4}, "cache_hit": False}),
+                (3, {"status": "unavailable", "error": "timeout", "usage": {"input": 5}, "model": "jev", "cache_hit": False}),
+            ]):
+                first = template_triage.triage(evidence(), context(), workspace=workspace)
+                second = template_triage.triage(evidence(owner_repo="other/catalog"), context(), workspace=workspace)
+            records = list((Path(workspace) / ".jev" / "site1" / "advisory").glob("*.json"))
+            self.assertEqual(len(records), 2)
+            self.assertFalse((Path(workspace) / ".jev" / "site1-triage.json").exists())
+            payloads = [json.loads(path.read_text(encoding="utf-8")) for path in records]
+        self.assertNotEqual(first["triage_identity"], second["triage_identity"])
+        self.assertEqual({payload["site"] for payload in payloads}, {"site1"})
+        self.assertEqual({payload["state_identity"] for payload in payloads}, {first["triage_identity"], second["triage_identity"]})
+        for payload in payloads:
+            self.assertIn("schema_identity", payload)
+            self.assertIn("policy_identity", payload)
+            self.assertIn("cache_status", payload)
+            self.assertIn("actual_action", payload)
+            self.assertIn("fallback", payload)
+            self.assertIsInstance(payload["timing"], dict)
+            self.assertIn("duration_ms", payload["timing"])
+            self.assertEqual(payload["episode"]["site"], "site1")
+            self.assertIn("owner_repo", payload["episode"])
+
+    def test_active_catalog_persistence_failure_never_reports_jev_success(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as policy:
+            json.dump({
+                "site": "site1", "mode": "active", "threshold": 0.9,
+                "model": "jev", "schema_hash": "schema", "evaluator": "eval", "version": "p1", "calibration_report": {
+                    "site": "site1", "model": "jev", "schema_hash": "schema", "threshold": 0.9, "evaluator": "eval"
+                }
+            }, policy)
+            policy.flush()
+            envelope = {"model": "jev", "schema_hash": "schema", "answers": {
+                "triage": {"choice": "adopt", "confidence": 0.95}
+            }}
+            with patch.object(template_triage.jev_classify, "classify", return_value=(0, envelope)):
+                result = template_triage.triage(evidence(), context(catalog_path=str(Path(workspace) / "missing.sqlite3")), workspace=workspace, policy_path=policy.name)
+        self.assertEqual(result["decision"], "existing_path")
+        self.assertEqual(result["actor"], "baseline")
+        self.assertEqual(result["fallback_reason"], "catalog_persistence_failed")
+        self.assertEqual(result["domain_error"], "catalog_persistence_failed")
+        self.assertNotEqual(result.get("decision"), "adopt")
+
+    def test_active_catalog_missing_row_is_a_persistence_failure(self):
+        with tempfile.TemporaryDirectory() as workspace, tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as policy:
+            database = Path(workspace) / "template-catalog.sqlite3"
+            conn = sqlite3.connect(database)
+            with conn:
+                conn.execute("CREATE TABLE templates (owner_repo TEXT PRIMARY KEY, score_verdict TEXT, triage_decision TEXT, triage_confidence REAL, triage_policy_version TEXT, triage_actor TEXT)")
+            conn.close()
+            json.dump({
+                "site": "site1", "mode": "active", "threshold": 0.9,
+                "model": "jev", "schema_hash": "schema", "evaluator": "eval", "version": "p1", "calibration_report": {
+                    "site": "site1", "model": "jev", "schema_hash": "schema", "threshold": 0.9, "evaluator": "eval"
+                }
+            }, policy)
+            policy.flush()
+            envelope = {"model": "jev", "schema_hash": "schema", "answers": {
+                "triage": {"choice": "reject", "confidence": 0.95}
+            }}
+            with patch.object(template_triage.jev_classify, "classify", return_value=(0, envelope)):
+                result = template_triage.triage(evidence(), context(catalog_path=str(database)), workspace=workspace, policy_path=policy.name)
+        self.assertEqual(result["fallback_reason"], "catalog_persistence_failed")
+        self.assertEqual(result["persistence_error"], "catalog_row_missing")
+        self.assertEqual(result["actor"], "baseline")
+
+    def test_advisory_store_write_error_is_optional_and_never_changes_triage_semantics(self):
+        with tempfile.TemporaryDirectory() as workspace, patch.object(jev_store, "write_record", side_effect=OSError("telemetry disk full")):
+            result = template_triage.triage(evidence(), context(), workspace=workspace)
+        self.assertEqual(result["decision"], "existing_path")
+        self.assertEqual(result["actor"], "baseline")
         self.assertEqual(result["fallback_reason"], "provider_unavailable")
-        self.assertEqual(audit["inference_status"], "unavailable")
-        self.assertEqual(audit["provider_error"], "timeout")
-        self.assertEqual(audit["usage"], {"input": 4})
-        self.assertEqual(audit["duration_ms"], 123)
 
     def test_cli_invalid_json_returns_two(self):
         with tempfile.TemporaryDirectory() as workspace:

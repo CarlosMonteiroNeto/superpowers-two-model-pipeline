@@ -58,6 +58,12 @@ MISS carries a live-search reason; `template-recall` invokes the existing
 Phase 2a `template-search` only when specific and generic queries are present.
 Site 2 never changes freshness, scoring, timestamps, or catalog membership.
 
+Site 1 provenance is written through the shared workspace/site advisory store,
+with episode, schema, policy, cache, action, fallback, and timing identities.
+Active catalog updates are transactional and strict: a missing database/table,
+row-count mismatch, or SQLite write failure falls back to the existing path and
+cannot report a successful Jev adopt/reject action.
+
 ### Site 3 director prompt selection
 
 `director-prompt --mode CORRECTIVE|ARBITRATE --workspace WS --task ID --plan
