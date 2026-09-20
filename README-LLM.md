@@ -33,6 +33,18 @@ Jev triage, confidence, policy, actor, vector identity, and adoption history;
 an evidence update clears only derived triage/vector fields. Catalog writes do
 not clone, install, select, or adopt a project template.
 
+### Site 2 deterministic template recall
+
+`template-refresh OWNER/REPO --database DB --category CATEGORY --project NAME`
+collects complete evidence and atomically refreshes one catalog row. Collection
+or validation failure returns a domain/setup error and preserves the previous
+row. `template-recall CATEGORY --database DB` is offline and read-only; it
+filters fresh AUTO_APPROVE rows by package overlap and optional injected-vector
+cosine similarity. A vector is eligible only when its model, vector identity,
+source evidence hash, dimensions, and finite values match the query and row.
+Missing databases, malformed vectors, invalid top/age arguments, and missing
+embedding setup are setup errors, never silent MISS results.
+
 This file gives any LLM agent (or coding agent) a complete mental model of
 this repository and the development harness it provides. Read it before doing
 work. It describes the architecture, the tools, the pipeline phases, the

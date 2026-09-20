@@ -13,6 +13,7 @@ _COLUMNS = {
     "generic_category": "TEXT", "specific_category": "TEXT", "original_implementations": "TEXT",
     "constraints": "TEXT", "triage_decision": "TEXT", "triage_confidence": "REAL", "triage_policy_version": "TEXT",
     "triage_actor": "TEXT", "vector_identity": "TEXT", "adoption_history": "TEXT NOT NULL DEFAULT '[]'",
+    "package_names": "TEXT", "fetched_at": "TEXT", "vector": "TEXT",
 }
 
 
@@ -56,7 +57,10 @@ def upsert_template(conn, owner_repo, category, project, score_report, evidence=
     with conn:
         old = conn.execute("SELECT evidence_hash FROM templates WHERE owner_repo=?", (owner_repo,)).fetchone()
         changed = old is not None and old["evidence_hash"] != evidence_hash
-        conn.execute("INSERT INTO templates (owner_repo, category, project, score_report, score_verdict, evidence_hash, readme_text, pubspec_text, tree_text, generic_category, specific_category, original_implementations, constraints) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_repo) DO UPDATE SET category=excluded.category, project=excluded.project, score_report=excluded.score_report, score_verdict=excluded.score_verdict, evidence_hash=excluded.evidence_hash, readme_text=excluded.readme_text, pubspec_text=excluded.pubspec_text, tree_text=excluded.tree_text, generic_category=excluded.generic_category, specific_category=excluded.specific_category, original_implementations=excluded.original_implementations, constraints=excluded.constraints", values)
+        conn.execute("INSERT INTO templates (owner_repo, category, project, score_report, score_verdict, evidence_hash, readme_text, pubspec_text, tree_text, generic_category, specific_category, original_implementations, constraints, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_repo) DO UPDATE SET category=excluded.category, project=excluded.project, score_report=excluded.score_report, score_verdict=excluded.score_verdict, evidence_hash=excluded.evidence_hash, readme_text=excluded.readme_text, pubspec_text=excluded.pubspec_text, tree_text=excluded.tree_text, generic_category=excluded.generic_category, specific_category=excluded.specific_category, original_implementations=excluded.original_implementations, constraints=excluded.constraints, fetched_at=excluded.fetched_at", values + (evidence.get("fetched_at"),))
+        if evidence.get("vector") is not None:
+            vector = evidence["vector"]
+            conn.execute("UPDATE templates SET vector=?, vector_identity=? WHERE owner_repo=?", (json.dumps(vector, sort_keys=True), vector.get("identity") if isinstance(vector, dict) else None, owner_repo))
         if changed:
             conn.execute("UPDATE templates SET triage_decision=NULL, triage_confidence=NULL, triage_policy_version=NULL, triage_actor=NULL, vector_identity=NULL WHERE owner_repo=?", (owner_repo,))
 

@@ -1,4 +1,4 @@
 #!/usr/bin/env python3
 import os,sys; sys.path.insert(0,os.path.dirname(__file__))
-from template_catalog import main
+from template_refresh import main
 raise SystemExit(main())

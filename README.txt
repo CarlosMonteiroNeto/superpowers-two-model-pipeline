@@ -29,6 +29,18 @@ verdicts remain independent from Jev triage, confidence, policy, actor, vector
 identity, and adoption history. Changing source evidence clears only derived
 triage/vector data. Catalog writes never clone, install, select, or adopt a
 project template.
+
+SITE 2 DETERMINISTIC TEMPLATE RECALL
+------------------------------------
+`template-refresh OWNER/REPO --database DB --category CATEGORY --project NAME`
+collects complete evidence before replacing a catalog row. Failed or incomplete
+collection returns an error and preserves the prior row. `template-recall`
+performs an offline, read-only shortlist using freshness, AUTO_APPROVE status,
+package overlap, and optional cosine vectors. Injected vectors must match the
+model, vector identity, source evidence hash, dimensions, and finite values;
+invalid arguments, missing databases, malformed vectors, and missing embedding
+setup are setup errors rather than silent MISS results. Recall never downloads,
+selects, or adopts a template.
 =====================================
 
 A fork of obra/superpowers (MIT) that turns it into a deterministic,

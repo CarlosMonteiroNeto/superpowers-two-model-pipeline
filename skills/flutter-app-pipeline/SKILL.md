@@ -45,6 +45,16 @@ and high confidence; they never select, clone, install, or download a project
 template. Off, shadow, missing evidence, failed constraints, uncertainty, and
 provider failures preserve the existing developer path and record provenance.
 
+Site 2 template recall is a deterministic, read-only shortlist service. The
+`scripts/template-refresh` command collects complete evidence before a
+transactional upsert; a failed or incomplete collection leaves the existing
+catalog unchanged. `scripts/template-recall` applies category, freshness,
+score-verdict, package-overlap, and optional cosine-vector filters. Injected
+vectors require a matching model, vector identity, source evidence hash, and
+valid finite dimensions; missing databases, malformed vectors, and invalid
+arguments are setup errors rather than silent misses. Recall never downloads,
+selects, or adopts a template, and it never calls the network.
+
 ### 2a. Solution research
 
 **Package search** — same task-level cycle as before:

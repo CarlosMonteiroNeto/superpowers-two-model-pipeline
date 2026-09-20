@@ -13,7 +13,13 @@ import sys
 from template_score import GH_API, _fetch_json, compute_score, gather_data
 
 
+class EvidenceCollectionError(RuntimeError):
+    """The upstream evidence set could not be collected completely."""
+
+
 def _text(response):
+    if not isinstance(response, dict):
+        return None
     content = (response or {}).get("content")
     if not content:
         return None
@@ -51,22 +57,36 @@ def collect_evidence(owner_repo, github_token=None, fetch_json=None):
         raise ValueError("owner_repo must be OWNER/REPO")
     fetch = fetch_json or _fetch_json
 
-    def request(path):
+    def request(path, *, optional=False):
         try:
             return fetch("{}/repos/{}/{}{}".format(GH_API, owner, repo, path), github_token)
-        except (OSError, ValueError, KeyError):
-            return None
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            if optional:
+                return None
+            raise EvidenceCollectionError("failed to collect {}: {}".format(path or "repository", error)) from error
 
     repo_data = request("")
-    readme_text = _text(request("/readme"))
-    pubspec_text = _text(request("/contents/pubspec.yaml"))
+    if not isinstance(repo_data, dict):
+        raise EvidenceCollectionError("repository response is not an object")
+    # README and pubspec absence is valid evidence. Transport failures for the
+    # required scoring endpoints below remain hard collection failures.
+    readme_text = _text(request("/readme", optional=True))
+    pubspec_text = _text(request("/contents/pubspec.yaml", optional=True))
     tree = request("/git/trees/HEAD?recursive=1")
     tree_text = None
     if isinstance(tree, dict) and isinstance(tree.get("tree"), list):
         paths = [entry.get("path") for entry in tree["tree"] if isinstance(entry, dict) and isinstance(entry.get("path"), str)]
         tree_text = "\n".join(sorted(paths))
+    else:
+        raise EvidenceCollectionError("repository tree response is incomplete")
 
-    raw_score = gather_data(owner, repo, github_token, fetch_json=fetch)
+    # ``strict=True`` prevents template_score's legacy best-effort fallback
+    # from turning an outage into a synthetic low quality score. README is an
+    # optional field and remains explicitly null when absent.
+    try:
+        raw_score = gather_data(owner, repo, github_token, fetch_json=fetch, strict=True)
+    except Exception as error:
+        raise EvidenceCollectionError("failed to collect scoring evidence: {}".format(error)) from error
     score_report = compute_score(raw_score)
     score_report["data"] = raw_score
 
@@ -101,6 +121,9 @@ def main(argv=None):
         with open(args.output, "x", encoding="utf-8") as handle:
             json.dump(record, handle, ensure_ascii=False, indent=2)
         return 0
+    except EvidenceCollectionError as error:
+        print("template-evidence: {}".format(error), file=sys.stderr)
+        return 1
     except ValueError as error:
         print("template-evidence: {}".format(error), file=sys.stderr)
         return 2
