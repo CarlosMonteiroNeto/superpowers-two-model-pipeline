@@ -490,6 +490,11 @@ installed, syncs/installs and asks you to restart OpenCode. Tier models
 headlessly): Strategic (Agente diretor / Agente revisor) and Operational
 (Agente operador) = opencode-go/deepseek-v4.1-flash.
 
+On Git Bash for Windows, pipeline-workspace and cmd normalize native paths
+through their shared lib/path-normalize.sh helper before POSIX filesystem
+operations. This supports checkout and output paths with spaces and prevents
+MSYS from attempting to create a literal C: directory.
+
 TESTS
 -----
 

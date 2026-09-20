@@ -396,6 +396,12 @@ On the reference machine the tiers are fixed agent definitions (both
 No `variants` block is used; the model is selected by the agent definition.
 The repo mirrors these definitions under `agent/` for versioning.
 
+On Git Bash for Windows, `pipeline-workspace` and `cmd` normalize native
+Windows paths through their shared `lib/path-normalize.sh` helper before
+passing them to POSIX filesystem tools. This keeps workspaces and full command
+logs inside the selected checkout, including paths with spaces, instead of
+asking MSYS `mkdir` to create a literal `C:` directory.
+
 ## 12. Repository layout
 
 ```

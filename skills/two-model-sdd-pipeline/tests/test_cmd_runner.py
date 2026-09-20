@@ -58,6 +58,18 @@ class TestCmdUsage(CmdTestBase):
 
 
 class TestCmdRunner(CmdTestBase):
+    @unittest.skipUnless(os.name == "nt", "Git Bash Windows path regression")
+    def test_windows_full_file_path_works_without_msys_argument_conversion(self):
+        out = pathlib.Path(self._tmp) / "nested output" / "out.txt"
+        r = run_script(
+            "cmd",
+            ["--full-file", str(out), "--", "echo", "windows-path-ok"],
+            cwd=self._tmp,
+            env_extra={"RTK_ENABLED": "0", "MSYS2_ARG_CONV_EXCL": "*"},
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(out.read_text(encoding="utf-8").strip(), "windows-path-ok")
+
     def test_saves_full_output_and_preserves_exit_code(self):
         """cmd must save FULL output to --full-file and return the command's
         true exit code (RTK is disabled here; passthrough)."""
