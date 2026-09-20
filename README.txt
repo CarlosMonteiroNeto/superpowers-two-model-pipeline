@@ -17,6 +17,18 @@ Site 5 plan fusion is advisory during plan authoring. `plan-fusion propose` writ
 `jev-evaluate REPORTS_JSON LABELS_JSON --output REPORT` reports recommendation
 agreement and observed executions separately. It is offline only: it cannot
 activate policies or claim counterfactual outcomes.
+
+TEMPLATE CATALOG EVIDENCE
+-------------------------
+`template-evidence OWNER/REPO --output FILE` records the score report, README,
+pubspec, tree, explicit SDK/license constraints, and a content hash. Missing
+text remains null. `template-catalog add|list|outcome` is transactional: exit 0
+means success, 1 means domain or write failure, and 2 means usage or invalid
+local input. Score
+verdicts remain independent from Jev triage, confidence, policy, actor, vector
+identity, and adoption history. Changing source evidence clears only derived
+triage/vector data. Catalog writes never clone, install, select, or adopt a
+project template.
 =====================================
 
 A fork of obra/superpowers (MIT) that turns it into a deterministic,

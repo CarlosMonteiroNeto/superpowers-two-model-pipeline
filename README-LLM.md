@@ -22,6 +22,17 @@ only. It separates recommendation agreement from observed executed outcomes
 and reports missing evidence; it cannot activate a policy or infer a
 counterfactual result.
 
+## Template catalog evidence
+
+`template-evidence OWNER/REPO --output FILE` collects the scoring report,
+README, `pubspec.yaml`, repository tree, explicit SDK/license constraints, and
+a content hash. Missing source text stays `null`. `template-catalog add|list|outcome`
+persists the evidence transactionally; exit 0 means success, 1 means domain or
+write failure, and 2 means usage or invalid local input. The score verdict is independent from
+Jev triage, confidence, policy, actor, vector identity, and adoption history;
+an evidence update clears only derived triage/vector fields. Catalog writes do
+not clone, install, select, or adopt a project template.
+
 This file gives any LLM agent (or coding agent) a complete mental model of
 this repository and the development harness it provides. Read it before doing
 work. It describes the architecture, the tools, the pipeline phases, the
