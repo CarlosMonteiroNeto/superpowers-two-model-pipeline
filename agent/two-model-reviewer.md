@@ -2,8 +2,8 @@
 description: Strategic tier of the two-model pipeline (GPT-5.6 Terra, medium reasoning). Architectural reviewer of compiler-approved code; judges design plus test-vs-acceptance fit; returns a structured JSON verdict.
 mode: all
 hidden: true
-model: opencode/gpt-5.6-terra
-variant: medium
+model: opencode/gpt-5.6-luna
+variant: max
 permission:
   edit: deny
   read: allow

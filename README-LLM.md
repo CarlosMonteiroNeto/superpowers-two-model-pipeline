@@ -368,9 +368,7 @@ On the reference machine the tiers are fixed agent definitions (both
 
 | Tier | Agent | Model |
 |---|---|---|
-| Strategic (director, reviewer, and controller) | `two-model-task-generator`, `two-model-reviewer`, `two-model-controller` | `opencode/gpt-5.6-terra`, `variant: medium` |
-| Operational (coder and language variants) | `two-model-coder*` | `opencode/gpt-5.6-luna`, `variant: low` |
-| Flutter orchestrator | `flutter-pipeline` | `opencode/gpt-5.6-terra`, `variant: medium` |
+| All implementation, control, intermediate review, and final review | `two-model-coder*`, `two-model-task-generator`, `two-model-reviewer`, `two-model-controller`, `flutter-pipeline` | `opencode/gpt-5.6-luna`, `variant: max` |
 
 The model and reasoning variant are selected by each agent definition. The
 repo mirrors these definitions under `agent/` for versioning, so syncing the

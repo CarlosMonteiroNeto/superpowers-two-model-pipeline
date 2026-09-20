@@ -469,9 +469,8 @@ or take it as the first argument):
 The agent runs check-superpowers at session start and, if behind or not
 installed, syncs/installs and asks you to restart OpenCode. Tier models are
 mirrored under `agent/` and use `mode: all` for headless dispatch. Operational
-coder definitions use opencode/gpt-5.6-luna with the low variant. Strategic
-director, reviewer and controller definitions use opencode/gpt-5.6-terra with
-the medium variant; the Flutter orchestrator uses the same Terra/medium pairing.
+coder, director, controller, reviewer, Flutter, and final branch review
+definitions all use opencode/gpt-5.6-luna with the max variant.
 
 On Git Bash for Windows, pipeline-workspace and cmd normalize native paths
 through their shared lib/path-normalize.sh helper before POSIX filesystem

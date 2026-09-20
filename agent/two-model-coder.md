@@ -3,7 +3,7 @@ description: Operational tier of the two-model pipeline (GPT-5.6 Luna, low reaso
 mode: all
 hidden: true
 model: opencode/gpt-5.6-luna
-variant: low
+variant: max
 permission:
   edit: allow
   read: allow
