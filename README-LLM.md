@@ -361,18 +361,21 @@ The pipeline keeps itself in sync with its GitHub repository:
   reflect the changes and include them in the push. Do not churn docs when
   behavior did not change. `scripts/doc-check` enforces this deterministically.
 
-### Tier agents (reference OpenCode setup)
+### Pipeline agent model and reasoning defaults
 
-On the reference machine the tiers are fixed agent definitions (both
-`mode: all` so `opencode run --agent` can target them headlessly):
+Every versioned pipeline agent uses `opencode/gpt-6-luna` with
+`variant: max`:
 
-| Tier | Agent | Model |
-|---|---|---|
-| All implementation, control, intermediate review, and final review | `two-model-coder*`, `two-model-task-generator`, `two-model-reviewer`, `two-model-controller`, `flutter-pipeline` | `opencode/gpt-5.6-luna`, `variant: max` |
+| Role | Agent definition |
+|---|---|
+| Flutter orchestrator | `flutter-pipeline` (`mode: primary`) |
+| Operator / coder | `two-model-coder*` (`mode: all`) |
+| Director | `two-model-task-generator` (`mode: all`) |
+| Reviewer | `two-model-reviewer` (`mode: all`) |
+| Controller fallback | `two-model-controller` (`mode: all`) |
 
-The model and reasoning variant are selected by each agent definition. The
-repo mirrors these definitions under `agent/` for versioning, so syncing the
-checkout also keeps the tier assignment stable across Codex sessions.
+The repo mirrors these settings under `agent/` for versioning and syncs them
+with the live OpenCode definitions.
 
 On Git Bash for Windows, `pipeline-workspace` and `cmd` normalize native
 Windows paths through their shared `lib/path-normalize.sh` helper before

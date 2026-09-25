@@ -1,8 +1,8 @@
 ---
-description: Strategic fallback of the two-model pipeline (GPT-5.6 Terra, medium reasoning). Used only for final-branch review or arbitration when the interactive session (B) is unavailable.
+description: Strategic fallback of the two-model pipeline (GPT-6 Luna, max reasoning). Used only for final-branch review or arbitration when the interactive session (B) is unavailable.
 mode: all
 hidden: true
-model: opencode/gpt-5.6-luna
+model: opencode/gpt-6-luna
 variant: max
 permission:
   edit: deny

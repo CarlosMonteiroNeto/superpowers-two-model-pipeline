@@ -467,10 +467,11 @@ or take it as the first argument):
   scripts/install-superpowers  full clone when not installed (refuses to clobber)
 
 The agent runs check-superpowers at session start and, if behind or not
-installed, syncs/installs and asks you to restart OpenCode. Tier models are
-mirrored under `agent/` and use `mode: all` for headless dispatch. Operational
-coder, director, controller, reviewer, Flutter, and final branch review
-definitions all use opencode/gpt-5.6-luna with the max variant.
+installed, syncs/installs and asks you to restart OpenCode. Agent model
+settings are mirrored under `agent/`. The coder variants, director, reviewer,
+controller, and Flutter orchestrator all use opencode/gpt-6-luna with the max
+reasoning variant. Dispatchable subagents use `mode: all`; the Flutter
+orchestrator remains `mode: primary`.
 
 On Git Bash for Windows, pipeline-workspace and cmd normalize native paths
 through their shared lib/path-normalize.sh helper before POSIX filesystem

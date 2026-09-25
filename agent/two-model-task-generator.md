@@ -1,8 +1,8 @@
 ---
-description: Strategic tier of the two-model pipeline (GPT-5.6 Terra, medium reasoning). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
+description: Strategic tier of the two-model pipeline (GPT-6 Luna, max reasoning). Punctual task owner - corrective/arbitrate rulings and branch closing, dispatched by Script CEO with script-controlled context.
 mode: all
 hidden: true
-model: opencode/gpt-5.6-luna
+model: opencode/gpt-6-luna
 variant: max
 permission:
   edit: allow
