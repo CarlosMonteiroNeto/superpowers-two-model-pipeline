@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Read-only capability check for the two-model pipeline (Round 1 Task 2).
+
+Usage: pipeline-doctor --config FILE --project DIR --output REPORT
+
+Loads and strictly validates the shared runtime configuration, dispatches
+only the matching backend's read-only capability probe, and writes the
+report as JSON. The doctor never installs, upgrades, dispatches a worker,
+launches a model, or edits the user config or project.
+
+Exit codes: 0 = ready; 2 = invalid input (bad usage, missing files, or
+invalid configuration); 3 = valid configuration but a capability is
+unavailable (unconfirmed selection, missing binary, or unsupported
+options).
+"""
+
+import argparse
+import importlib
+import json
+import os
+import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import pipeline_config
+
+DOCTOR_VERSION = 1
+ADAPTER_MODULES = {
+    "codex": "codex_capabilities",
+    "opencode": "opencode_capabilities",
+}
+
+
+def fail_invalid(message):
+    print("pipeline-doctor: invalid input: %s" % message, file=sys.stderr)
+    return 2
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="pipeline-doctor")
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--project", required=True)
+    parser.add_argument("--output", required=True)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+
+    if not os.path.isfile(args.config):
+        return fail_invalid("no such config file: %s" % args.config)
+    if not os.path.isdir(args.project):
+        return fail_invalid("no such project directory: %s" % args.project)
+
+    try:
+        config = pipeline_config.load_runtime(args.config)
+    except pipeline_config.RuntimeConfigError as exc:
+        print("pipeline-doctor: invalid configuration: %s" % exc,
+              file=sys.stderr)
+        return 2
+    except (OSError, UnicodeError, ValueError) as exc:
+        print("pipeline-doctor: invalid configuration: %s: %s"
+              % (args.config, exc), file=sys.stderr)
+        return 2
+
+    module_name = ADAPTER_MODULES.get(config.get("backend"))
+    if module_name is None:
+        return fail_invalid("unsupported backend: %r"
+                            % (config.get("backend"),))
+    try:
+        adapter = importlib.import_module(module_name)
+    except ImportError as exc:
+        print("pipeline-doctor: backend adapter unavailable: %s" % exc,
+              file=sys.stderr)
+        return 3
+    try:
+        report = adapter.inspect_runtime(config, args.project)
+    except ValueError as exc:
+        print("pipeline-doctor: invalid configuration: %s" % exc,
+              file=sys.stderr)
+        return 2
+
+    executable = report.get("executable", {})
+    roles = report.get("roles", {})
+    if report.get("needs_configuration"):
+        status = "needs_configuration"
+    elif not executable.get("available") \
+            or not executable.get("options_supported") \
+            or not roles \
+            or any(not info.get("supported") for info in roles.values()):
+        status = "unavailable"
+    else:
+        status = "ready"
+
+    output = {
+        "doctor_version": DOCTOR_VERSION,
+        "status": status,
+        "backend": report.get("backend"),
+        "needs_configuration": bool(report.get("needs_configuration")),
+        "executable": executable,
+        "roles": roles,
+        "setting_keys": report.get("setting_keys"),
+        "events": report.get("events"),
+        "session": report.get("session"),
+        "auth": report.get("auth"),
+        "live": report.get("live"),
+        "manifest": report.get("manifest"),
+        "credentials_exposed": False,
+    }
+    if "policy_mapping" in report:
+        output["policy_mapping"] = report["policy_mapping"]
+
+    try:
+        parent = os.path.dirname(os.path.abspath(args.output))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(args.output, "w", encoding="utf-8") as handle:
+            json.dump(output, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    except OSError as exc:
+        return fail_invalid("cannot write report %s: %s"
+                            % (args.output, exc))
+
+    if status == "ready":
+        print("pipeline-doctor: ready (backend %s)"
+              % report.get("backend"))
+        return 0
+    print("pipeline-doctor: %s (backend %s)"
+          % (status, report.get("backend")), file=sys.stderr)
+    return 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

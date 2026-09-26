@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "backend": "codex",
+  "roles": {
+    "operator": {
+      "model": "SELECT-AT-LAUNCH:operator-model",
+      "settings": {"model_reasoning_effort": "high"},
+      "policy": "workspace-write",
+      "instruction": "codex-operator-v1"
+    },
+    "reviewer": {
+      "model": "SELECT-AT-LAUNCH:reviewer-model",
+      "settings": {"model_reasoning_effort": "medium"},
+      "policy": "read-only",
+      "instruction": "codex-reviewer-v1"
+    }
+  },
+  "toolchains": {
+    "python": {}
+  },
+  "retention_days": 30,
+  "coder_cycle_limits": [5, 3, 3],
+  "publication": "local",
+  "max_parallel": 2,
+  "dispatch_timeout_seconds": 600
+}

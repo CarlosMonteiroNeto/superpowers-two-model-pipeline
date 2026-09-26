@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Two-model pipeline runtime configuration",
+  "description": "Backend-neutral manifest (version 1). The backend is an explicit enum; every role carries an explicit model with backend-specific settings, a policy, and a packaged instruction identifier. Publication and max_parallel are explicit launch-time choices with no silent defaults; coder_cycle_limits and retention_days are configurable budgets with documented defaults. Confirmation provenance binds a user-confirmed selection; its absence means needs_configuration.",
+  "type": "object",
+  "required": ["version", "backend", "roles", "toolchains", "publication", "max_parallel", "dispatch_timeout_seconds"],
+  "properties": {
+    "version": {"const": 1},
+    "backend": {"enum": ["codex", "opencode"]},
+    "roles": {
+      "type": "object",
+      "required": ["operator", "reviewer"],
+      "properties": {
+        "operator": {"$ref": "#/$defs/role"},
+        "reviewer": {"$ref": "#/$defs/role"},
+        "director": {"$ref": "#/$defs/role"}
+      },
+      "additionalProperties": false
+    },
+    "toolchains": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "object"}
+    },
+    "retention_days": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30
+    },
+    "coder_cycle_limits": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "integer", "minimum": 1},
+        {"type": "integer", "minimum": 1},
+        {"type": "integer", "minimum": 1}
+      ],
+      "minItems": 3,
+      "maxItems": 3,
+      "default": [5, 3, 3]
+    },
+    "publication": {"enum": ["local", "pull_request"]},
+    "max_parallel": {"type": "integer", "minimum": 1},
+    "dispatch_timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "confirmation": {
+      "type": "object",
+      "required": ["confirmed", "configuration_hash", "provenance"],
+      "properties": {
+        "confirmed": {"type": "boolean"},
+        "configuration_hash": {"type": "string", "minLength": 1},
+        "provenance": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "plan_path": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "role": {
+      "type": "object",
+      "required": ["model", "settings", "policy", "instruction"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "settings": {"type": "object"},
+        "policy": {"type": "string", "minLength": 1},
+        "instruction": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}
