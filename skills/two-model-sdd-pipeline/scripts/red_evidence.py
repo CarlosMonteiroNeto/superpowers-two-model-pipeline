@@ -8,7 +8,7 @@ from typing import Any
 
 
 IDENTITY_FIELDS = (
-    "task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot"
+    "task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot", "adapter"
 )
 
 

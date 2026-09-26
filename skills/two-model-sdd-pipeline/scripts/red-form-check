@@ -172,7 +172,7 @@ def main(argv):
     except ValueError:
         envelope = None
     attempt_path = os.path.join(workspace.rstrip("/\\"), "task-%s-attempt.json" % task)
-    identity_fields = ("task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot")
+    identity_fields = ("task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot", "adapter")
     if not os.path.isfile(attempt_path):
         print("RED-FORM-CHECK: missing current attempt identity: %s" % attempt_path,
               file=sys.stderr)
