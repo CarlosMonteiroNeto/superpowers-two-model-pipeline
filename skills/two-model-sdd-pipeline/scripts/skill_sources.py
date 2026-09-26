@@ -218,9 +218,9 @@ def _dedupe_sources(sources):
         else:
             current = ordered[indexes[key]]
             # Preserve skill paths discovered from multiple catalog links.
-            known = {str(item.get("path", "")).casefold() for item in current["skills"]}
+            known = {str(item.get("path", "")) for item in current["skills"]}
             for skill in candidate["skills"]:
-                path = str(skill.get("path", "")).casefold()
+                path = str(skill.get("path", ""))
                 if path and path not in known:
                     current["skills"].append(skill)
                     known.add(path)
@@ -239,6 +239,22 @@ def _merge_sources(existing, incoming):
             values.append(candidate)
             continue
         old = values[index[key]]
+        discovered_candidate = candidate.get("category") == "linked-candidate"
+        if discovered_candidate:
+            # A catalog link is partial evidence. It must not downgrade a
+            # source already registered with richer metadata or decisions.
+            candidate["category"] = old.get("category", candidate["category"])
+            candidate["skills"] = _merge_skill_entries(
+                candidate.get("skills", []),
+                old.get("skills", []),
+                preserve_missing=True,
+                previous_source_license=old.get("license"),
+            )
+            for field, value in old.items():
+                if field not in candidate:
+                    candidate[field] = copy.deepcopy(value)
+            if old.get("refresh_status"):
+                candidate["refresh_status"] = old["refresh_status"]
         candidate["revision"] = candidate.get("revision") or old.get("revision")
         candidate["last_checked_at"] = candidate.get("last_checked_at") or old.get("last_checked_at")
         for field in ("description", "stars", "topics", "license", "skills", "refresh_status"):
@@ -290,9 +306,10 @@ def _skill_entries(tree, license_info):
     return sorted(entries, key=lambda item: item["path"].casefold())
 
 
-def _merge_skill_entries(refreshed, previous, preserve_missing=False):
+def _merge_skill_entries(refreshed, previous, preserve_missing=False,
+                         previous_source_license=None):
     previous_by_path = {
-        item["path"].casefold(): item
+        item["path"]: item
         for item in previous
         if isinstance(item, dict) and isinstance(item.get("path"), str)
     }
@@ -302,12 +319,17 @@ def _merge_skill_entries(refreshed, previous, preserve_missing=False):
     for item in refreshed:
         entry = copy.deepcopy(item)
         path = entry.get("path")
-        key = path.casefold() if isinstance(path, str) else None
+        key = path if isinstance(path, str) else None
         old = previous_by_path.get(key) if key is not None else None
         if old is not None:
             for field, value in old.items():
                 if field not in refresh_owned_fields:
                     entry[field] = copy.deepcopy(value)
+            if "license" in old:
+                old_license = _normal_license(old.get("license"))
+                inherited_license = _normal_license(previous_source_license)
+                if old.get("license") is None or old_license != inherited_license:
+                    entry["license"] = copy.deepcopy(old["license"])
             seen.add(key)
         merged.append(entry)
     if preserve_missing:
@@ -360,7 +382,7 @@ def _catalog_targets(readme, catalog_repository):
                     skill_name = pathlib.PurePosixPath(skill_path).parent.name
                 else:
                     skill_name = pathlib.PurePosixPath(skill_path).name
-                if not any(item.get("path", "").casefold() == skill_path.casefold()
+                if not any(item.get("path", "") == skill_path
                            for item in target["skills"]):
                     target["skills"].append({
                         "name": skill_name or skill_path,
@@ -422,6 +444,7 @@ def _refresh_source(source, now):
             _skill_entries(tree, license_info),
             source.get("skills", []),
             preserve_missing=tree_incomplete,
+            previous_source_license=source.get("license"),
         )
         updated["skills_incomplete"] = tree_incomplete
         if tree_incomplete:
@@ -453,6 +476,21 @@ def refresh(registry: str, now: str, sources: list) -> dict:
     current = _load_registry(path)
     source_inputs = _dedupe_sources(sources)
     merged = _merge_sources(current["sources"], source_inputs)
+    preexisting_refreshable = {
+        _source_key(item)
+        for item in current["sources"]
+        if isinstance(item, dict)
+        and item.get("repository")
+        and item.get("category") != "documentation"
+        and _source_key(item)
+    }
+    selected_refreshable = {
+        _source_key(item)
+        for item in source_inputs
+        if item.get("repository") and item.get("category") != "documentation"
+        and _source_key(item)
+    }
+    unselected_sources = preexisting_refreshable - selected_refreshable
     source_index = {_source_key(item): i for i, item in enumerate(merged) if _source_key(item)}
     linked_sources = []
     failed = []
@@ -493,9 +531,15 @@ def refresh(registry: str, now: str, sources: list) -> dict:
     if failed or incomplete_sources:
         result["status"] = "incomplete"
         result["last_refresh_errors"] = failed + incomplete_sources
+        result.pop("unrefreshed_sources", None)
+    elif unselected_sources:
+        result["status"] = "stale"
+        result["unrefreshed_sources"] = sorted(unselected_sources)
+        result.pop("last_refresh_errors", None)
     else:
         result["status"] = "fresh"
         result["last_refreshed_at"] = now
+        result.pop("unrefreshed_sources", None)
         result.pop("last_refresh_errors", None)
     _validate_registry(result)
     _atomic_json(path, result)
@@ -812,10 +856,21 @@ def _combine_candidates(*groups):
 
 
 def _refresh_if_due(path, registry_value, now):
-    if _fresh(registry_value.get("last_refreshed_at"), now):
+    registered_sources = registry_value.get("sources") or []
+    sources_current = all(
+        not isinstance(source, dict)
+        or not source.get("repository")
+        or source.get("category") == "documentation"
+        or (_fresh(source.get("last_checked_at"), now)
+            and source.get("refresh_status", "fresh") == "fresh")
+        for source in registered_sources
+    )
+    if (registry_value.get("status") == "fresh"
+            and _fresh(registry_value.get("last_refreshed_at"), now)
+            and sources_current):
         return registry_value
-    selected = registry_value.get("sources") or _seed_sources()
-    return refresh(str(path), now, selected)
+    sources = registered_sources or _seed_sources()
+    return refresh(str(path), now, sources)
 
 
 def discover(query: dict, installed: list, registry: str) -> dict:
