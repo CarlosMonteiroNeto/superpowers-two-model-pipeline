@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "upstream_revision": "b36e0829c6d0140e93cfef2ca599b1b07d4a7797",
+  "sections": [
+    {
+      "role": "operator",
+      "source_path": "skills/test-driven-development/SKILL.md",
+      "section": "The Iron Law",
+      "decision": "retained",
+      "reason": "Keep test-first as the production-change gate."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/test-driven-development/SKILL.md",
+      "section": "Red-Green-Refactor",
+      "decision": "retained",
+      "reason": "Keep the observed RED, minimal implementation and verified GREEN cycle."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/test-driven-development/SKILL.md",
+      "section": "Common Rationalizations",
+      "decision": "replaced",
+      "reason": "Condense the repeated rationale into direct test and verification rules."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/test-driven-development/writing-good-tests.md",
+      "section": "Principle 1: Name the Break",
+      "decision": "retained",
+      "reason": "Require behavioral acceptance tests with hand-derived expectations."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/test-driven-development/writing-good-tests.md",
+      "section": "Principle 2: Exercise the Real Thing",
+      "decision": "retained",
+      "reason": "Keep tests focused on observable behavior rather than mocks of the target."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/subagent-driven-development/SKILL.md",
+      "section": "The Task Loop",
+      "decision": "replaced",
+      "reason": "Script CEO owns dispatch, scheduling, and worktree assignment."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/subagent-driven-development/SKILL.md",
+      "section": "Finish",
+      "decision": "replaced",
+      "reason": "Workers report results; Script CEO owns commits and integration."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/subagent-driven-development/implementer-prompt.md",
+      "section": "Implementer Subagent Prompt Template",
+      "decision": "retained",
+      "reason": "Keep bounded task scope, self-review, and a factual completion report."
+    },
+    {
+      "role": "operator",
+      "source_path": "skills/verification-before-completion/SKILL.md",
+      "section": "The Iron Law",
+      "decision": "retained",
+      "reason": "Claims about passing or completion require fresh command evidence."
+    },
+    {
+      "role": "reviewer",
+      "source_path": "skills/subagent-driven-development/task-reviewer-prompt.md",
+      "section": "Task Reviewer Prompt Template",
+      "decision": "retained",
+      "reason": "Preserve an independent review of implementation against task acceptance."
+    },
+    {
+      "role": "reviewer",
+      "source_path": "skills/requesting-code-review/code-reviewer.md",
+      "section": "Issues",
+      "decision": "retained",
+      "reason": "Keep actionable findings with severity, location, and impact."
+    },
+    {
+      "role": "reviewer",
+      "source_path": "skills/requesting-code-review/SKILL.md",
+      "section": "How to Request",
+      "decision": "replaced",
+      "reason": "Use the pipeline review package and structured result instead of interactive delegation."
+    },
+    {
+      "role": "reviewer",
+      "source_path": "skills/receiving-code-review/SKILL.md",
+      "section": "The Response Pattern",
+      "decision": "replaced",
+      "reason": "Route evidence-backed findings through Script CEO rather than direct reviewer-to-worker conversation."
+    },
+    {
+      "role": "reviewer",
+      "source_path": "skills/verification-before-completion/SKILL.md",
+      "section": "The Gate Function",
+      "decision": "retained",
+      "reason": "Require direct evidence before affirming test, build, or completion claims."
+    },
+    {
+      "role": "director",
+      "source_path": "skills/systematic-debugging/SKILL.md",
+      "section": "Phase 1: Root Cause Investigation",
+      "decision": "retained",
+      "reason": "Use evidence and data flow to judge escalation claims."
+    },
+    {
+      "role": "director",
+      "source_path": "skills/systematic-debugging/SKILL.md",
+      "section": "Phase 4: Implementation",
+      "decision": "replaced",
+      "reason": "Director returns a bounded proposal or route; it does not edit files or approve evidence."
+    },
+    {
+      "role": "director",
+      "source_path": "skills/subagent-driven-development/re-review-prompt.md",
+      "section": "Scoped Re-Review Prompt Template",
+      "decision": "retained",
+      "reason": "Keep judgment confined to the disputed finding and its concrete evidence."
+    },
+    {
+      "role": "shared",
+      "source_path": "skills/using-superpowers/SKILL.md",
+      "section": "Skill Priority",
+      "decision": "replaced",
+      "reason": "Workers receive the already approved role package; they do not restart brainstorming or recursively select skills."
+    }
+  ]
+}
