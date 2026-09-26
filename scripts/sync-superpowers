@@ -1,74 +1,436 @@
 #!/usr/bin/env bash
 # sync-superpowers
 #
-# Fetch the vendored superpowers checkout to origin/main, hard-reset to it,
-# and re-run the pipeline test suite. Deterministic sync gate:
+# Inspected fast-forward-only synchronization for the vendored superpowers
+# checkout. Deterministic sync gate:
 #
-#   exit 0 = synced and all pipeline tests pass
-#   exit 1 = synced but the new copy fails its tests (the checkout was NOT
-#            reset - the failure is reported before any destructive move)
-#   exit 2 = usage error / not a checkout
+#   exit 0 = inspected (unchanged), behind reported (check-only), or updated
+#   exit 1 = needs_user_merge (ahead, diverged, dirty, detached, remote mismatch)
+#   exit 2 = invalid invocation / not a checkout
+#   exit 3 = operational failure (failed inspection, fetch error, bad candidate)
 #
-# Usage: sync-superpowers [VENDOR_DIR]
-#   VENDOR_DIR defaults to ~/.config/opencode/vendor/superpowers.
-#   Set REPO_URL to override the origin URL used for the fetch (defaults to
-#   the checkout's configured 'origin' remote).
+# Usage: sync-superpowers [VENDOR_DIR] [--check-only] [--json] [--apply]
+#   VENDOR_DIR defaults to ${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}.
+#   --check-only inspects without applying (reports behind instead of updated).
+#   --json prints a structured report to stdout (human text goes to stderr).
+#   --apply is accepted for compatibility (the safe update needs no
+#   confirmation); it cannot be combined with --check-only.
+#   Set REPO_URL to require a specific origin URL: a mismatch reports
+#   needs_user_merge without changing the checkout.
 #
-# The pipeline test suite = every run-tests.sh under skills/*/tests/
-# (two-model-sdd-pipeline, flutter-app-pipeline, brainstorming). Set PYTHON
-# to override the interpreter used by the suites.
+# The candidate is validated in isolation (a detached worktree at the remote
+# revision runs every skills/*/tests/run-tests.sh found there) before any
+# working-tree change. Divergence is never reset, cleaned, stashed, rebased
+# or auto-merged; the working tree, index and untracked files are preserved.
 
 set -euo pipefail
 
-VENDOR_DIR="${1:-${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}}"
+VENDOR_DIR=""
+CHECK_ONLY=0
+JSON=0
+APPLY=0
 
-if [[ ! -d "$VENDOR_DIR/.git" ]]; then
-  echo "SYNC-SUPERPOWERS: not a git checkout at $VENDOR_DIR" >&2
-  exit 2
-fi
+CHANGED_PATHS=()
+ERRORS=()
 
-# Refuse to hard-reset over uncommitted local changes.
-if [[ -n "$(git -C "$VENDOR_DIR" status --porcelain)" ]]; then
-  echo "SYNC-SUPERPOWERS: uncommitted changes in $VENDOR_DIR - refusing to reset" >&2
-  echo "SYNC-SUPERPOWERS: commit, stash, or discard them first" >&2
-  exit 2
-fi
+usage() {
+  echo "usage: sync-superpowers [VENDOR_DIR] [--check-only] [--json] [--apply]" >&2
+}
 
-echo "SYNC-SUPERPOWERS: fetching origin..."
-if ! git -C "$VENDOR_DIR" fetch origin >/dev/null 2>&1; then
-  echo "SYNC-SUPERPOWERS: fetch failed (offline?)" >&2
-  exit 1
-fi
-
-local_before="$(git -C "$VENDOR_DIR" rev-parse --short HEAD)"
-remote="$(git -C "$VENDOR_DIR" rev-parse --short origin/main)"
-
-if [[ "$local_before" == "$remote" ]]; then
-  echo "SYNC-SUPERPOWERS: already at origin/main ($remote) - no reset needed"
-else
-  echo "SYNC-SUPERPOWERS: resetting $local_before -> $remote"
-  git -C "$VENDOR_DIR" reset --hard origin/main
-fi
-
-# Pipeline test suite: every run-tests.sh under skills/*/tests/.
-# Failures abort before we report success; the checkout is already on the
-# new commit (reset happened above), so a test failure means the new copy
-# is broken - report it loudly.
-failed=0
-for runner in "$VENDOR_DIR"/skills/*/tests/run-tests.sh; do
-  [[ -x "$runner" ]] || continue
-  name="$(basename "$(dirname "$(dirname "$runner")")")"
-  echo "SYNC-SUPERPOWERS: running $name test suite ($runner)"
-  if ! bash "$runner"; then
-    echo "SYNC-SUPERPOWERS: $name tests FAILED" >&2
-    failed=1
+say() {
+  if [[ "$JSON" -eq 1 ]]; then
+    printf '%s\n' "$*" >&2
+  else
+    printf '%s\n' "$*"
   fi
+}
+
+say_err() {
+  printf '%s\n' "$*" >&2
+}
+
+json_str() {
+  python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+json_array() {
+  if [[ "$#" -eq 0 ]]; then
+    printf '[]'
+    return
+  fi
+  printf '['
+  local first=1
+  local item
+  local esc
+  for item in "$@"; do
+    esc="$(json_str "$item")"
+    if [[ "$first" -eq 1 ]]; then
+      first=0
+    else
+      printf ','
+    fi
+    printf '%s' "$esc"
+  done
+  printf ']'
+}
+
+emit_json() {
+  local state="$1"
+  local before="$2"
+  local remote="$3"
+  local action="$4"
+  local before_json
+  local remote_json
+  local changed_json
+  local errors_json
+  if [[ -z "$before" ]]; then
+    before_json="null"
+  else
+    before_json="$(json_str "$before")"
+  fi
+  if [[ -z "$remote" ]]; then
+    remote_json="null"
+  else
+    remote_json="$(json_str "$remote")"
+  fi
+  if [[ "${#CHANGED_PATHS[@]}" -eq 0 ]]; then
+    changed_json="[]"
+  else
+    changed_json="$(json_array "${CHANGED_PATHS[@]}")"
+  fi
+  if [[ "${#ERRORS[@]}" -eq 0 ]]; then
+    errors_json="[]"
+  else
+    errors_json="$(json_array "${ERRORS[@]}")"
+  fi
+  printf '{"state":%s,"before_sha":%s,"remote_sha":%s,"changed_paths":%s,"action":%s,"errors":%s}\n' \
+    "$(json_str "$state")" "$before_json" "$remote_json" "$changed_json" \
+    "$(json_str "$action")" "$errors_json"
+}
+
+report_and_exit() {
+  local state="$1"
+  local before="$2"
+  local remote="$3"
+  local action="$4"
+  local code="$5"
+  if [[ "$JSON" -eq 1 ]]; then
+    emit_json "$state" "$before" "$remote" "$action"
+  fi
+  exit "$code"
+}
+
+invalid_exit() {
+  local msg="$1"
+  ERRORS=("$msg")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: $msg"
+  if [[ "$JSON" -eq 1 ]]; then
+    emit_json "error" "" "" "error"
+  fi
+  exit 2
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --check-only)
+      CHECK_ONLY=1
+      shift
+      ;;
+    --json)
+      JSON=1
+      shift
+      ;;
+    --apply)
+      APPLY=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      if [[ "$#" -eq 1 ]]; then
+        if [[ -n "$VENDOR_DIR" ]]; then
+          JSON_HOLD="$JSON"
+          JSON=0
+          say_err "SYNC-SUPERPOWERS: only one VENDOR_DIR is allowed"
+          JSON="$JSON_HOLD"
+          ERRORS=("only one VENDOR_DIR is allowed")
+          CHANGED_PATHS=()
+          if [[ "$JSON" -eq 1 ]]; then
+            emit_json "error" "" "" "error"
+          fi
+          exit 2
+        fi
+        VENDOR_DIR="$1"
+        shift
+      elif [[ "$#" -gt 1 ]]; then
+        say_err "SYNC-SUPERPOWERS: only one VENDOR_DIR is allowed"
+        ERRORS=("only one VENDOR_DIR is allowed")
+        CHANGED_PATHS=()
+        if [[ "$JSON" -eq 1 ]]; then
+          emit_json "error" "" "" "error"
+        fi
+        exit 2
+      fi
+      ;;
+    -*)
+      invalid_exit "unknown option: $1"
+      ;;
+    *)
+      if [[ -n "$VENDOR_DIR" ]]; then
+        invalid_exit "only one VENDOR_DIR is allowed"
+      fi
+      VENDOR_DIR="$1"
+      shift
+      ;;
+  esac
 done
 
-if [[ $failed -ne 0 ]]; then
-  echo "SYNC-SUPERPOWERS: one or more pipeline test suites failed after sync" >&2
-  exit 1
+if [[ "$CHECK_ONLY" -eq 1 && "$APPLY" -eq 1 ]]; then
+  invalid_exit "--check-only and --apply are mutually exclusive"
 fi
 
-echo "SYNC-SUPERPOWERS: synced to $remote, all pipeline tests pass"
-exit 0
+if [[ -z "$VENDOR_DIR" ]]; then
+  VENDOR_DIR="${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}"
+fi
+
+if ! git -C "$VENDOR_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  ERRORS=("not a git checkout at $VENDOR_DIR")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: not a git checkout at $VENDOR_DIR"
+  report_and_exit "error" "" "" "error" 2
+fi
+
+status_out=""
+if ! status_out="$(git -C "$VENDOR_DIR" status --porcelain 2>&1)"; then
+  ERRORS=("git status inspection failed: $status_out")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: git status inspection failed"
+  say_err "$status_out"
+  report_and_exit "error" "" "" "error" 3
+fi
+
+before_sha=""
+if ! before_sha="$(git -C "$VENDOR_DIR" rev-parse HEAD 2>&1)"; then
+  ERRORS=("cannot resolve HEAD at $VENDOR_DIR: $before_sha")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: cannot resolve HEAD at $VENDOR_DIR"
+  report_and_exit "error" "" "" "error" 3
+fi
+
+if ! git -C "$VENDOR_DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
+  ERRORS=("detached HEAD at $before_sha - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - detached HEAD at $before_sha"
+  say "SYNC-SUPERPOWERS: working tree preserved; no automatic update attempted"
+  report_and_exit "needs_user_merge" "$before_sha" "" "needs_user_merge" 1
+fi
+
+branch_name=""
+if ! branch_name="$(git -C "$VENDOR_DIR" rev-parse --abbrev-ref HEAD 2>&1)"; then
+  ERRORS=("cannot resolve branch at $VENDOR_DIR: $branch_name")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: cannot resolve branch at $VENDOR_DIR"
+  report_and_exit "error" "" "" "error" 3
+fi
+
+origin_url=""
+if ! origin_url="$(git -C "$VENDOR_DIR" config --get remote.origin.url 2>&1)"; then
+  ERRORS=("no origin remote configured at $VENDOR_DIR - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - no origin remote configured"
+  report_and_exit "needs_user_merge" "$before_sha" "" "needs_user_merge" 1
+fi
+if [[ -z "$origin_url" ]]; then
+  ERRORS=("no origin remote configured at $VENDOR_DIR - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - no origin remote configured"
+  report_and_exit "needs_user_merge" "$before_sha" "" "needs_user_merge" 1
+fi
+
+if [[ -n "${REPO_URL:-}" && "${REPO_URL:-}" != "$origin_url" ]]; then
+  ERRORS=("remote mismatch: origin is $origin_url, expected ${REPO_URL} - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - remote mismatch (origin $origin_url != ${REPO_URL})"
+  say "SYNC-SUPERPOWERS: working tree preserved"
+  report_and_exit "needs_user_merge" "$before_sha" "" "needs_user_merge" 1
+fi
+
+fetch_err=""
+if [[ "${CHECK_SKIP_FETCH:-0}" == "1" ]]; then
+  say "SYNC-SUPERPOWERS: skipping fetch (CHECK_SKIP_FETCH=1); using last fetched origin/main"
+else
+  if ! fetch_err="$(git -C "$VENDOR_DIR" fetch origin 2>&1)"; then
+    ERRORS=("fetch failed for origin at $VENDOR_DIR: $fetch_err")
+    CHANGED_PATHS=()
+    say_err "SYNC-SUPERPOWERS: fetch failed (offline?)"
+    say_err "$fetch_err"
+    say_err "SYNC-SUPERPOWERS: working tree unchanged at $before_sha"
+    report_and_exit "error" "$before_sha" "" "error" 3
+  fi
+fi
+
+remote_sha=""
+if ! remote_sha="$(git -C "$VENDOR_DIR" rev-parse origin/main 2>&1)"; then
+  ERRORS=("no origin/main ref at $VENDOR_DIR after fetch - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - no origin/main ref after fetch"
+  report_and_exit "needs_user_merge" "$before_sha" "" "needs_user_merge" 1
+fi
+
+if [[ "$before_sha" == "$remote_sha" ]]; then
+  if [[ -n "$status_out" ]]; then
+    ERRORS=("dirty working tree at $before_sha - user resolution required")
+    CHANGED_PATHS=()
+    say "SYNC-SUPERPOWERS: needs_user_merge - dirty working tree at $before_sha"
+    say "SYNC-SUPERPOWERS: working tree preserved"
+    report_and_exit "needs_user_merge" "$before_sha" "$remote_sha" "needs_user_merge" 1
+  fi
+  ERRORS=()
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: unchanged at $before_sha (already at origin/main)"
+  report_and_exit "unchanged" "$before_sha" "$remote_sha" "none" 0
+fi
+
+rc_before=0
+git -C "$VENDOR_DIR" merge-base --is-ancestor "$before_sha" "$remote_sha" >/dev/null 2>&1 || rc_before=$?
+rc_remote=0
+git -C "$VENDOR_DIR" merge-base --is-ancestor "$remote_sha" "$before_sha" >/dev/null 2>&1 || rc_remote=$?
+if [[ "$rc_before" -gt 1 || "$rc_remote" -gt 1 ]]; then
+  ERRORS=("commit ancestry inspection failed at $VENDOR_DIR")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: commit ancestry inspection failed"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+
+if [[ "$rc_remote" -eq 0 ]]; then
+  ERRORS=("local HEAD $before_sha is ahead of origin/main $remote_sha - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - ahead of origin/main ($before_sha vs $remote_sha)"
+  say "SYNC-SUPERPOWERS: local commits preserved; no reset performed"
+  report_and_exit "needs_user_merge" "$before_sha" "$remote_sha" "needs_user_merge" 1
+fi
+
+if [[ "$rc_before" -ne 0 ]]; then
+  ERRORS=("diverged history: $before_sha and $remote_sha share no fast-forward path - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - diverged history ($before_sha vs $remote_sha)"
+  say "SYNC-SUPERPOWERS: local commits, index and untracked files preserved"
+  report_and_exit "needs_user_merge" "$before_sha" "$remote_sha" "needs_user_merge" 1
+fi
+
+if [[ -n "$status_out" ]]; then
+  ERRORS=("dirty working tree at $before_sha - user resolution required")
+  CHANGED_PATHS=()
+  say "SYNC-SUPERPOWERS: needs_user_merge - dirty working tree at $before_sha"
+  say "SYNC-SUPERPOWERS: index, untracked files and working-tree bytes preserved"
+  report_and_exit "needs_user_merge" "$before_sha" "$remote_sha" "needs_user_merge" 1
+fi
+
+diff_log=""
+if ! diff_log="$(git -C "$VENDOR_DIR" log --oneline "$before_sha..$remote_sha" 2>&1)"; then
+  ERRORS=("diff inspection failed: $diff_log")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: diff inspection failed"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+diff_stat=""
+if ! diff_stat="$(git -C "$VENDOR_DIR" diff --stat "$before_sha..$remote_sha" 2>&1)"; then
+  ERRORS=("diff inspection failed: $diff_stat")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: diff inspection failed"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+diff_names=""
+if ! diff_names="$(git -C "$VENDOR_DIR" diff --name-only "$before_sha" "$remote_sha" 2>&1)"; then
+  ERRORS=("diff inspection failed: $diff_names")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: diff inspection failed"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+CHANGED_PATHS=()
+if [[ -n "$diff_names" ]]; then
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    CHANGED_PATHS+=("$line")
+  done <<< "$diff_names"
+fi
+
+say "SYNC-SUPERPOWERS: diff $before_sha -> $remote_sha"
+say "$diff_log"
+say "$diff_stat"
+
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+  ERRORS=()
+  say "SYNC-SUPERPOWERS: behind - local $before_sha != origin/main $remote_sha (inspection only)"
+  report_and_exit "behind" "$before_sha" "$remote_sha" "inspect-only" 0
+fi
+
+tmp_base=""
+if ! tmp_base="$(mktemp -d 2>&1)"; then
+  ERRORS=("cannot create validation workspace: $tmp_base")
+  say_err "SYNC-SUPERPOWERS: cannot create validation workspace"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+isolated="$tmp_base/isolated"
+validation="pass"
+validation_err=""
+if git -C "$VENDOR_DIR" worktree add --detach "$isolated" "$remote_sha" >/dev/null 2>&1; then
+  validation_failed=0
+  for runner in "$isolated"/skills/*/tests/run-tests.sh; do
+    [[ -x "$runner" ]] || continue
+    name="$(basename "$(dirname "$(dirname "$runner")")")"
+    say "SYNC-SUPERPOWERS: validating $name suite in isolation ($runner)"
+    if ! bash "$runner" >/dev/null 2>&1; then
+      say_err "SYNC-SUPERPOWERS: $name candidate suite FAILED in isolation"
+      validation_failed=1
+      validation_err="$name candidate suite failed"
+    fi
+  done
+  git -C "$VENDOR_DIR" worktree remove --force "$isolated" >/dev/null 2>&1 || true
+  rm -rf "$tmp_base"
+  if [[ "$validation_failed" -ne 0 ]]; then
+    validation="fail"
+  fi
+else
+  rm -rf "$tmp_base"
+  ERRORS=("cannot validate candidate $remote_sha in isolation")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: cannot validate candidate $remote_sha in isolation"
+  say_err "SYNC-SUPERPOWERS: current checkout preserved at $before_sha"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+
+if [[ "$validation" != "pass" ]]; then
+  ERRORS=("candidate $remote_sha failed validation in isolation: $validation_err - current checkout preserved")
+  say_err "SYNC-SUPERPOWERS: candidate $remote_sha failed validation in isolation"
+  say_err "SYNC-SUPERPOWERS: current checkout preserved at $before_sha"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+
+if ! git -C "$VENDOR_DIR" merge --ff-only origin/main >/dev/null 2>&1; then
+  ERRORS=("fast-forward update to $remote_sha failed - current checkout preserved")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: fast-forward update failed; current checkout preserved at $before_sha"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+
+new_head=""
+if ! new_head="$(git -C "$VENDOR_DIR" rev-parse HEAD 2>&1)"; then
+  ERRORS=("cannot resolve HEAD after update")
+  CHANGED_PATHS=()
+  say_err "SYNC-SUPERPOWERS: cannot resolve HEAD after update"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+if [[ "$new_head" != "$remote_sha" ]]; then
+  ERRORS=("update incomplete: HEAD $new_head != $remote_sha")
+  say_err "SYNC-SUPERPOWERS: update incomplete"
+  report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+
+ERRORS=()
+say "SYNC-SUPERPOWERS: updated $before_sha -> $remote_sha via fast-forward-only"
+report_and_exit "updated" "$before_sha" "$remote_sha" "fast-forward" 0
