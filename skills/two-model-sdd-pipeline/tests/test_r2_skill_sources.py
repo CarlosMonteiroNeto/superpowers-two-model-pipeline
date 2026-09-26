@@ -128,6 +128,148 @@ class SkillSourceDiscoveryTests(unittest.TestCase):
         self.assertFalse(result["installation_performed"])
         self.assertEqual(result["candidates"][0]["review_status"], "unreviewed")
 
+    def test_query_cache_mismatch_in_result_limit_triggers_search(self):
+        query = {"topics": ["python"], "limit": 1}
+        value = empty_registry()
+        value["queries"] = [cached_query({"topics": ["python"]}, [
+            repo("Acme/cached-one", 90, ["python"]),
+            repo("Acme/cached-two", 80, ["python"]),
+        ])]
+        self.write_registry(value)
+
+        def github_search(url):
+            return {"total_count": 1, "incomplete_results": False, "items": [{
+                "full_name": "Acme/fresh-python-skill",
+                "html_url": "https://github.com/Acme/fresh-python-skill",
+                "description": "Python skill",
+                "stargazers_count": 70,
+                "topics": ["python"],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+            }]}
+
+        with mock.patch.object(self.module, "_now_iso",
+                               return_value="2026-09-26T12:00:00Z"), \
+                mock.patch.object(self.module, "_github_get_json",
+                                  side_effect=github_search) as external:
+            result = self.module.discover(query, [], str(self.registry))
+
+        external.assert_called_once()
+        self.assertEqual([item["repository"] for item in result["candidates"]],
+                         ["Acme/fresh-python-skill"])
+
+    def test_query_cache_mismatch_in_page_size_triggers_search(self):
+        query = {"topics": ["python"], "limit": 2, "per_page": 2}
+        cached = cached_query(
+            {"topics": ["python"], "limit": 2, "per_page": 1},
+            [repo("Acme/cached-one", 90, ["python"])],
+        )
+        cached.update({"limit": 2, "per_page": 1})
+        value = empty_registry()
+        value["queries"] = [cached]
+        self.write_registry(value)
+
+        def github_search(url):
+            from urllib.parse import parse_qs, urlsplit
+
+            self.assertEqual(parse_qs(urlsplit(url).query)["per_page"], ["2"])
+            return {"total_count": 2, "incomplete_results": False, "items": [
+                {"full_name": "Acme/fresh-one", "html_url": "https://github.com/Acme/fresh-one",
+                 "description": "Python skill", "stargazers_count": 70,
+                 "topics": ["python"], "license": {"spdx_id": "MIT", "name": "MIT License"}},
+                {"full_name": "Acme/fresh-two", "html_url": "https://github.com/Acme/fresh-two",
+                 "description": "Python skill", "stargazers_count": 60,
+                 "topics": ["python"], "license": {"spdx_id": "MIT", "name": "MIT License"}},
+            ]}
+
+        with mock.patch.object(self.module, "_now_iso",
+                               return_value="2026-09-26T12:00:00Z"), \
+                mock.patch.object(self.module, "_github_get_json",
+                                  side_effect=github_search) as external:
+            result = self.module.discover(query, [], str(self.registry))
+
+        external.assert_called_once()
+        self.assertEqual(len(result["candidates"]), 2)
+
+    def test_cached_results_are_capped_to_the_requested_limit(self):
+        query = {"topics": ["python"], "limit": 1, "per_page": 100}
+        cached = cached_query(query, [
+            repo("Acme/python-one", 90, ["python"]),
+            repo("Acme/python-two", 80, ["python"]),
+            repo("Acme/python-three", 70, ["python"]),
+        ])
+        cached.update({"limit": 1, "per_page": 100})
+        value = empty_registry()
+        value["queries"] = [cached]
+        self.write_registry(value)
+
+        with mock.patch.object(self.module, "_now_iso",
+                               return_value="2026-09-26T12:00:00Z"), \
+                mock.patch.object(self.module, "_github_get_json",
+                                  side_effect=AssertionError("fresh matching cache must be reused")):
+            result = self.module.discover(query, [], str(self.registry))
+
+        self.assertEqual([item["repository"] for item in result["candidates"]],
+                         ["Acme/python-one"])
+
+    def test_installed_topic_matching_requires_whole_tokens(self):
+        cases = [
+            ("go", "Django lint helper", "Django style checks"),
+            ("ai", "Training assistant", "Training workflow"),
+        ]
+        for topic, name, description in cases:
+            with self.subTest(topic=topic):
+                self.write_registry(empty_registry())
+                with mock.patch.object(self.module, "_now_iso",
+                                       return_value="2026-09-26T12:00:00Z"), \
+                        mock.patch.object(self.module, "_github_get_json", return_value={
+                            "total_count": 0, "incomplete_results": False, "items": [],
+                        }) as external:
+                    result = self.module.discover(
+                        {"topics": [topic]},
+                        [{"name": name, "description": description,
+                          "topics": ["unrelated"]}],
+                        str(self.registry),
+                    )
+
+                external.assert_called_once()
+                self.assertEqual(result["missing_topics"], [topic])
+                self.assertEqual(result["installed_matches"], [])
+
+    def test_registry_topic_matching_does_not_accept_substrings(self):
+        query = {"topics": ["go"]}
+        value = empty_registry()
+        value["sources"] = [{
+            "repository": "Acme/Django-skills",
+            "source_url": "https://github.com/Acme/Django-skills",
+            "category": "publisher",
+            "revision": "rev-1",
+            "last_checked_at": "2026-09-20T12:00:00Z",
+            "review_status": "unreviewed",
+            "description": "Django training helpers",
+            "stars": 45,
+            "topics": ["web"],
+            "license": {"spdx_id": "MIT", "name": "MIT License"},
+            "skills": [{
+                "name": "Django helper",
+                "path": "skills/django/SKILL.md",
+                "topics": [],
+                "compatibility": [],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+                "review_status": "unreviewed",
+            }],
+        }]
+        self.write_registry(value)
+
+        with mock.patch.object(self.module, "_now_iso",
+                               return_value="2026-09-26T12:00:00Z"), \
+                mock.patch.object(self.module, "_github_get_json", return_value={
+                    "total_count": 0, "incomplete_results": False, "items": [],
+                }) as external:
+            result = self.module.discover(query, [], str(self.registry))
+
+        external.assert_called_once()
+        self.assertEqual(result["candidates"], [])
+
     def test_registered_skill_metadata_is_searched_before_external_sources(self):
         query = {"topics": ["python"], "compatibility": ["codex"]}
         value = empty_registry()

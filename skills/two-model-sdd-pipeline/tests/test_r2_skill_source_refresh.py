@@ -114,6 +114,120 @@ class SkillSourceRefreshTests(unittest.TestCase):
         saved = json.loads(self.registry.read_text(encoding="utf-8"))
         self.assertEqual(saved, result)
 
+    def test_refresh_preserves_skill_decisions_and_annotations_by_path(self):
+        source = {
+            "repository": "Acme/agent-skills",
+            "source_url": "https://github.com/Acme/agent-skills",
+            "category": "publisher",
+            "revision": "old-revision",
+            "last_checked_at": "2026-09-20T12:00:00Z",
+            "review_status": "candidate",
+            "description": "Reusable agent skills",
+            "stars": 20,
+            "topics": ["agent-skills"],
+            "license": {"spdx_id": "MIT", "name": "MIT License"},
+            "skills": [{
+                "name": "Python helper",
+                "path": "skills/python-helper/SKILL.md",
+                "topics": ["python", "testing"],
+                "compatibility": ["codex"],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+                "review_status": "rejected",
+                "annotations": {"reason": "requires unsupported runtime"},
+            }],
+        }
+        self.registry.write_text(json.dumps({
+            "schema_version": 1,
+            "last_refreshed_at": "2026-09-20T12:00:00Z",
+            "status": "fresh",
+            "sources": [source],
+            "queries": [],
+        }), encoding="utf-8")
+
+        def github_get(url):
+            parsed = urlsplit(url)
+            if parsed.path == "/repos/Acme/agent-skills":
+                return repo_details("Acme/agent-skills")
+            if parsed.path == "/repos/Acme/agent-skills/commits/main":
+                return {"sha": "new-revision"}
+            if parsed.path == "/repos/Acme/agent-skills/git/trees/new-revision":
+                return {"tree": [
+                    {"path": "skills/python-helper/SKILL.md", "type": "blob"},
+                    {"path": "skills/new-helper/SKILL.md", "type": "blob"},
+                ], "truncated": False}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.refresh(
+                str(self.registry), "2026-09-26T14:30:00Z", [source],
+            )
+
+        refreshed = result["sources"][0]
+        skills = {item["path"]: item for item in refreshed["skills"]}
+        self.assertEqual(skills["skills/python-helper/SKILL.md"]["review_status"],
+                         "rejected")
+        self.assertEqual(skills["skills/python-helper/SKILL.md"]["topics"],
+                         ["python", "testing"])
+        self.assertEqual(skills["skills/python-helper/SKILL.md"]["compatibility"],
+                         ["codex"])
+        self.assertEqual(skills["skills/python-helper/SKILL.md"]["annotations"],
+                         {"reason": "requires unsupported runtime"})
+        self.assertEqual(skills["skills/new-helper/SKILL.md"]["review_status"],
+                         "unreviewed")
+
+    def test_truncated_tree_preserves_inventory_and_marks_refresh_incomplete(self):
+        source = {
+            "repository": "Acme/agent-skills",
+            "source_url": "https://github.com/Acme/agent-skills",
+            "category": "publisher",
+            "revision": "old-revision",
+            "last_checked_at": "2026-09-20T12:00:00Z",
+            "review_status": "candidate",
+            "skills": [
+                {"name": "Existing one", "path": "skills/existing-one/SKILL.md",
+                 "topics": ["python"], "compatibility": ["codex"],
+                 "review_status": "reviewed"},
+                {"name": "Existing two", "path": "skills/existing-two/SKILL.md",
+                 "topics": ["testing"], "compatibility": ["codex"],
+                 "review_status": "unreviewed"},
+            ],
+        }
+        previous_refresh = "2026-08-20T12:00:00Z"
+        self.registry.write_text(json.dumps({
+            "schema_version": 1,
+            "last_refreshed_at": previous_refresh,
+            "status": "fresh",
+            "sources": [source],
+            "queries": [],
+        }), encoding="utf-8")
+
+        def github_get(url):
+            parsed = urlsplit(url)
+            if parsed.path == "/repos/Acme/agent-skills":
+                return repo_details("Acme/agent-skills")
+            if parsed.path == "/repos/Acme/agent-skills/commits/main":
+                return {"sha": "new-revision"}
+            if parsed.path == "/repos/Acme/agent-skills/git/trees/new-revision":
+                return {"tree": [
+                    {"path": "skills/new-helper/SKILL.md", "type": "blob"},
+                ], "truncated": True}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.refresh(
+                str(self.registry), "2026-09-26T14:30:00Z", [source],
+            )
+
+        refreshed = result["sources"][0]
+        self.assertEqual(result["status"], "incomplete")
+        self.assertEqual(result["last_refreshed_at"], previous_refresh)
+        self.assertTrue(refreshed["skills_incomplete"])
+        self.assertEqual({item["path"] for item in refreshed["skills"]}, {
+            "skills/existing-one/SKILL.md",
+            "skills/existing-two/SKILL.md",
+            "skills/new-helper/SKILL.md",
+        })
+
     def test_refresh_deduplicates_repositories_regardless_of_case(self):
         source = {
             "repository": "Acme/Agent-Skills",
