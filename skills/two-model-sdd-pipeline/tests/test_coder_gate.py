@@ -290,6 +290,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         result = run_script(
             "coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
             env_extra=self._env(
+                RUN_GATES_BIN=str(SCRIPTS / "run-gates"),
                 FLUTTER_BIN=flutter_cli,
                 FLUTTER_MARKER=str(flutter_marker),
                 DART_BIN=dart_cli,
