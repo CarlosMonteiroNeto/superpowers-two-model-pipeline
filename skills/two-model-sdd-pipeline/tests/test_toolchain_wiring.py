@@ -5,6 +5,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -64,6 +65,38 @@ class ToolchainWiringBase(unittest.TestCase):
 
 
 class TestResolveToolchainAll(ToolchainWiringBase):
+    def test_all_deduplicates_markers_that_share_one_toolchain_id(self):
+        (self.repo / "pyproject.toml").write_text("[project]\nname = 'sample'\n", encoding="utf-8")
+        (self.repo / "requirements.txt").write_text("", encoding="utf-8")
+        runtime_path = self._tmp / "runtime.json"
+        runtime_path.write_text(json.dumps({"toolchains": {
+            "python-shared-v1": {
+                "language": "python",
+                "executable": sys.executable,
+                "red_adapter": "unittest",
+                "commands": {
+                    "red": {"argv": [sys.executable, "-c", "pass"], "cwd": ".", "env": {}},
+                    "test": {"argv": [sys.executable, "-c", "pass"], "cwd": ".", "env": {}},
+                    "analyze": {"argv": [sys.executable, "-c", "pass"], "cwd": ".", "env": {}},
+                },
+            },
+        }}), encoding="utf-8")
+
+        resolved = run_script(
+            "resolve-toolchain",
+            ["--all", "--runtime", str(runtime_path), str(self.ws), str(self.repo)],
+            cwd=self._tmp, env_extra={},
+        )
+
+        self.assertEqual(resolved.returncode, 0, resolved.stdout + resolved.stderr)
+        entries = [json.loads(line) for line in self.ledger_path().read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([entry["toolchain_id"] for entry in entries], ["python-shared-v1"])
+        selected = run_script(
+            "run-gates", [str(self.ws), "--toolchains", "python-shared-v1"],
+            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+        )
+        self.assertEqual(selected.returncode, 0, selected.stdout + selected.stderr)
+
     def test_all_keeps_supported_gate_and_rejects_unconfigured_node(self):
         (self.repo / "go.mod").write_text("module test\n", encoding="utf-8")
         (self.repo / "package.json").write_text("{}\n", encoding="utf-8")

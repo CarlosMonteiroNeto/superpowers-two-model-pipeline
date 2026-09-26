@@ -113,6 +113,27 @@ class ToolchainEvidenceTests(unittest.TestCase):
         self.assertTrue(result.get("error") or result.get("available") is False,
                         "Node without an explicitly tested RED adapter must fail preflight")
 
+    def test_explicitly_unavailable_toolchain_stays_unavailable_when_runtime_appears(self):
+        module = load_module(self, "toolchain_contract.py", "toolchain_contract", "resolve_toolchain")
+        runtime = {"toolchains": {"python-unavailable": {
+            "available": False,
+            "preflight_error": "executable was missing during resolution",
+            "language": "python",
+            "executable": sys.executable,
+            "red_adapter": "unittest",
+            "commands": {
+                "red": {"argv": [sys.executable, "-m", "unittest"], "cwd": ".", "env": {}},
+                "test": {"argv": [sys.executable, "-m", "unittest"], "cwd": ".", "env": {}},
+            },
+        }}}
+
+        result = module.resolve_toolchain(
+            {"toolchain_id": "python-unavailable"}, runtime, str(self.project),
+        )
+
+        self.assertFalse(result.get("available"), result)
+        self.assertIn("unavailable", result.get("error", ""))
+
     def test_unittest_red_requires_an_executed_failing_test_and_matching_attempt(self):
         module = load_module(self, "red_evidence.py", "red_evidence", "validate_evidence")
         evidence_path = self.temp / "attempt-red.json"
@@ -165,48 +186,89 @@ class ToolchainEvidenceTests(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(errors, [])
 
-    def test_red_form_check_accepts_valid_unittest_evidence_and_keeps_existing_adapters(self):
+    def test_red_form_check_accepts_bound_unittest_evidence_and_keeps_existing_adapters(self):
         workspace = self.temp / "red-workspace"
         workspace.mkdir()
-        evidence = {
+
+        def write_bound(task, adapter, payload):
+            identity = {
+                "task_id": task,
+                "attempt_id": "attempt-%s" % task,
+                "toolchain_id": "fixture-%s" % adapter,
+                "runner": "scoped-run-v1",
+                "command": ["fixture-runner", adapter],
+                "source_snapshot": "tree:fixture-%s" % task,
+            }
+            (workspace / ("task-%s-attempt.json" % task)).write_text(
+                json.dumps(identity), encoding="utf-8",
+            )
+            (workspace / ("task-%s-red.txt" % task)).write_text(
+                json.dumps(dict(identity, **payload)), encoding="utf-8",
+            )
+
+        unittest_evidence = {
             "version": 1,
             "adapter": "unittest",
             "tests_run": 1,
+            "executed_tests": ["test_acceptance"],
             "failures": ["test_acceptance"],
             "errors": [],
             "tests": [{"id": "test_acceptance", "outcome": "failure"}],
+            "exit_code": 1,
         }
-        (workspace / "task-1-red.txt").write_text(json.dumps(evidence), encoding="utf-8")
+        write_bound(1, "unittest", unittest_evidence)
         unittest_red = subprocess.run(
             [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],
             capture_output=True, text=True,
         )
         self.assertEqual(unittest_red.returncode, 0, unittest_red.stdout + unittest_red.stderr)
 
-        collection = dict(evidence, tests_run=0, failures=[], errors=["collection error"], tests=[])
-        (workspace / "task-1-red.txt").write_text(json.dumps(collection), encoding="utf-8")
+        collection = dict(unittest_evidence, tests_run=0, executed_tests=[], failures=[],
+                          errors=["collection error"], tests=[])
+        write_bound(1, "unittest", collection)
         invalid_red = subprocess.run(
             [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],
             capture_output=True, text=True,
         )
         self.assertNotEqual(invalid_red.returncode, 0, invalid_red.stdout + invalid_red.stderr)
 
-        (workspace / "task-2-red.txt").write_text(json.dumps({"tests": [{"outcome": "failed"}]}), encoding="utf-8")
+        pytest_output = json.dumps({"tests": [{"nodeid": "test_acceptance", "outcome": "failed"}]})
+        write_bound(2, "pytest_json_report", {"adapter": "pytest_json_report", "raw_output": pytest_output})
         pytest_red = subprocess.run(
             [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "2", "python"],
             capture_output=True, text=True,
         )
         self.assertEqual(pytest_red.returncode, 0, pytest_red.stdout + pytest_red.stderr)
 
-        (workspace / "task-3-red.txt").write_text(
-            '{"Test":"TestAccepts","Action":"run"}\n{"Test":"TestAccepts","Action":"fail"}\n',
-            encoding="utf-8",
-        )
+        go_output = ('{"Test":"TestAccepts","Action":"run"}\n'
+                     '{"Test":"TestAccepts","Action":"fail"}\n')
+        write_bound(3, "go_test_json", {"adapter": "go_test_json", "raw_output": go_output})
         go_red = subprocess.run(
             [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "3", "go"],
             capture_output=True, text=True,
         )
         self.assertEqual(go_red.returncode, 0, go_red.stdout + go_red.stderr)
+
+    def test_red_form_check_rejects_valid_but_unbound_legacy_red_evidence(self):
+        workspace = self.temp / "unbound-legacy-red-workspace"
+        workspace.mkdir()
+        legacy_evidence = {
+            "adapter": "unittest",
+            "tests_run": 1,
+            "executed_tests": ["test_acceptance"],
+            "failures": ["test_acceptance"],
+            "errors": [],
+            "tests": [{"id": "test_acceptance", "outcome": "failure"}],
+            "exit_code": 1,
+        }
+        (workspace / "task-1-red.txt").write_text(json.dumps(legacy_evidence), encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],
+            capture_output=True, text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_red_form_check_rejects_unittest_collection_error_even_when_named_as_executed(self):
         workspace = self.temp / "strict-red-workspace"
@@ -270,11 +332,20 @@ class ToolchainEvidenceTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_legacy_red_form_check_does_not_accept_unittest_failedtest_collection_error(self):
-        workspace = self.temp / "legacy-collection-workspace"
+    def test_red_form_check_does_not_accept_bound_unittest_failedtest_collection_error(self):
+        workspace = self.temp / "bound-collection-workspace"
         workspace.mkdir()
         failed_test = "test_missing_module (unittest.loader._FailedTest.test_missing_module)"
-        legacy_evidence = {
+        identity = {
+            "task_id": 1,
+            "attempt_id": "attempt-9",
+            "toolchain_id": "python-unittest",
+            "runner": "scoped-run-v1",
+            "command": [sys.executable, "-m", "unittest", "tests.test_acceptance"],
+            "source_snapshot": "commit:fedcba9876543210",
+        }
+        (workspace / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
+        legacy_evidence = dict(identity, **{
             "adapter": "unittest",
             "tests_run": 1,
             "executed_tests": [failed_test],
@@ -282,7 +353,7 @@ class ToolchainEvidenceTests(unittest.TestCase):
             "errors": [failed_test],
             "tests": [{"id": failed_test, "outcome": "error"}],
             "exit_code": 1,
-        }
+        })
         (workspace / "task-1-red.txt").write_text(json.dumps(legacy_evidence), encoding="utf-8")
         result = subprocess.run(
             [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],

@@ -137,9 +137,27 @@ class RedFormCheckBase(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def write_evidence(self, text, task="1"):
+    def write_evidence(self, text, task="1", lang="flutter"):
+        adapters = {
+            "flutter": "flutter_machine",
+            "dart": "flutter_machine",
+            "python": "pytest_json_report",
+            "go": "go_test_json",
+        }
+        identity = {
+            "task_id": int(task),
+            "attempt_id": "attempt-%s" % task,
+            "toolchain_id": "fixture-%s" % lang,
+            "runner": "scoped-run-v1",
+            "command": ["fixture-runner", lang],
+            "source_snapshot": "tree:fixture-%s" % task,
+        }
+        (self.ws / ("task-%s-attempt.json" % task)).write_text(
+            json.dumps(identity), encoding="utf-8",
+        )
+        evidence = dict(identity, adapter=adapters[lang], raw_output=text)
         (self.ws / ("task-%s-red.txt" % task)).write_text(
-            text, encoding="utf-8",
+            json.dumps(evidence), encoding="utf-8",
         )
 
     def run_it(self, task="1", lang="flutter"):
@@ -176,22 +194,22 @@ class TestRedFormCheck(RedFormCheckBase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
     def test_python_assertion_failure_is_valid(self):
-        self.write_evidence(PYTHON_ASSERTION_FAILURE)
+        self.write_evidence(PYTHON_ASSERTION_FAILURE, lang="python")
         r = self.run_it(lang="python")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_python_collection_error_is_invalid(self):
-        self.write_evidence(PYTHON_COLLECTION_ERROR)
+        self.write_evidence(PYTHON_COLLECTION_ERROR, lang="python")
         r = self.run_it(lang="python")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
     def test_go_test_failure_is_valid(self):
-        self.write_evidence(GO_TEST_FAILURE)
+        self.write_evidence(GO_TEST_FAILURE, lang="go")
         r = self.run_it(lang="go")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_go_build_failure_is_invalid(self):
-        self.write_evidence(GO_BUILD_FAILURE)
+        self.write_evidence(GO_BUILD_FAILURE, lang="go")
         r = self.run_it(lang="go")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 

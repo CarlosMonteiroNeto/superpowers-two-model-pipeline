@@ -204,6 +204,51 @@ class IntegrateTest(unittest.TestCase):
         self.assertEqual([marker.read_text(encoding="utf-8") for marker in markers],
                          ["exact-1", "exact-2"])
 
+    def test_integrate_fails_closed_for_structured_flutter_gate_without_task_identity(self):
+        gate_marker = self._tmp / "gate-should-not-run.txt"
+        descriptor = {
+            "available": True,
+            "toolchain_id": "flutter-stable-v1",
+            "language": "flutter",
+            "project_root": str(self.repo),
+            "commands": {
+                "test": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self.repo), "env": {}},
+                "analyze": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self.repo), "env": {}},
+            },
+        }
+        # The task intentionally lacks toolchain_id. A structured gate may not
+        # be selected by language even when Flutter has only one ledger entry.
+        (self.ws / "plan.json").write_text(json.dumps({
+            "feature": "f", "tasks": [{"id": 1, "touches": ["lib/task1.dart"]}],
+        }), encoding="utf-8")
+        (self.ws / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate", "task": "-", "lang": "flutter",
+            "toolchain_id": "flutter-stable-v1",
+            "toolchain_descriptor": json.dumps(descriptor),
+        }) + "\n", encoding="utf-8")
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.dart", "void main() {}\n")
+        self.shard_complete(1)
+        flutter_gate = write_stub(
+            self.stub_dir, "flutter-gate",
+            'echo invoked > "${GATE_MARKER:?}"\nexit 0\n',
+        )
+        generic_gate = write_stub(
+            self.stub_dir, "generic-gate",
+            'echo invoked > "${GATE_MARKER:?}"\nexit 0\n',
+        )
+
+        result = self.run_integrate(
+            1,
+            GREEN_GATE_BIN=flutter_gate,
+            RUN_GATES_BIN=generic_gate,
+            GATE_MARKER=str(gate_marker),
+        )
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertFalse(gate_marker.exists(), result.stdout + result.stderr)
+        self.assertEqual(len(self.entries("integration_failed")), 1, self.ledger())
+
     def test_unapproved_shard_is_not_merged_or_released(self):
         """Critical: coder-gate commits BEFORE the revisor runs, so a shard
         without `task_complete` is a committed-but-unapproved task. integrate

@@ -82,7 +82,7 @@ class Task1PipelineCompatibilityTests(unittest.TestCase):
         gate = next(entry for entry in entries if entry.get("type") == "gate")
 
         result = run_script(
-            "run-gates", [self.workspace, gate["test_cmd"], gate["analyze_cmd"]], self.temp,
+            "run-gates", [self.workspace, "--toolchains", gate["toolchain_id"]], self.temp,
             {"RTK_ENABLED": "0"},
         )
 

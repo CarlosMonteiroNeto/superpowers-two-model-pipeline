@@ -137,6 +137,44 @@ class ScopedRunnerTests(unittest.TestCase):
         )
         self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
 
+    def test_explicitly_unavailable_descriptor_never_executes_scoped_command(self):
+        project = self.temp / "unavailable-project"
+        project.mkdir()
+        descriptor = {
+            "available": False,
+            "preflight_error": "python was unavailable during toolchain resolution",
+            "toolchain_id": "python-unavailable-v1",
+            "language": "python",
+            "executable": sys.executable,
+            "project_root": str(project),
+            "red_adapter": "unittest",
+            "commands": {
+                "red": {
+                    "argv": [sys.executable, "-c", "pass"],
+                    "cwd": str(project),
+                    "env": {},
+                },
+                "test": {
+                    "argv": [sys.executable, "-c",
+                             "import pathlib; pathlib.Path(r'{}').write_text('executed')".format(self.sentinel)],
+                    "cwd": str(project),
+                    "env": {},
+                },
+            },
+        }
+        (self.workspace / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": "python-unavailable-v1"}],
+        }), encoding="utf-8")
+        (self.workspace / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate", "toolchain_id": "python-unavailable-v1",
+            "toolchain_descriptor": descriptor,
+        }) + "\n", encoding="utf-8")
+
+        result = self.run_scoped("1", "test")
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.sentinel.exists(), "unavailable descriptor must never execute")
+
 
 if __name__ == "__main__":
     unittest.main()

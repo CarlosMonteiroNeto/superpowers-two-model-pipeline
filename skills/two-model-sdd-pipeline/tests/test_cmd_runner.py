@@ -1,7 +1,9 @@
+import json
 import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -160,9 +162,19 @@ echo "rtk exploded" >&2; exit 9
 
 
 class TestRunGates(CmdTestBase):
+    def write_legacy_gate(self, ws, test_cmd, analyze_cmd):
+        (ws / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate",
+            "toolchain_id": "legacy-python-v1",
+            "lang": "python",
+            "test_cmd": test_cmd,
+            "analyze_cmd": analyze_cmd,
+        }) + "\n", encoding="utf-8")
+
     def test_green_exits_zero(self):
         ws = pathlib.Path(self._tmp) / "ws"
         ws.mkdir()
+        self.write_legacy_gate(ws, "echo ok-test", "echo ok-analyze")
         r = run_script(
             "run-gates",
             [str(ws), "echo ok-test", "echo ok-analyze"],
@@ -176,6 +188,7 @@ class TestRunGates(CmdTestBase):
     def test_test_failure_exits_one(self):
         ws = pathlib.Path(self._tmp) / "ws"
         ws.mkdir()
+        self.write_legacy_gate(ws, "exit 1", "echo ok-analyze")
         r = run_script(
             "run-gates",
             [str(ws), "exit 1", "echo ok-analyze"],
@@ -188,6 +201,7 @@ class TestRunGates(CmdTestBase):
     def test_analyze_failure_exits_two(self):
         ws = pathlib.Path(self._tmp) / "ws"
         ws.mkdir()
+        self.write_legacy_gate(ws, "echo ok-test", "exit 2")
         r = run_script(
             "run-gates",
             [str(ws), "echo ok-test", "exit 2"],
@@ -201,6 +215,74 @@ class TestRunGates(CmdTestBase):
         ws.mkdir()
         r = run_script("run-gates", [str(ws), "echo only-test"], cwd=self._tmp, env_extra={"RTK_ENABLED": "0"})
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+
+    def test_unmatched_positional_and_commands_modes_do_not_execute_caller_commands(self):
+        ws = pathlib.Path(self._tmp) / "unmatched-ws"
+        ws.mkdir()
+        test_cmd = "echo UNMATCHED_COMMAND_RAN"
+        analyze_cmd = "true"
+
+        for args in ([str(ws), test_cmd, analyze_cmd],
+                     [str(ws), "--commands", test_cmd, analyze_cmd]):
+            result = run_script("run-gates", list(args), cwd=self._tmp, env_extra={"RTK_ENABLED": "0"})
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn("UNMATCHED_COMMAND_RAN", result.stdout + result.stderr)
+
+    def test_structured_single_gate_requires_exact_toolchain_selection(self):
+        ws = pathlib.Path(self._tmp) / "structured-ws"
+        ws.mkdir()
+        marker = pathlib.Path(self._tmp) / "structured-command-ran"
+        descriptor = {
+            "available": True,
+            "toolchain_id": "python-structured-v1",
+            "language": "python",
+            "project_root": str(self._tmp),
+            "commands": {
+                "test": {"argv": [sys.executable, "-c",
+                                   "import pathlib; pathlib.Path(r'{}').write_text('ran')".format(marker)],
+                         "cwd": str(self._tmp), "env": {}},
+                "analyze": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self._tmp), "env": {}},
+            },
+        }
+        (ws / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate", "toolchain_id": "python-structured-v1", "lang": "python",
+            "toolchain_descriptor": descriptor,
+        }) + "\n", encoding="utf-8")
+
+        result = run_script(
+            "run-gates", [str(ws), "python test", "python analyze"],
+            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(marker.exists(), "a structured descriptor needs exact task/toolchain identity")
+
+    def test_exact_toolchain_selection_is_not_misrouted_to_legacy_ledger_mode(self):
+        ws = pathlib.Path(self._tmp) / "multi-structured-ws"
+        ws.mkdir()
+        entries = []
+        for identity in ("python-first-v1", "python-selected-v1"):
+            entries.append({
+                "type": "gate", "toolchain_id": identity, "lang": "python",
+                "toolchain_descriptor": {
+                    "available": True, "toolchain_id": identity, "language": "python",
+                    "project_root": str(self._tmp),
+                    "commands": {
+                        "test": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self._tmp), "env": {}},
+                        "analyze": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self._tmp), "env": {}},
+                    },
+                },
+            })
+        (ws / "ledger.jsonl").write_text(
+            "\n".join(json.dumps(entry) for entry in entries) + "\n", encoding="utf-8",
+        )
+
+        result = run_script(
+            "run-gates", [str(ws), "--toolchains", "python-selected-v1"],
+            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class TestCmdFlutterRtk(CmdTestBase):
