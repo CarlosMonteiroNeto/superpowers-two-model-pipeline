@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reviewer result",
+  "description": "Semantic payload for the reviewer role: APPROVED, SEND_BACK or ESCALATE with findings, parked minors and summary. Findings carry severity, location, issue, fix, correction scope (in_scope, structural or uncertain), affected paths and affected contracts.",
+  "type": "object",
+  "required": ["verdict", "findings", "minors", "summary"],
+  "properties": {
+    "verdict": {"enum": ["APPROVED", "SEND_BACK", "ESCALATE"]},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "minors": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "summary": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["severity", "file", "line", "issue", "fix", "correction_scope", "affected_paths", "affected_contracts"],
+      "properties": {
+        "severity": {"enum": ["Critical", "Important", "Minor"]},
+        "file": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 0},
+        "issue": {"type": "string", "minLength": 1},
+        "fix": {"type": "string", "minLength": 1},
+        "correction_scope": {"enum": ["in_scope", "structural", "uncertain"]},
+        "affected_paths": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "affected_contracts": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

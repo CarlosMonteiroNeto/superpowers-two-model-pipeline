@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Operator result",
+  "description": "Semantic payload for the operator role: DONE, DONE_WITH_CONCERNS, BLOCKED, NEEDS_CONTEXT or TEST_DEFECT with summary, changed files, RED evidence and concerns.",
+  "type": "object",
+  "required": ["status", "summary", "changed_files", "red_evidence", "concerns"],
+  "properties": {
+    "status": {"enum": ["DONE", "DONE_WITH_CONCERNS", "BLOCKED", "NEEDS_CONTEXT", "TEST_DEFECT"]},
+    "summary": {"type": "string", "minLength": 1},
+    "changed_files": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "red_evidence": {
+      "type": "object",
+      "required": ["path", "runner", "exit_code"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "runner": {"type": "string", "minLength": 1},
+        "exit_code": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "concerns": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": false
+}

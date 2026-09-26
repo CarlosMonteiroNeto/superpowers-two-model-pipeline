@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Worker request",
+  "description": "Normalized invocation identity for a dispatched worker: backend, role, task/family/episode, worktree, base commit, plan revision, config/prompt hashes, requested settings and evidence paths. No provider session is assigned yet; no worker process is launched by validation.",
+  "type": "object",
+  "required": ["version", "backend", "run_id", "dispatch_id", "task_id", "task_family", "episode_id", "role", "repository_id", "worktree", "plan_revision", "base_commit", "config_hash", "prompt_hash", "requested_model", "requested_effort", "evidence_paths"],
+  "properties": {
+    "version": {"const": 1},
+    "backend": {"enum": ["codex", "opencode"]},
+    "run_id": {"type": "string", "minLength": 1},
+    "dispatch_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "integer", "minimum": 1},
+    "task_family": {"type": "integer", "minimum": 1},
+    "episode_id": {"type": "string", "minLength": 1},
+    "role": {"enum": ["operator", "reviewer", "director"]},
+    "repository_id": {"type": "string", "minLength": 1},
+    "worktree": {"type": "string", "minLength": 1},
+    "plan_revision": {"type": "string", "minLength": 1},
+    "base_commit": {"type": "string", "minLength": 1},
+    "config_hash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "prompt_hash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "requested_model": {"type": "string", "minLength": 1},
+    "requested_effort": {"type": "string", "minLength": 1},
+    "evidence_paths": {
+      "type": "object",
+      "required": ["request_path", "prompt_path", "events_path", "stderr_path", "final_path", "result_path"],
+      "properties": {
+        "request_path": {"type": "string", "minLength": 1},
+        "prompt_path": {"type": "string", "minLength": 1},
+        "events_path": {"type": "string", "minLength": 1},
+        "stderr_path": {"type": "string", "minLength": 1},
+        "final_path": {"type": "string", "minLength": 1},
+        "result_path": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

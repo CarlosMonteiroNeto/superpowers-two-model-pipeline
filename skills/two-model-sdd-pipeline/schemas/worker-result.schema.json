@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Worker result",
+  "description": "Normalized transport record for a finished dispatch: invocation identity, candidate/base commits, plan revision, config hash, requested settings, provider session, process status, terminal completion, output schema/hash, semantic final output, usage and error. Transport completion is separate from semantic outcome.",
+  "type": "object",
+  "required": ["version", "backend", "run_id", "dispatch_id", "task_id", "task_family", "role", "episode_id", "repository_id", "worktree", "plan_revision", "base_commit", "candidate_commit", "requested_model", "requested_effort", "runtime_version", "config_hash", "session_id", "resumed_from", "process_exit", "terminal_status", "output_schema", "output_hash", "final_output", "usage", "error"],
+  "properties": {
+    "version": {"const": 1},
+    "backend": {"enum": ["codex", "opencode"]},
+    "run_id": {"type": "string", "minLength": 1},
+    "dispatch_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "integer", "minimum": 1},
+    "task_family": {"type": "integer", "minimum": 1},
+    "role": {"enum": ["operator", "reviewer", "director"]},
+    "episode_id": {"type": "string", "minLength": 1},
+    "repository_id": {"type": "string", "minLength": 1},
+    "worktree": {"type": "string", "minLength": 1},
+    "plan_revision": {"type": "string", "minLength": 1},
+    "base_commit": {"type": "string", "minLength": 1},
+    "candidate_commit": {"type": "string", "minLength": 1},
+    "requested_model": {"type": "string", "minLength": 1},
+    "requested_effort": {"type": "string", "minLength": 1},
+    "runtime_version": {"type": "string", "minLength": 1},
+    "config_hash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "session_id": {"type": "string", "minLength": 1},
+    "resumed_from": {"type": ["string", "null"]},
+    "process_exit": {"type": ["integer", "null"]},
+    "terminal_status": {"enum": ["completed", "failed", "interrupted", "incomplete"]},
+    "output_schema": {"enum": ["operator-result-v1", "reviewer-result-v1", "director-result-v1", "closing-result-v1"]},
+    "output_hash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "final_output": {"type": "object"},
+    "usage": {
+      "type": "object",
+      "required": ["input_tokens", "cached_tokens", "output_tokens"],
+      "properties": {
+        "input_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "cached_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "output_tokens": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "error": {"type": ["string", "object", "null"]}
+  },
+  "additionalProperties": false
+}

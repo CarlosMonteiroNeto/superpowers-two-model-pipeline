@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Director result",
+  "description": "Semantic payloads for the director role: correction and arbitration proposals (mode, decision, reason, source_plan_hash, target_task, proposal) and closing judgments (verdict APPROVED, REOPEN or BLOCKED with summary, findings, parked minors and proposed tasks). Correction routing fields are validated here; routing behavior itself is unchanged in this round.",
+  "type": "object",
+  "oneOf": [
+    {"$ref": "#/$defs/correction"},
+    {"$ref": "#/$defs/arbitration"},
+    {"$ref": "#/$defs/closing"}
+  ],
+  "$defs": {
+    "correction": {
+      "type": "object",
+      "required": ["mode", "decision", "reason", "source_plan_hash", "target_task", "proposal"],
+      "properties": {
+        "mode": {"const": "correction"},
+        "decision": {"enum": ["propose", "amend"]},
+        "reason": {"type": "string", "minLength": 1},
+        "source_plan_hash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "target_task": {"type": "integer", "minimum": 1},
+        "proposal": {
+          "type": "object",
+          "required": ["title", "summary", "acceptance", "touches"],
+          "properties": {
+            "title": {"type": "string", "minLength": 1},
+            "summary": {"type": "string", "minLength": 1},
+            "acceptance": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "touches": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "arbitration": {
+      "type": "object",
+      "required": ["mode", "decision", "reason", "source_plan_hash", "target_task", "proposal"],
+      "properties": {
+        "mode": {"const": "arbitration"},
+        "decision": {"enum": ["propose", "amend"]},
+        "reason": {"type": "string", "minLength": 1},
+        "source_plan_hash": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "target_task": {"type": "integer", "minimum": 1},
+        "proposal": {
+          "type": "object",
+          "required": ["field_changes"],
+          "properties": {
+            "field_changes": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {"enum": ["touches", "acceptance", "summary", "title"]},
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "closing": {
+      "type": "object",
+      "required": ["verdict", "summary", "findings", "parked_minors", "proposed_tasks"],
+      "properties": {
+        "verdict": {"enum": ["APPROVED", "REOPEN", "BLOCKED"]},
+        "summary": {"type": "string", "minLength": 1},
+        "findings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/closing_finding"}
+        },
+        "parked_minors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/closing_finding"}
+        },
+        "proposed_tasks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/proposed_task"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "closing_finding": {
+      "type": "object",
+      "required": ["severity", "file", "line", "issue", "fix", "correction_scope", "affected_paths", "affected_contracts"],
+      "properties": {
+        "severity": {"enum": ["Critical", "Important", "Minor"]},
+        "file": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 0},
+        "issue": {"type": "string", "minLength": 1},
+        "fix": {"type": "string", "minLength": 1},
+        "correction_scope": {"enum": ["in_scope", "structural", "uncertain"]},
+        "affected_paths": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "affected_contracts": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "proposed_task": {
+      "type": "object",
+      "required": ["title", "summary", "acceptance"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1},
+        "acceptance": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
