@@ -212,6 +212,61 @@ class IntegrateTest(unittest.TestCase):
         self.assertEqual([marker.read_text(encoding="utf-8") for marker in markers],
                          ["exact-1", "exact-2"])
 
+    def test_integrate_runs_exact_structured_flutter_descriptor(self):
+        test_marker = self._tmp / "selected-flutter-integration-test.txt"
+        analyze_marker = self._tmp / "selected-flutter-integration-analyze.txt"
+        toolchain_id = "flutter-custom-v1"
+        def marker_command(path, value):
+            return [
+                sys.executable, "-c",
+                "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys.argv[2], encoding='utf-8')",
+                str(path), value,
+            ]
+        descriptor = {
+            "available": True,
+            "toolchain_id": toolchain_id,
+            "language": "flutter",
+            "project_root": str(self.repo),
+            "commands": {
+                "test": {"argv": marker_command(test_marker, "selected-test"),
+                         "cwd": str(self.repo), "env": {}},
+                "analyze": {"argv": marker_command(analyze_marker, "selected-analyze"),
+                            "cwd": str(self.repo), "env": {}},
+            },
+        }
+        (self.ws / "plan.json").write_text(json.dumps({
+            "feature": "f",
+            "tasks": [{"id": 1, "toolchain_id": toolchain_id,
+                       "touches": ["lib/task1.dart"]}],
+        }), encoding="utf-8")
+        (self.ws / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate", "task": "-", "lang": "flutter",
+            "toolchain_id": toolchain_id,
+            "toolchain_descriptor": json.dumps(descriptor),
+        }) + "\n", encoding="utf-8")
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.dart", "void main() {}\n")
+        self.shard_complete(1)
+        legacy_gate_calls = self._tmp / "legacy-flutter-gate.log"
+        legacy_flutter_gate = write_stub(
+            self.stub_dir, "legacy-flutter-gate",
+            'echo invoked >> "${LEGACY_GATE_MARKER:?}"\nexit 0\n',
+        )
+
+        result = self.run_integrate(
+            1,
+            GREEN_GATE_BIN=legacy_flutter_gate,
+            LEGACY_GATE_MARKER=str(legacy_gate_calls),
+            RTK_ENABLED="0",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(test_marker.exists(), "selected Flutter test command did not run")
+        self.assertTrue(analyze_marker.exists(), "selected Flutter analyze command did not run")
+        self.assertEqual(test_marker.read_text(encoding="utf-8"), "selected-test")
+        self.assertEqual(analyze_marker.read_text(encoding="utf-8"), "selected-analyze")
+        self.assertFalse(legacy_gate_calls.exists(), "legacy Flutter gate bypassed the selected descriptor")
+
     def test_integrate_fails_closed_for_structured_flutter_gate_without_task_identity(self):
         gate_marker = self._tmp / "gate-should-not-run.txt"
         descriptor = {

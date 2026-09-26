@@ -3,6 +3,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -198,6 +199,53 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         env.update(extra)
         return env
 
+    def _install_structured_flutter_toolchain(self, test_marker, analyze_marker):
+        toolchain_id = "flutter-custom-v1"
+        def marker_command(path, value):
+            return [
+                sys.executable, "-c",
+                "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys.argv[2], encoding='utf-8')",
+                str(path), value,
+            ]
+        descriptor = {
+            "available": True,
+            "toolchain_id": toolchain_id,
+            "language": "flutter",
+            "project_root": str(self.repo),
+            "commands": {
+                "test": {"argv": marker_command(test_marker, "selected-test"),
+                         "cwd": str(self.repo), "env": {}},
+                "analyze": {"argv": marker_command(analyze_marker, "selected-analyze"),
+                            "cwd": str(self.repo), "env": {}},
+            },
+        }
+        (self.ws / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": toolchain_id,
+                       "touches": ["file.txt"]}],
+        }), encoding="utf-8")
+        self.ledger_path.write_text(json.dumps({
+            "type": "gate", "task": "-", "lang": "flutter",
+            "toolchain_id": toolchain_id,
+            "toolchain_descriptor": json.dumps(descriptor),
+        }) + "\n", encoding="utf-8")
+        identity = {
+            "task_id": 1,
+            "attempt_id": "fixture-flutter-attempt-1",
+            "toolchain_id": toolchain_id,
+            "runner": "scoped-run-v1",
+            "command": ["flutter", "test", "--machine"],
+            "source_snapshot": "tree:fixture-flutter-red",
+        }
+        (self.ws / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
+        red = (
+            '{"type":"testStart","testID":1}\n'
+            '{"type":"testDone","testID":1,"result":"failure"}\n'
+        )
+        (self.ws / "task-1-red.txt").write_text(
+            json.dumps(dict(identity, adapter="flutter_machine", raw_output=red)),
+            encoding="utf-8",
+        )
+
     def test_gate_green_commits_and_dispatches(self):
         self.brief()
         with open(self.ledger_path, "a", encoding="utf-8") as f:
@@ -222,6 +270,44 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
                              capture_output=True, text=True).stdout
         self.assertEqual(log.count("\n"), 2, log)
+
+    def test_structured_flutter_gate_runs_exact_selected_descriptor(self):
+        self.brief()
+        test_marker = self._tmp / "selected-flutter-test.txt"
+        analyze_marker = self._tmp / "selected-flutter-analyze.txt"
+        flutter_marker = self._tmp / "legacy-flutter-gate.txt"
+        self._install_structured_flutter_toolchain(test_marker, analyze_marker)
+        (self.repo / "file.txt").write_text("changed\n", encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        flutter_cli = write_stub(
+            self.stub_dir, "flutter-cli",
+            'printf "%s\\n" "$*" >> "${FLUTTER_MARKER:?}"\nexit 0\n',
+        )
+        dart_cli = write_stub(self.stub_dir, "dart-cli", "exit 0\n")
+
+        result = run_script(
+            "coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+            env_extra=self._env(
+                FLUTTER_BIN=flutter_cli,
+                FLUTTER_MARKER=str(flutter_marker),
+                DART_BIN=dart_cli,
+                STUB_GATE_EXIT="0",
+            ),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(test_marker.exists(), "selected Flutter test command did not run")
+        self.assertTrue(analyze_marker.exists(), "selected Flutter analyze command did not run")
+        self.assertEqual(test_marker.read_text(encoding="utf-8"), "selected-test")
+        self.assertEqual(analyze_marker.read_text(encoding="utf-8"), "selected-analyze")
+        self.assertFalse(flutter_marker.exists(), "legacy Flutter CLI bypassed the selected descriptor")
+        self.assertEqual(
+            subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
+                           capture_output=True, text=True).stdout.count("\n"),
+            2,
+        )
 
     def test_missing_baseline_package_stops_reviewer_dispatch(self):
         self.brief()
