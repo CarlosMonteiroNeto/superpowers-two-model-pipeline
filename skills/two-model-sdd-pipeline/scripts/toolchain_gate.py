@@ -205,6 +205,26 @@ def _all_task_toolchains(workspace: str, task_ids: list[str]) -> list[str]:
     return result
 
 
+def _task_selection_is_legacy(workspace: str, task_ids: list[str]) -> bool:
+    """Return true only when every selected plan task is explicitly legacy."""
+    plan_path = Path(workspace) / "plan.json"
+    if not plan_path.exists():
+        return True
+    try:
+        tasks = _read_plan(workspace)["tasks"]
+    except GateContractError:
+        return False
+    for task_id in task_ids:
+        matches = [task for task in tasks if isinstance(task, dict)
+                   and str(task.get("id")) == str(task_id)]
+        if len(matches) != 1:
+            return False
+        toolchain_id = matches[0].get("toolchain_id")
+        if isinstance(toolchain_id, str) and toolchain_id.strip():
+            return False
+    return True
+
+
 def _legacy_default_entry(workspace: str) -> dict[str, Any]:
     entries = load_gate_entries(workspace)
     if len(entries) != 1:
@@ -336,6 +356,8 @@ def run_cli(argv: list[str]) -> int:
                     or ("cannot read plan:" in str(exc)
                         and not (Path(workspace) / "plan.json").exists())
                 )
+                if args[0] == "--tasks" and not _task_selection_is_legacy(workspace, args[1:]):
+                    legacy_eligible = False
                 if not legacy_eligible:
                     raise
                 legacy = load_gate_entries(workspace)
