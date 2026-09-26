@@ -65,6 +65,29 @@ class ToolchainWiringBase(unittest.TestCase):
 
 
 class TestResolveToolchainAll(ToolchainWiringBase):
+    def test_mixed_task_selection_does_not_fall_back_to_single_legacy_gate(self):
+        (self.ws / "plan.json").write_text(json.dumps({
+            "tasks": [
+                {"id": 1, "touches": ["legacy.py"]},
+                {"id": 2, "toolchain_id": "python-structured-v1",
+                 "touches": ["structured.py"]},
+            ],
+        }), encoding="utf-8")
+        self.write_ledger([gate_entry(
+            "python",
+            'python -c "open(\'legacy-gate-ran.txt\', \'w\').write(\'ran\')"',
+            'python -c "pass"',
+            "python-legacy-v1",
+        )])
+
+        result = run_script(
+            "run-gates", [str(self.ws), "--tasks", "1", "2"],
+            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.ws / "legacy-gate-ran.txt").exists())
+
     def test_all_deduplicates_markers_that_share_one_toolchain_id(self):
         (self.repo / "pyproject.toml").write_text("[project]\nname = 'sample'\n", encoding="utf-8")
         (self.repo / "requirements.txt").write_text("", encoding="utf-8")
