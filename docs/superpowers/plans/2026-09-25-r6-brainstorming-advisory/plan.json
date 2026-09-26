@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "title": "R6: Brainstorming intent advisory and calibration",
+  "date": "2026-09-25",
+  "status": "deferred_not_for_execution",
+  "round_id": "R6",
+  "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
+  "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
+  "roadmap_doc": "roadmap.md",
+  "global_constraints": [
+    "GC01: Script CEO owns dispatch, scheduling, gates, authoritative state, commits, and publication; no coordinating LLM is introduced.",
+    "GC02: The Codex path never executes OpenCode or silently changes runtime, model, reasoning effort, or role.",
+    "GC03: Every role receives explicit model and reasoning settings; operator, reviewer, and director have separate identities and permissions.",
+    "GC04: Plans, specs, prompts, ledger summaries, and implementation comments are English; product UI copy retains its established locale.",
+    "GC05: Codex workers inherit no brainstorming transcript; all required task context comes from versioned artifacts and explicit packages.",
+    "GC06: Operator-owned RED/GREEN and independent semantic review remain mandatory; mechanical green alone never approves a task or branch.",
+    "GC07: Raw evidence determines gates; RTK only changes the model-visible rendering and never the command exit code.",
+    "GC08: Unknown, malformed, stale, interrupted, or mismatched results never advance authoritative state.",
+    "GC09: Resume is confined to a recorded task family and role; unrelated tasks and closing use fresh contexts.",
+    "GC10: Parallel workers use distinct worktrees; shared plan writes, integration, and publication are serialized by scripts.",
+    "GC11: Existing user changes, unrelated branches, Codex sessions, credentials, and installed plugin caches are preserved.",
+    "GC12: Jev remains optional advisory inference; it cannot dispatch, select a tier, approve, route, or write the authoritative ledger.",
+    "GC13: Each new run confirms local-only or push-and-PR publication and concurrency at launch; resume retains those choices and no automatic merge is allowed.",
+    "GC14: Compatibility is claimed only for runtime/platform/toolchain combinations backed by the acceptance matrix."
+  ],
+  "prerequisite_rounds": [],
+  "execution_handoff": {
+    "implementation_authorized": false,
+    "execution": "Do not execute. No classifier/provider/activation policy is selected."
+  },
+  "scheduling": {
+    "task_ids": "Local to this round; depends_on never names another round's task ID.",
+    "cross_round": "Run rounds in order. Shared file paths across rounds are intentional sequential edits.",
+    "resources": "touches assigns one owner per implementation path in this round. New test files listed in verification are additional exclusive write resources; scheduler must include them."
+  },
+  "tasks": [],
+  "confirmed_decisions": {
+    "record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+    "scope": "All task acceptance is governed by the confirmed decisions; R6 is deferred."
+  },
+  "decision_record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+  "executable": false,
+  "deferred_task_reference": [
+    {
+      "id": 1,
+      "title": "Add optional brainstorming intent advisory",
+      "summary": "Introduce a separate Jev site with bounded inference and safe fallback.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d15--jev-at-brainstorming-entry"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/brainstorm_intent.py",
+        "skills/two-model-sdd-pipeline/scripts/brainstorm-intent",
+        "skills/two-model-sdd-pipeline/schemas/brainstorm-intent.schema.json",
+        "skills/two-model-sdd-pipeline/policies/brainstorm-intent.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Use a new stable site ID brainstorming-intent without renumbering Sites 1–5. Choices: architectural, bounded_feature, debugging, research, mixed.",
+        "Run after minimal orientation with sanitized request/context, schema and policy identities. Default off/shadow; no key means recorded fallback with no interruption.",
+        "At most one bounded request per input identity; ten-second timeout; no hidden retries. Cache keys include input/schema/policy hashes; keep provider/circuit state site-scoped.",
+        "Output recommendation/confidence/provenance/fallback, never execution authorization, routing command or ledger mutation.",
+        "Fixtures cover off/shadow, unavailable key/provider, low confidence, malformed response, cache mismatch, oversized/private inputs and mixed intent."
+      ],
+      "interfaces": {
+        "produces": [
+          "brainstorm_intent.classify(request: dict, policy: dict) -> dict",
+          "brainstorm-intent --request FILE --policy FILE --output FILE"
+        ],
+        "consumes": [
+          "Existing jev_classify/jev_store/jev_policy contracts; R5 intent/profile context"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r6_intent_advisory.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r6_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected existing tests and complete configured suites before round closure.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Integrate intent recommendations into brainstorming discovery",
+      "summary": "Use advisory hints to select questions and skills while preserving user and strategist authority.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d15--jev-at-brainstorming-entry"
+      ],
+      "touches": [
+        "skills/brainstorming/SKILL.md",
+        "skills/systematic-debugging/SKILL.md",
+        "skills/two-model-sdd-pipeline/references/intent-discovery.md",
+        "skills/two-model-sdd-pipeline/scripts/intent_context.py"
+      ],
+      "depends_on": [
+        1
+      ],
+      "acceptance": [
+        "Debugging starts evidence gathering; research starts a bounded investigation; architecture uses requirements/design; mixed or uncertain intent produces one focused clarification.",
+        "Off/shadow behavior preserves baseline classification; active calibrated guidance is still an advisory to the interactive strategist.",
+        "Carry selected intent and pinned skill/profile references into planning context without automatically installing skills or expanding implementation scope.",
+        "Do not force product Category Skeleton questions onto tooling maintenance/debugging. Do not reintroduce spec-before-plan approval or select worker models during brainstorming.",
+        "User correction overrides the advisory and is recorded as a new classification identity; workers never recursively invoke entry classification."
+      ],
+      "interfaces": {
+        "produces": [
+          "intent_context.prepare(advisory: dict, context: dict, user_override: dict | None) -> dict"
+        ],
+        "consumes": [
+          "R6 task 1 advisory; R2 skill manifests; R5 profiles"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r6_intent_discovery.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r6_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected existing tests and complete configured suites before round closure.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Evaluate, package and document advisory activation",
+      "summary": "Require observed value and calibration before active use, with opt-in deployment.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d15--jev-at-brainstorming-entry"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/brainstorm_intent_evaluate.py",
+        "skills/two-model-sdd-pipeline/fixtures/intent-labels.json",
+        "skills/two-model-sdd-pipeline/references/intent-evaluation.md",
+        "scripts/package-codex-plugin.sh",
+        "README.md"
+      ],
+      "depends_on": [
+        1,
+        2
+      ],
+      "acceptance": [
+        "Create labeled fixtures covering all intents, ambiguous/mixed requests and counterexamples; distinguish held-out evaluation from calibration labels.",
+        "Report confusion matrix, coverage, abstention, latency and inference usage/cost when available; unknown costs stay unknown. Compare off/shadow workflow outcomes.",
+        "Active policy requires explicit selection and a matching schema/model/policy/calibration evidence identity. Evaluation cannot activate policy automatically.",
+        "Package all required schemas and default off/shadow settings; preserve existing Sites 1–5 behavior and store isolation.",
+        "Run both backend-independent entry fixtures, unavailable-service fallback and existing Jev regression suites; document remaining limits and complete round acceptance."
+      ],
+      "interfaces": {
+        "produces": [
+          "brainstorm_intent_evaluate.evaluate(reports: list, labels: list) -> dict calibration evidence"
+        ],
+        "consumes": [
+          "R6 tasks 1–2 observations; existing Jev evaluation conventions"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r6_intent_evaluation.py",
+          "skills/two-model-sdd-pipeline/tests/test_r6_advisory_acceptance.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r6_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected existing tests and complete configured suites before round closure.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    }
+  ],
+  "deferral": {
+    "reason": "User removed brainstorming-entry Jev from current scope; compare alternative approaches in a future investigation.",
+    "resume_condition": "New user request and a fresh design decision; historical task references do not authorize implementation.",
+    "existing_jev_sites": "Sites 1–5 remain unchanged by this deferral."
+  }
+}

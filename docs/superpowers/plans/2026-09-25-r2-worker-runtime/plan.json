@@ -1,0 +1,402 @@
+{
+  "version": 1,
+  "title": "R2: Worker runtime, prompts and backend adapters",
+  "date": "2026-09-25",
+  "status": "planned_not_implemented",
+  "round_id": "R2",
+  "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
+  "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
+  "roadmap_doc": "roadmap.md",
+  "global_constraints": [
+    "GC01: Script CEO owns dispatch, scheduling, gates, authoritative state, commits, and publication; no coordinating LLM is introduced.",
+    "GC02: The Codex path never executes OpenCode or silently changes runtime, model, reasoning effort, or role.",
+    "GC03: Every role receives explicit model and reasoning settings; operator, reviewer, and director have separate identities and permissions.",
+    "GC04: Plans, specs, prompts, ledger summaries, and implementation comments are English; product UI copy retains its established locale.",
+    "GC05: Codex workers inherit no brainstorming transcript; all required task context comes from versioned artifacts and explicit packages.",
+    "GC06: Operator-owned RED/GREEN and independent semantic review remain mandatory; mechanical green alone never approves a task or branch.",
+    "GC07: Raw evidence determines gates; RTK only changes the model-visible rendering and never the command exit code.",
+    "GC08: Unknown, malformed, stale, interrupted, or mismatched results never advance authoritative state.",
+    "GC09: Resume is confined to a recorded task family and role; unrelated tasks and closing use fresh contexts.",
+    "GC10: Parallel workers use distinct worktrees; shared plan writes, integration, and publication are serialized by scripts.",
+    "GC11: Existing user changes, unrelated branches, Codex sessions, credentials, and installed plugin caches are preserved.",
+    "GC12: Jev remains optional advisory inference; it cannot dispatch, select a tier, approve, route, or write the authoritative ledger.",
+    "GC13: Each new run confirms local-only or push-and-PR publication and concurrency at launch; resume retains those choices and no automatic merge is allowed.",
+    "GC14: Compatibility is claimed only for runtime/platform/toolchain combinations backed by the acceptance matrix."
+  ],
+  "prerequisite_rounds": [
+    {
+      "round": "R1",
+      "plan": "docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    }
+  ],
+  "execution_handoff": {
+    "implementation_authorized": false,
+    "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
+    "bootstrap": "Use an explicitly requested development workflow and pinned supervisor; the complete new pipeline is only available after R3 acceptance.",
+    "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
+    "drift_check": "Before execution compare exact paths, schemas, interface signatures and prerequisites with accepted predecessor commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
+  },
+  "scheduling": {
+    "task_ids": "Local to this round; depends_on never names another round's task ID.",
+    "cross_round": "Run rounds in order. Shared file paths across rounds are intentional sequential edits.",
+    "resources": "touches assigns one owner per implementation path in this round. New test files listed in verification are additional exclusive write resources; scheduler must include them."
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Build complete context packages and executable toolchain descriptors",
+      "summary": "Make fresh workers self-sufficient by carrying global/task/spec/verification context and platform-correct scoped runner commands. Replace marker-only assumptions with executable toolchain contracts and support the repository's unittest evidence.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#5-planning-research-and-context-packaging",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#6-role-permissions-and-command-execution",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#8-red-green-independent-review-and-routing",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/context_package.py",
+        "skills/two-model-sdd-pipeline/scripts/brief-scaffold",
+        "skills/two-model-sdd-pipeline/scripts/scoped-run",
+        "skills/two-model-sdd-pipeline/scripts/scoped_runner.py",
+        "skills/two-model-sdd-pipeline/scripts/toolchain_contract.py",
+        "skills/two-model-sdd-pipeline/scripts/resolve-toolchain",
+        "skills/two-model-sdd-pipeline/scripts/gate-entry-for",
+        "skills/two-model-sdd-pipeline/scripts/task-lang",
+        "skills/two-model-sdd-pipeline/scripts/red-form-check",
+        "skills/two-model-sdd-pipeline/scripts/red_evidence.py"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "build_context produces complete deterministic role packages containing global_constraints, full task, interfaces, verification, spec excerpts, pinned bundle references, family/attempt identity and evidence paths. Missing references or oversized mandatory evidence produce an explicit error, never truncation.",
+        "Brief commands quote paths with spaces/Unicode correctly and resolve pipeline skills against the bundle, project references against the task worktree. Remove the unconditional Flutter runner from non-Flutter briefs.",
+        "Toolchain descriptors use argv arrays plus cwd/environment and a RED adapter; validate the executable and configured test/analyzer commands. package.json with no test script must not automatically become npm test plus npx eslint.",
+        "scoped-run WORKSPACE TASK red|test|analyze|format accepts only declared modes and canonical in-root test paths; delegates full-output capture and RTK rendering to cmd without permitting an arbitrary command argument.",
+        "Retain Flutter/Dart, pytest JSON-report, and Go evidence support; add a unittest adapter which records actual executed tests, failures and errors. A collection/build failure with no executed failing test is invalid RED.",
+        "Bind evidence to task, attempt, runner/command and source snapshot; a previous attempt's evidence is not automatically reusable. Preserve the reviewer as independent judge of whether tests encode acceptance.",
+        "Node/Rust without an explicitly configured tested RED adapter fail preflight as unsupported. Missing adapters are not code failures and cannot enter a coder correction loop.",
+        "Multi-toolchain records are resolved by exact task toolchain identity, not first/last ledger line. Define all affected toolchains for later integration/closing.",
+        "Keep existing research/scoring/Jev semantics. Dependency preparation describes pub get accurately as capable of downloads and records necessary network/cache access.",
+        "Toolchain/context contracts are backend-neutral; Codex and OpenCode receive identical required task evidence with backend-specific policy wrappers."
+      ],
+      "interfaces": {
+        "produces": [
+          "context_package.build_context(role: str, request: dict, plan: dict, bundle_root: str) -> dict; returns prompt text and source manifest",
+          "toolchain_contract.resolve_toolchain(task: dict, runtime: dict, project_root: str) -> dict",
+          "red_evidence.validate_evidence(path: str, expected: dict) -> dict"
+        ],
+        "consumes": [
+          "R1 runtime configuration and normalized schemas; approved plan/spec; pinned bundle and project binding"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_context_package.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_scoped_runner.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_toolchain_evidence.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Build reusable skill-source discovery and refresh",
+      "summary": "Persist vetted discovery sources and cached skill metadata so planning does not repeatedly search from scratch.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/skill_sources.py",
+        "skills/two-model-sdd-pipeline/scripts/skill-source-refresh",
+        "skills/two-model-sdd-pipeline/scripts/skill-source-search",
+        "skills/two-model-sdd-pipeline/schemas/skill-source.schema.json",
+        "skills/two-model-sdd-pipeline/skills/sources.seed.json"
+      ],
+      "depends_on": [
+        1
+      ],
+      "acceptance": [
+        "Maintain repository/source/category/revision/last-check/review status and skill metadata. Seed publisher/catalog candidates from the confirmed decision record without marking every linked skill trusted.",
+        "Search installed skills first. Missing coverage queries the registry, then external sources. Rank up to 100 relevant GitHub skill repositories by stars within recorded queries; deduplicate and save query, collection time and result scope. Do not claim a global exhaustive ranking or use stars as approval.",
+        "Refresh on demand after 30 days; reuse cached results in between and search further for gaps. No background scheduler. Partial/rate-limited/offline refresh preserves usable cache and records stale/incomplete status.",
+        "Check individual skill relevance, compatibility, source and license before recommending installation. Require user approval for external installation; registry refresh alone never executes skill code.",
+        "Tests cover cache hit/expiry, clock timestamps, duplicate repositories, topic relevance, missing installed coverage, pagination/rate limits, stale fallback and catalog links whose target is unreviewed."
+      ],
+      "interfaces": {
+        "produces": [
+          "skill_sources.discover(query: dict, installed: list, registry: str) -> dict",
+          "skill_sources.refresh(registry: str, now: str, sources: list) -> dict"
+        ],
+        "consumes": [
+          "R1 installed bundle; recorded source candidates and project/task context"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r2_skill_sources.py",
+          "skills/two-model-sdd-pipeline/tests/test_r2_skill_source_refresh.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories, fake network/runtime responses and isolated configuration.",
+          "Observe meaningful RED before implementation; preserve baseline, candidate and raw evidence.",
+          "Run required final suites; distinguish new regressions from explicitly waived baseline failures."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Resolve pinned task skills and adapted upstream prompt headers",
+      "summary": "Preserve upstream role practices through versioned adaptation and deterministic prompt assembly.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d07--reuse-upstream-prompts-through-an-explicit-adaptation-layer",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/skill_manifest.py",
+        "skills/two-model-sdd-pipeline/scripts/prompt_headers.py",
+        "skills/two-model-sdd-pipeline/prompts/upstream-lock.json",
+        "skills/two-model-sdd-pipeline/prompts/adaptation-map.json",
+        "skills/two-model-sdd-pipeline/prompts/core-operator.md",
+        "skills/two-model-sdd-pipeline/prompts/core-reviewer.md",
+        "skills/two-model-sdd-pipeline/prompts/core-director.md"
+      ],
+      "depends_on": [
+        1,
+        2
+      ],
+      "acceptance": [
+        "Pin a verified upstream revision, source hashes and license notices; record each retained/replaced section. Never fetch mutable upstream prompts during task dispatch.",
+        "Resolve installed skills by ID/revision and applicable role/sections from planner selection. Required missing skills block; optional omissions are recorded. No per-task paid skill-selector dispatch or automatic installation.",
+        "Compose role/protocol, authority, adapted core guidance, backend policy, domain skills, task acceptance and output contract in stable order. Preserve mandatory sections under budget pressure; reject oversized required context instead of silently truncating.",
+        "Retain meaningful RED, self-review, independent review, focused scope and structured escalation. Replace worker commits/delegation and interactive approvals with Script CEO contracts. Do not introduce a separate RED approver.",
+        "Record prompt hash and skill/source versions; changed prompt inputs invalidate reuse. Cover conflicts, absent sections, stale hashes, license provenance and backend-independent content.",
+        "Consume the cached skill-source registry from the dedicated discovery task. Search installed skills first, external sources only for missing coverage; user approval is required before installing external skills. Adapt concise relevant upstream guidance rather than pasting every prompt.",
+        "Prompt budget conflicts or ambiguous skill instructions are surfaced before dispatch; source registry discovery does not imply installation or trust."
+      ],
+      "interfaces": {
+        "produces": [
+          "skill_manifest.resolve(selection: dict, bundle: str) -> dict",
+          "prompt_headers.build(role: str, context: dict, skills: dict, policy: str) -> dict containing text/hash/provenance"
+        ],
+        "consumes": [
+          "R1 bundle resolution; R2 task 1 context; R2 task 2 source registry; explicit planning skill selection"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r2_skill_manifest.py",
+          "skills/two-model-sdd-pipeline/tests/test_r2_prompt_headers.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Enforce separate Codex and OpenCode role policies",
+      "summary": "Create packaged Codex role prompts and deterministic command/edit guards reflecting the operator, reviewer and director boundaries. Verify hook/tool coverage and sandbox prerequisites before permitting runtime dispatch.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#4-installation-bootstrap-and-preflight",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#5-planning-research-and-context-packaging",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#6-role-permissions-and-command-execution",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/codex/operator.md",
+        "skills/two-model-sdd-pipeline/codex/reviewer.md",
+        "skills/two-model-sdd-pipeline/codex/director.md",
+        "skills/two-model-sdd-pipeline/codex/hooks.json",
+        "skills/two-model-sdd-pipeline/scripts/codex-policy",
+        "skills/two-model-sdd-pipeline/scripts/codex_policy.py",
+        "skills/two-model-sdd-pipeline/scripts/opencode_policy.py",
+        "skills/two-model-sdd-pipeline/opencode/operator.md",
+        "skills/two-model-sdd-pipeline/opencode/reviewer.md",
+        "skills/two-model-sdd-pipeline/opencode/director.md"
+      ],
+      "depends_on": [
+        1,
+        3
+      ],
+      "acceptance": [
+        "Codex role prompts retain RED/GREEN, independent review duties, TEST_DEFECT and bounded director judgment. Worker instructions explicitly operate on approved artifacts and skip recursive brainstorming, self-update, tier questions and manual subagent orchestration.",
+        "Build supported per-invocation settings for explicit model/effort, developer instructions, sandbox, approval_policy=never, and disabled native delegation. Do not transplant OpenCode mode/variant/permission YAML.",
+        "Operator policy permits scoped writes/runners but rejects git/publication, arbitrary interpreters/shell expressions, and plan/ledger/runtime mutations. Reviewer is read-only and cannot run test/analyze/format. Director is read-only, has no shell commands, and returns proposals.",
+        "Normalize documented PreToolUse Bash/unified-exec/apply_patch input forms on Windows and POSIX. A safe-looking command prefix followed by extra shell syntax is rejected. Unknown mutating shapes fail closed.",
+        "Account for hook coverage gaps, inherited AGENTS.md, configured tools and managed policy. Disable unneeded capabilities through supported configuration; if the required policy cannot be enforced, return unavailable rather than weakening it.",
+        "Report required hook trust during setup and never add dangerous bypass flags automatically. Policy setup cannot modify the installed plugin cache or an unrelated global configuration.",
+        "Capture protected-state baselines for supervisor comparison after every worker. A model-written result or ledger edit cannot authorize itself.",
+        "Tests cover shell chaining, Python/PowerShell wrappers, direct git, arbitrary generic cmd usage, unauthorized apply_patch paths, unknown tool shapes and safe scoped commands. Record that hooks are workflow guards and the OS sandbox is the security boundary.",
+        "Translate the same role boundaries into supported OpenCode policy settings; do not copy Codex settings into OpenCode. Validate enforced and unsupported capabilities separately.",
+        "Permit approved read-only exploration and scoped RED/GREEN/self-review; new legitimate command families require a reviewed toolchain descriptor, not arbitrary shell bypass.",
+        "Policy accepts supervisor-issued dynamic path grants for related new files and director-approved existing-file changes. Worker self-assertion is insufficient; protect plan/ledger/runtime and reject conflicting grants."
+      ],
+      "interfaces": {
+        "produces": [
+          "codex_policy.build_overrides(role: str, runtime: dict, request: dict) -> list[str]",
+          "codex_policy.check_tool_call(event: dict, policy: dict) -> dict; returns documented hook decision",
+          "codex_policy.capture_protected_state(request: dict) -> dict",
+          "opencode_policy.build_settings(role: str, runtime: dict, request: dict) -> dict"
+        ],
+        "consumes": [
+          "R1 runtime configuration/schemas; R2 task 1 scoped runners; R2 task 3 role headers"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_role_policy.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_worker_instructions.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Implement both backend adapters with shared session lifecycle",
+      "summary": "Add the direct subprocess Codex backend, immutable attempt evidence, explicit-ID continuation and classified failures. Keep the public dispatch seam and retain OpenCode as an explicit separate backend.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#2-execution-interface-decision",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#7-dispatch-result-and-event-contracts",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#10-resume-retry-interruption-and-retention",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/dispatch",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-opencode",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-codex",
+        "skills/two-model-sdd-pipeline/scripts/codex_dispatch.py",
+        "skills/two-model-sdd-pipeline/scripts/codex_process.py",
+        "skills/two-model-sdd-pipeline/scripts/codex_sessions.py",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-retry",
+        "skills/two-model-sdd-pipeline/scripts/session-clean",
+        "skills/two-model-sdd-pipeline/scripts/opencode_dispatch.py",
+        "skills/two-model-sdd-pipeline/scripts/backend_registry.py"
+      ],
+      "depends_on": [
+        1,
+        3,
+        4
+      ],
+      "acceptance": [
+        "dispatch-codex invokes a resolved native CLI with argv arrays, cwd and UTF-8 stdin prompt, using exec fresh or exec resume explicit ID. Never emit opencode commands, --last, inferred --agent, or a model-coordinator request.",
+        "Separate events.jsonl from stderr.log, require fresh final.json, and write request/result atomically in a unique attempt directory. A failed digest may not hide capture errors; disk-write failure cannot yield success.",
+        "Recognize thread/turn/item/error event families, distinguish progress from final output, and require process exit 0 plus matching successful completion and strict semantic output. Unknown terminal behavior or stale final files fail closed.",
+        "Persist thread identity and model/config/worktree/family bindings before continuation. Incompatible or missing identity blocks; explicitly selected fresh recovery records context_reset and reconstructs complete context.",
+        "Implement exit codes 0,2,3,4,5,6,130,124 as specified. Retry only confirmed pre-execution transient code 5, at most three attempts with delays 1 and 3 seconds; ambiguous post-start failure code 6 never blindly launches fresh work.",
+        "Register PID/start/process-tree ownership for each dispatch and expose bounded cancellation to the run controller; test stdout/stderr pressure, Unicode, split lines, and process interruption on both supported platforms.",
+        "Session cleanup enforces configurable 30-day completed-run retention, preserving active/unresolved resources. Never delete unrelated sessions or provider database rows.",
+        "Preserve legacy OpenCode behavior behind explicit backend selection, including its existing fake-runtime fixtures. An invalid backend or unavailable Codex capability cannot silently route to OpenCode.",
+        "Tests verify fresh/resume argv and schema options using a fake native executable, missing ID, mismatched ID, invalid output, terminal error, transient startup, ambiguous mutation, stale artifacts, and secret-free compact telemetry.",
+        "Register codex and opencode adapters under one explicit backend selector; normalize success/failure/resume/cancel without interpreting semantic content as transport success.",
+        "Preserve OpenCode fresh/resume behavior through fixtures and opt-in live checks. Session IDs cannot cross backend boundaries. Remove hard-coded role model selection from invocation; use confirmed manifest values.",
+        "Retain historical adapter filenames only where consumers require them; shared session/cancellation helpers must accept an explicit backend and cannot assume Codex event formats.",
+        "Retain completed sessions and evidence for 30 days by default, configurable; active/unresolved runs are exempt. Cleanup only run-owned resources through supported adapter APIs; unsupported remote deletion is reported, never simulated by database edits."
+      ],
+      "interfaces": {
+        "produces": [
+          "codex_dispatch.run_dispatch(request: dict, runtime: dict) -> dict; result follows dispatch contract",
+          "codex_sessions.load_session(identity: dict) -> dict | None",
+          "codex_sessions.store_session(identity: dict, record: dict) -> None",
+          "codex_process.stop_owned_processes(records: list[dict], grace_seconds: float) -> None",
+          "backend_registry.resolve(backend: str) -> adapter exposing invoke(request: dict) -> dict and cancel(ownership: dict) -> dict"
+        ],
+        "consumes": [
+          "R1 shared contracts; R2 task 1 context; R2 task 3 headers; R2 task 4 role policies"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_dispatch.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_resume_and_retry.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_process_ownership.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Ship and verify worker runtime contracts for both backends",
+      "summary": "Integrate runtime artifacts into both package routes and document capability evidence without claiming a complete pipeline.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d01--one-engine-two-adapters",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "scripts/package-codex-plugin.sh",
+        "scripts/sync-to-codex-plugin.sh",
+        "skills/two-model-sdd-pipeline/references/worker-runtime.md",
+        "skills/using-superpowers/references/codex-tools.md",
+        "README.md"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "acceptance": [
+        "Extract both delivery bundles in disposable paths and resolve all referenced prompts/schemas/runners without source checkout assumptions.",
+        "Exercise fake fresh/resume, interrupted, malformed, wrong-session, unsupported-policy and cancellation cases for both backends; assert no alternate provider fallback.",
+        "Document verified versus unknown support by runtime/platform; live probes require explicit model confirmation and preserve usage/evidence. No simulated result certifies live permission behavior.",
+        "Correct native Codex subagent guidance using the actual contract; keep model-directed desktop tools distinct from script-launched worker sessions.",
+        "Round closure runs existing generic/Flutter regression suites; do not wire the unfinished full pipeline launcher before R3."
+      ],
+      "interfaces": {
+        "produces": [
+          "Documented worker adapter compatibility matrix and packaged runtime artifacts"
+        ],
+        "consumes": [
+          "R1 packaging/install contracts; R2 tasks 1–5"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r2_packaged_workers.py",
+          "skills/two-model-sdd-pipeline/tests/test_r2_backend_contract_parity.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    }
+  ],
+  "confirmed_decisions": {
+    "record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+    "scope": "All task acceptance is governed by the confirmed decisions; R6 is deferred."
+  },
+  "decision_record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+  "active_task_count": 6
+}

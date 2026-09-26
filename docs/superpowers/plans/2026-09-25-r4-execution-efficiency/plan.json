@@ -1,0 +1,311 @@
+{
+  "version": 1,
+  "title": "R4: Bounded dispatch and affected verification",
+  "date": "2026-09-25",
+  "status": "planned_not_implemented",
+  "round_id": "R4",
+  "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
+  "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
+  "roadmap_doc": "roadmap.md",
+  "global_constraints": [
+    "GC01: Script CEO owns dispatch, scheduling, gates, authoritative state, commits, and publication; no coordinating LLM is introduced.",
+    "GC02: The Codex path never executes OpenCode or silently changes runtime, model, reasoning effort, or role.",
+    "GC03: Every role receives explicit model and reasoning settings; operator, reviewer, and director have separate identities and permissions.",
+    "GC04: Plans, specs, prompts, ledger summaries, and implementation comments are English; product UI copy retains its established locale.",
+    "GC05: Codex workers inherit no brainstorming transcript; all required task context comes from versioned artifacts and explicit packages.",
+    "GC06: Operator-owned RED/GREEN and independent semantic review remain mandatory; mechanical green alone never approves a task or branch.",
+    "GC07: Raw evidence determines gates; RTK only changes the model-visible rendering and never the command exit code.",
+    "GC08: Unknown, malformed, stale, interrupted, or mismatched results never advance authoritative state.",
+    "GC09: Resume is confined to a recorded task family and role; unrelated tasks and closing use fresh contexts.",
+    "GC10: Parallel workers use distinct worktrees; shared plan writes, integration, and publication are serialized by scripts.",
+    "GC11: Existing user changes, unrelated branches, Codex sessions, credentials, and installed plugin caches are preserved.",
+    "GC12: Jev remains optional advisory inference; it cannot dispatch, select a tier, approve, route, or write the authoritative ledger.",
+    "GC13: Each new run confirms local-only or push-and-PR publication and concurrency at launch; resume retains those choices and no automatic merge is allowed.",
+    "GC14: Compatibility is claimed only for runtime/platform/toolchain combinations backed by the acceptance matrix."
+  ],
+  "prerequisite_rounds": [
+    {
+      "round": "R1",
+      "plan": "docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    },
+    {
+      "round": "R2",
+      "plan": "docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    },
+    {
+      "round": "R3",
+      "plan": "docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    }
+  ],
+  "execution_handoff": {
+    "implementation_authorized": false,
+    "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
+    "bootstrap": "Use the accepted R3 shared runner from a pinned bundle outside worker edits.",
+    "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
+    "drift_check": "Before execution compare exact paths, schemas, interface signatures and prerequisites with accepted predecessor commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
+  },
+  "scheduling": {
+    "task_ids": "Local to this round; depends_on never names another round's task ID.",
+    "cross_round": "Run rounds in order. Shared file paths across rounds are intentional sequential edits.",
+    "resources": "touches assigns one owner per implementation path in this round. New test files listed in verification are additional exclusive write resources; scheduler must include them."
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Centralize correction routing and enforce dispatch budgets",
+      "summary": "Remove unnecessary director hops while preserving independent semantic review and bounded recovery.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d09--dispatch-only-at-semantic-boundaries",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/task-run",
+        "skills/two-model-sdd-pipeline/scripts/coder-gate",
+        "skills/two-model-sdd-pipeline/scripts/route-next",
+        "skills/two-model-sdd-pipeline/scripts/review-dispatch",
+        "skills/two-model-sdd-pipeline/scripts/review_dispatch.py",
+        "skills/two-model-sdd-pipeline/scripts/correction_policy.py",
+        "skills/two-model-sdd-pipeline/scripts/dispatch_budget.py",
+        "skills/flutter-app-pipeline/scripts/green-gate",
+        "skills/two-model-sdd-pipeline/schemas/reviewer-result.schema.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Refresh the per-site dispatch inventory and assign each semantic invocation one owner. Flutter gate delegates review to the shared owner.",
+        "Route SEND_BACK directly to the coder when structured scope is in_scope and paths/contracts fit the approved task plus valid scope grants. Structural/uncertain/viability findings require director; malformed metadata blocks.",
+        "Default coder cycle allowances are [5,3,3], at most three cycles and eleven coder invocations. After each exhausted cycle return to director; pause after the third assessment or earlier unresolved ruling. Configure before run and persist counts across crashes, scope changes and corrective child tasks.",
+        "Gate infrastructure failure leaves a pending gate/review, not a new coding request. Classify transport attempts separately; never double-charge resumed/reconciled invocation identities.",
+        "Keep updated independent re-review candidate-bound. Scope changes use R3 canonical transactions. Reviewer cannot approve its own fixes.",
+        "Fixtures cover normal two-invocation path, in-scope fix without director, structural escalation, missing session, budget exhaustion, crash replay and duplicate Flutter review prevention.",
+        "Count external coder invocations, not internal RED/GREEN turns. Separate confirmed pre-start transport retries and infrastructure failures from coding failures; ambiguous post-start invocations are reconciled, never silently erased from the budget."
+      ],
+      "interfaces": {
+        "produces": [
+          "correction_policy.decide(review: dict, task: dict) -> dict action/reason",
+          "dispatch_budget.reserve(identity: dict, policy: dict) -> dict idempotent reservation"
+        ],
+        "consumes": [
+          "R3 ledger/router/transactions; R2 worker adapters; confirmed run budget"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r4_correction_routing.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_dispatch_budget.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Build evidence-bound affected-test selection",
+      "summary": "Compute tests from actual changes and dependency impact with conservative fallback.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d10--affected-tests-per-task-complete-suite-at-closing",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/test_impact.py",
+        "skills/two-model-sdd-pipeline/scripts/select-tests",
+        "skills/two-model-sdd-pipeline/schemas/test-impact.schema.json",
+        "skills/two-model-sdd-pipeline/toolchains/test-impact-rules.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Inputs include actual base/head diff including deleted/renamed files, task scope, test paths, dependency reverse edges and toolchain rules. Output contains commands/tests/reasons/gaps, tree/config/environment hashes and policy version.",
+        "Include affected consumers, contracts and integration checks. A changed production path with no match is an explicit gap requiring broader tests.",
+        "Missing/stale graph, unknown language, dependency/build/test configuration, shared infrastructure or generated contract changes expand to full suite. Do not infer completeness from file-name proximity.",
+        "Provide initial Python unittest and Flutter/Dart rules with demonstrable mappings; unsupported Node/Rust/Go configurations retain full-suite descriptors until adapter evidence exists.",
+        "Use deterministic traversal and stable output; reject unsafe argv/path selectors and malformed graphs. Cover cycles, renames, deleted tests, transitive imports and shared-code changes."
+      ],
+      "interfaces": {
+        "produces": [
+          "test_impact.select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict",
+          "select-tests --request FILE --output FILE"
+        ],
+        "consumes": [
+          "R2 executable toolchain descriptors; R3 candidate/base identities"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r4_test_impact.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_impact_fallbacks.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Record baseline failures and explicit closing waivers",
+      "summary": "Distinguish inherited failures from new regressions without silently relaxing completion.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/baseline_failures.py",
+        "skills/two-model-sdd-pipeline/scripts/baseline-check",
+        "skills/two-model-sdd-pipeline/schemas/baseline-waiver.schema.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Capture suite/test identities, raw failures, baseline source/environment/command hashes before changed-code verification. Do not classify an unexplained failure as baseline merely because it is familiar.",
+        "Allow demonstrably unaffected work to continue; new regressions and ambiguous failures block affected work. Do not automatically add unrelated repairs to scope.",
+        "At closing rerun the required suites and compare evidence. Remaining proven baseline failures require an explicit user waiver bound to failure identities and final candidate; stale or broadened waivers are rejected.",
+        "Report completed-with-waived-baseline distinctly from green completion, preserving raw failing results. Never let a worker issue its own waiver or waive new regressions.",
+        "Cover renamed tests, changed error signatures, environment drift, new failures, unaffected task continuation and candidate-bound waiver expiry."
+      ],
+      "interfaces": {
+        "produces": [
+          "baseline_failures.compare(baseline: dict, current: dict) -> dict",
+          "baseline_failures.validate_waiver(waiver: dict, candidate: dict) -> dict"
+        ],
+        "consumes": [
+          "R3 evidence/candidate identity and script-owned state; recorded user waiver"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r4_baseline_failures.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_baseline_waivers.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories, fake network/runtime responses and isolated configuration.",
+          "Observe meaningful RED before implementation; preserve baseline, candidate and raw evidence.",
+          "Run required final suites; distinguish new regressions from explicitly waived baseline failures."
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Apply impact gates at task, integration and closing boundaries",
+      "summary": "Wire selective verification without weakening final full-suite requirements.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d10--affected-tests-per-task-complete-suite-at-closing",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/run-gates",
+        "skills/two-model-sdd-pipeline/scripts/integrate",
+        "skills/two-model-sdd-pipeline/scripts/final-gate",
+        "skills/two-model-sdd-pipeline/scripts/gate_evidence.py",
+        "skills/flutter-app-pipeline/scripts/gate-entry",
+        "skills/two-model-sdd-pipeline/prompts/core-operator.md"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3
+      ],
+      "acceptance": [
+        "Task gate uses verified impact manifest, not coder-provided arbitrary test lists; static analysis and formatting retain required scope.",
+        "Recompute impact on each merged candidate; do not reuse isolated worktree success for a changed merged tree.",
+        "Closing requires every configured suite for every affected toolchain. Cache reuse needs identical tree/environment/commands/config; otherwise rerun.",
+        "Final new regressions block completion/publication and reopen work. Proven pre-existing failures require a valid candidate-bound user waiver; preserve a non-green, explicitly waived completion status. Unknown impact broadens test selection.",
+        "Update operator guidance to focused iteration and script-owned verification, explicitly overriding upstream pre-commit full-suite language only under this verified policy.",
+        "Fixtures simulate cross-task regression, stale evidence, configuration changes, no test matches, mixed toolchains and final failure."
+      ],
+      "interfaces": {
+        "produces": [
+          "gate_evidence.matches(record: dict, candidate: dict) -> bool",
+          "Task/integration/closing evidence records bound to impact manifest"
+        ],
+        "consumes": [
+          "R4 task 2 impact selector; R4 task 3 baseline/waiver result; R3 gates and closing; R4 task 1 routing"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r4_impact_gate_wiring.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_final_suite.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Add dispatch-cost audits, documentation and acceptance",
+      "summary": "Strengthen skill-scripter and quantify execution cost without claiming savings from call counts alone.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d09--dispatch-only-at-semantic-boundaries",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/skill-scripter/SKILL.md",
+        "skills/write-script/SKILL.md",
+        "skills/two-model-sdd-pipeline/scripts/dispatch_metrics.py",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-audit",
+        "docs/superpowers/adr/2026-09-25-affected-verification-and-bounded-dispatch.md",
+        "README.md"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "acceptance": [
+        "Skill-scripter requires every call site's role, trigger, frequency, budget, termination entry and keep/remove/merge decision, including dynamic calls and worker delegation.",
+        "Metrics separate semantic invocations, backend model turns, transport retries, Jev calls, input/output/cached tokens when available, latency and escaped-defect observations; unknown usage stays null.",
+        "Audit rejects newly introduced mechanical model routing and unbounded call loops; semantic calls carry a justification.",
+        "Record supersession of historical unbounded retry and ADR-0012 per-merge testing policy without erasing history.",
+        "Acceptance covers both backend fixtures, regression/quality gates and full final suites. Report measured results; do not assume fewer invocations proves savings."
+      ],
+      "interfaces": {
+        "produces": [
+          "dispatch_metrics.summarize(records: list) -> dict",
+          "dispatch-audit --inventory FILE --policy FILE --output FILE"
+        ],
+        "consumes": [
+          "R4 tasks 1–4; normalized invocation/evidence records"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r4_dispatch_metrics.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_efficiency_acceptance.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    }
+  ],
+  "confirmed_decisions": {
+    "record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+    "scope": "All task acceptance is governed by the confirmed decisions; R6 is deferred."
+  },
+  "decision_record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+  "active_task_count": 5
+}

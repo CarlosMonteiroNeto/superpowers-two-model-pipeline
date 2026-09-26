@@ -220,3 +220,91 @@ protocol.
 Bounded re-escalation is preserved: a genuine second escalation after a ruling
 still exits 1 (`arbitration did not resolve`), so the new attempt cannot become
 an unbounded director loop.
+
+## Codex adaptation review and proposed design (2026-09-25)
+
+The user requested a complete stage-by-stage Codex compatibility review and a
+specification plus complete JSON plan. The reviewed local `main` was confirmed
+equal to `origin/main` after fetch at
+`596951fa0da14b0010998c29c2810bff4f2e8b02`. Runtime implementation has not started.
+
+Category Skeleton for this tooling work, derived from that request:
+
+1. **generic category:** developer tooling.
+2. **specific category:** deterministic orchestration of Codex coding agents.
+3. **original implementations:** two configurable model tiers; script-controlled
+   dispatch and routing; independent semantic review; task-family session
+   retention; plan/ledger recovery; isolated parallel worktrees.
+
+The proposed execution interface is `codex exec --json` with explicit-ID
+`codex exec resume`, supervised directly by scripts. These are independent
+Codex worker sessions; native subagent linkage to a desktop conversation is
+not a verified external-script capability. Native model-directed delegation
+is unnecessary for this pipeline's script-owned parallelism.
+
+The review found changes needed across initialization, packaging, roles and
+permissions, context, toolchains, result parsing, recovery, parallel state,
+closing, and publication. It also found inherited correctness gaps that a
+Codex port must address. The reviewed role files select Terra/low and Sol/high;
+older DeepSeek references above describe historical configuration and must not
+be used to resolve the proposed Codex tiers. Runtime model availability still
+requires verification.
+
+Proposed contracts and task definitions live in:
+
+- `docs/superpowers/reviews/2026-09-25-codex-pipeline-review.md`
+- `docs/superpowers/specs/2026-09-25-codex-pipeline-design.md`
+- `docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json`
+
+This section records review provenance and proposed scope. The implementation
+plan requires a Codex bootstrap workflow because today's `run-pipeline` still
+launches OpenCode. No runtime compatibility certification, implementation,
+model migration, or publication has been performed by this authoring task.
+
+## Shared pipeline roadmap (2026-09-25, planning revision)
+
+The user accepted one shared engine with Codex/OpenCode adapters and a
+version-pinned project harness. The project category is now developer tooling
+for deterministic multi-backend coding pipelines. Communication and new artifacts
+are English-only. Runtime implementation remains future work.
+
+`roadmap.md` records D01–D15 and R1–R6. It is the current planning authority for
+safe updates, documentation ownership, model selection, prompt reuse, coder
+autonomy, dispatch budgets, testing, skills, templates and early Jev classification.
+Historical model names above are not defaults for future runs. Historical unbounded
+retry and per-merge full-suite policies remain implemented behavior until the
+roadmap's staged replacements pass acceptance; do not silently apply them now.
+
+Documentation consolidation is planned: README.md for setup/usage, CONTEXT.md
+for current decisions/index, README-LLM.md temporarily reduced to a compatibility
+pointer. No documents are removed during this brainstorming task.
+
+The Codex transition spec now defines shared-backend boundaries. Its existing
+plan.json covers only R1 (four complete tasks). The earlier twelve-task proposal
+is preserved as non-executable transition-backlog.json. Future rounds require
+separate plans derived from the then-current repository. Brainstorming scope
+approval does not require another written-spec approval before plan authoring.
+
+## Complete roadmap plans (2026-09-25 follow-up)
+
+At the user's explicit request, R2–R6 were authored now instead of waiting for
+future planning rounds. All six rounds have complete plan.json files: 28 tasks
+in total, including four in R1. roadmap.md links every plan. Each later round
+requires accepted predecessor evidence and a source/interface drift check before
+execution. This replaces the earlier decision to defer later plan authoring;
+it does not authorize immediate implementation or publication.
+
+## Confirmed design consolidation (2026-09-25)
+
+The subsequent decision-by-decision review supersedes the earlier proposed
+six-round/28-task scope. See roadmap.md and
+`docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md` for the 24
+confirmed choices and task coverage. There are now 29 active tasks across R1–R5;
+R6 is non-executable future investigation material. Runtime code remains unchanged.
+
+The user chose one canonical README.md. R1 will migrate useful current content
+and consumers, then retire this file and README-LLM.md. Their presence today is
+pre-migration state, not a second authoritative design. The current plans encode
+5/3/3 coder cycles, launch-time choices, safe automatic installation updates,
+30-day retention/source refresh, automatic compatible adoption/dependencies,
+script-owned dynamic file scope and explicit baseline-failure waivers.

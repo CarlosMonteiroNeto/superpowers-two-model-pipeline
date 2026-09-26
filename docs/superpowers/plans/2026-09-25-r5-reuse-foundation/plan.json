@@ -1,0 +1,435 @@
+{
+  "version": 1,
+  "title": "R5: Generic reuse, requirement profiles and templates",
+  "date": "2026-09-25",
+  "status": "planned_not_implemented",
+  "round_id": "R5",
+  "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
+  "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
+  "roadmap_doc": "roadmap.md",
+  "global_constraints": [
+    "GC01: Script CEO owns dispatch, scheduling, gates, authoritative state, commits, and publication; no coordinating LLM is introduced.",
+    "GC02: The Codex path never executes OpenCode or silently changes runtime, model, reasoning effort, or role.",
+    "GC03: Every role receives explicit model and reasoning settings; operator, reviewer, and director have separate identities and permissions.",
+    "GC04: Plans, specs, prompts, ledger summaries, and implementation comments are English; product UI copy retains its established locale.",
+    "GC05: Codex workers inherit no brainstorming transcript; all required task context comes from versioned artifacts and explicit packages.",
+    "GC06: Operator-owned RED/GREEN and independent semantic review remain mandatory; mechanical green alone never approves a task or branch.",
+    "GC07: Raw evidence determines gates; RTK only changes the model-visible rendering and never the command exit code.",
+    "GC08: Unknown, malformed, stale, interrupted, or mismatched results never advance authoritative state.",
+    "GC09: Resume is confined to a recorded task family and role; unrelated tasks and closing use fresh contexts.",
+    "GC10: Parallel workers use distinct worktrees; shared plan writes, integration, and publication are serialized by scripts.",
+    "GC11: Existing user changes, unrelated branches, Codex sessions, credentials, and installed plugin caches are preserved.",
+    "GC12: Jev remains optional advisory inference; it cannot dispatch, select a tier, approve, route, or write the authoritative ledger.",
+    "GC13: Each new run confirms local-only or push-and-PR publication and concurrency at launch; resume retains those choices and no automatic merge is allowed.",
+    "GC14: Compatibility is claimed only for runtime/platform/toolchain combinations backed by the acceptance matrix."
+  ],
+  "prerequisite_rounds": [
+    {
+      "round": "R1",
+      "plan": "docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    },
+    {
+      "round": "R2",
+      "plan": "docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    },
+    {
+      "round": "R3",
+      "plan": "docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    },
+    {
+      "round": "R4",
+      "plan": "docs/superpowers/plans/2026-09-25-r4-execution-efficiency/plan.json",
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+    }
+  ],
+  "execution_handoff": {
+    "implementation_authorized": false,
+    "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
+    "bootstrap": "Use the accepted R3 shared runner from a pinned bundle outside worker edits.",
+    "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
+    "drift_check": "Before execution compare exact paths, schemas, interface signatures and prerequisites with accepted predecessor commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
+  },
+  "scheduling": {
+    "task_ids": "Local to this round; depends_on never names another round's task ID.",
+    "cross_round": "Run rounds in order. Shared file paths across rounds are intentional sequential edits.",
+    "resources": "touches assigns one owner per implementation path in this round. New test files listed in verification are additional exclusive write resources; scheduler must include them."
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Audit every Flutter phase and assign shared capability ownership",
+      "summary": "Create an exhaustive source-backed disposition matrix before moving implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "docs/superpowers/reviews/flutter-stage-generalization.md",
+        "skills/two-model-sdd-pipeline/schemas/stage-capability.schema.json",
+        "skills/two-model-sdd-pipeline/stage-capabilities.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Enumerate Flutter phases 0–8 and all scripts/callers: entry/setup, commercial/technical/UI requirements, research, template search/score/evidence/catalog/recall/triage, package selection, plan authoring, dependency preparation, RED/GREEN/review/RTK, final verification/docs and authentication.",
+        "Classify each capability shared, Flutter-specific, or requiring adaptation; cite actual source/callers and target owner. Mark already-shared shims as such rather than creating duplicate implementations.",
+        "Generic requirements, research/adoption lifecycle and evidence orchestration belong in the shared engine; pub.dev scoring/formulas, Dart tooling and Flutter UI implementation stay in ecosystem adapters.",
+        "Map each disposition to R5 tasks 2–7 or an already accepted R1–R4 owner. A newly discovered material change requires explicit plan revision, not hidden director expansion.",
+        "Do not promise added language support. A non-Flutter fixture proves generic contracts only. Inventory and schema checks cover every script in the current Flutter directory."
+      ],
+      "interfaces": {
+        "produces": [
+          "stage-capabilities.json: stage/source/current_owner/disposition/target_owner/plan_task/evidence"
+        ],
+        "consumes": [
+          "Accepted R1–R4 source and current Flutter SKILL/scripts"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_stage_inventory.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Use offline/disposable fixtures; never create a remote repository or publish without the applicable explicit authority.",
+          "Run affected existing checks and final suites; preserve candidate-bound baseline waiver semantics."
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Extract generic catalog and adoption contracts from Flutter",
+      "summary": "Preserve evidence and provenance while introducing ecosystem-neutral persistence.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d11--generic-capabilities-ecosystem-adapters",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/asset_catalog.py",
+        "skills/two-model-sdd-pipeline/scripts/asset-catalog",
+        "skills/two-model-sdd-pipeline/schemas/asset.schema.json",
+        "skills/flutter-app-pipeline/scripts/template_catalog.py",
+        "skills/flutter-app-pipeline/scripts/template-catalog",
+        "skills/flutter-app-pipeline/scripts/template_evidence.py"
+      ],
+      "depends_on": [
+        1
+      ],
+      "acceptance": [
+        "Define ecosystem/name/version/source/license/evidence-hash/compatibility identity, derived triage/vector metadata and separate adoption outcomes.",
+        "Migrate SQLite transactionally with schema version and backup; failed migration preserves the original database and does not report success.",
+        "Preserve current evidence-hash invalidation, advisory policy separation and outcome provenance. Do not treat recall score as adoption approval.",
+        "Flutter commands delegate through compatibility adapters and preserve documented exit codes; retain pub.dev-specific scoring outside generic persistence.",
+        "Use a second ecosystem fixture (Python) to prove generic contracts without requiring a new production search service."
+      ],
+      "interfaces": {
+        "produces": [
+          "asset_catalog.upsert(database: str, evidence: dict) -> dict",
+          "asset_catalog.record_outcome(database: str, outcome: dict) -> dict"
+        ],
+        "consumes": [
+          "R5 task 1 stage inventory; current Flutter catalog/evidence; accepted shared runtime"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_catalog_migration.py",
+          "skills/two-model-sdd-pipeline/tests/test_r5_generic_catalog.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Generalize deterministic recall and template refresh",
+      "summary": "Move shared recall orchestration while keeping provider scoring and evidence adapters specific.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d11--generic-capabilities-ecosystem-adapters",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/asset_recall.py",
+        "skills/two-model-sdd-pipeline/scripts/asset-refresh",
+        "skills/two-model-sdd-pipeline/scripts/asset-recall",
+        "skills/flutter-app-pipeline/scripts/template_recall.py",
+        "skills/flutter-app-pipeline/scripts/template_refresh.py",
+        "skills/flutter-app-pipeline/scripts/template_embed.py",
+        "skills/flutter-app-pipeline/scripts/recall_suitability.py",
+        "skills/flutter-app-pipeline/scripts/template-recall",
+        "skills/flutter-app-pipeline/scripts/template-refresh",
+        "skills/flutter-app-pipeline/scripts/template-embed"
+      ],
+      "depends_on": [
+        1,
+        2
+      ],
+      "acceptance": [
+        "Recall filters fresh compatible evidence using category/dependency overlap and optional validated vector ranking. Persist source/vector/model/dimension/hash identity.",
+        "Missing setup is distinct from valid MISS; optional vector absence works only in explicitly selected deterministic mode.",
+        "Refresh uses ecosystem evidence adapters and atomically preserves prior rows on collection/validation failure. Never adopt/download source during recall.",
+        "Preserve Jev Sites 1/2 boundaries and fallback behavior; do not generalize Flutter popularity thresholds to other registries.",
+        "Compare archive behaviors against current contracts; retain newer provenance protection. Cover stale evidence, malformed vectors, refresh failures and two ecosystem fixtures."
+      ],
+      "interfaces": {
+        "produces": [
+          "asset_recall.query(database: str, query: dict) -> dict",
+          "asset_recall.refresh(database: str, evidence: dict) -> dict"
+        ],
+        "consumes": [
+          "R5 task 2 generic catalog; ecosystem evidence/scoring adapters"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_generic_recall.py",
+          "skills/two-model-sdd-pipeline/tests/test_r5_refresh_parity.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Introduce applicable baseline requirement profiles",
+      "summary": "Make structural product requirements explicit during planning without adding irrelevant features.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d13--baseline-requirements-are-profiles-not-unconditional-features",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/requirement_profiles.py",
+        "skills/two-model-sdd-pipeline/scripts/requirements-resolve",
+        "skills/two-model-sdd-pipeline/schemas/requirements-profile.schema.json",
+        "skills/two-model-sdd-pipeline/profiles/generic.json",
+        "skills/flutter-app-pipeline/profiles/flutter-forms.json"
+      ],
+      "depends_on": [
+        1,
+        2
+      ],
+      "acceptance": [
+        "Profiles declare identity/version/applicability, requirement IDs, acceptance checks, dependencies and opt-out reasons; resolve generic then ecosystem/category overlays with conflict detection.",
+        "Include input normalization, locale-aware masks, validation boundaries, accessible labels/errors/focus, loading/empty/error states, duplicate-submit prevention, retries, date/currency handling and secret-safe logging as applicable requirements.",
+        "Separate masks from validation; country-specific identifiers and payment rules require matching product scope. No automatic auth/payment/analytics features.",
+        "Planning emits selected requirements and exceptions into task acceptance before implementation. Unresolved conflicts ask a focused question, not silent precedence.",
+        "Test locale differences, non-UI tools, opted-out requirements, conflicting overlays, absent client/server boundaries and deterministic output.",
+        "Apply applicable defaults and present one consolidated requirements summary during brainstorming. Ask only about ambiguity/exceptions; do not silently add defaults or require approval for every item."
+      ],
+      "interfaces": {
+        "produces": [
+          "requirement_profiles.resolve(context: dict, profiles: list) -> dict requirements/exceptions/questions"
+        ],
+        "consumes": [
+          "R5 task 1 stage inventory; R5 task 2 asset identity; R2 skill manifest; approved product context"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_requirement_profiles.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Build safe template repository and promotion workflows",
+      "summary": "Package reviewed reusable assets with explicit repository configuration and publication authority.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d14--versioned-reusable-template-repository",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/template_repository.py",
+        "skills/two-model-sdd-pipeline/scripts/template-repository",
+        "skills/two-model-sdd-pipeline/scripts/promote-template",
+        "skills/two-model-sdd-pipeline/scripts/template_promotion.py",
+        "skills/two-model-sdd-pipeline/schemas/template-release.schema.json",
+        "skills/two-model-sdd-pipeline/references/template-repository.md"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "acceptance": [
+        "Use the confirmed separate private repository CarlosMonteiroNeto/code-templates. Keep remote provisioning as an explicit implementation action; this planning task creates no remote. Reuse an existing matching repository, validate ownership/visibility and do not silently publish client-specific material.",
+        "Scaffold profiles/templates/packages/catalog manifests in a named staging repository; exclude credentials, SQLite caches, embeddings and private project evidence.",
+        "Adoption success nominates promotion; explicit selection plus license/provenance/API/dependency/tests checks permits packaging. No TODO dependency versions or automatic publication.",
+        "Projects pin immutable release/commit and track local adaptations. Update preview compares changes; conflicts preserve local source and require user merge.",
+        "Promotion is idempotent by asset/version/source identity, refuses overwrite by default and records outcomes transactionally. Publication is a separate explicitly authorized operation.",
+        "Archive code is a reference only: implement current contracts with path traversal protection, dependency verification and duplicate-promotion fixtures."
+      ],
+      "interfaces": {
+        "produces": [
+          "template_repository.preview_update(binding: dict, candidate: dict) -> dict",
+          "template_promotion.stage(request: dict, catalog: dict) -> dict staged manifest"
+        ],
+        "consumes": [
+          "R5 tasks 2–4; R1 safe update lifecycle; confirmed repository identity; per-asset publication authorization"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_template_repository.py",
+          "skills/two-model-sdd-pipeline/tests/test_r5_promotion.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Generalize research, dependency preparation and compatible adoption",
+      "summary": "Expose generally useful Flutter-only lifecycle behavior through shared contracts and preserve ecosystem-specific implementation.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/solution_research.py",
+        "skills/two-model-sdd-pipeline/scripts/solution-research",
+        "skills/two-model-sdd-pipeline/scripts/dependency_policy.py",
+        "skills/two-model-sdd-pipeline/scripts/dependency-prepare",
+        "skills/two-model-sdd-pipeline/scripts/template_adoption.py",
+        "skills/two-model-sdd-pipeline/scripts/template-adopt",
+        "skills/flutter-app-pipeline/scripts/pub-sync",
+        "skills/flutter-app-pipeline/scripts/template-search",
+        "skills/flutter-app-pipeline/scripts/_template_search_collect.py",
+        "skills/flutter-app-pipeline/scripts/pkg-score",
+        "skills/flutter-app-pipeline/scripts/pkg_score.py",
+        "skills/flutter-app-pipeline/scripts/template-score",
+        "skills/flutter-app-pipeline/scripts/template_score.py",
+        "skills/flutter-app-pipeline/scripts/rtk-run"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "acceptance": [
+        "Implement shared solution research records (requirement, alternatives, evidence, compatibility, license, selection/reason) and dependency preparation protocols using stage inventory ownership. Avoid additional agent dispatch for mechanical lookup or validation.",
+        "Preserve pub.dev/GitHub scoring semantics in Flutter adapters; generic callers consume evidence and do not apply Flutter numerical thresholds to every ecosystem.",
+        "Automatically adopt suitable templates when requirements/technical compatibility checks pass; raise questions only for changes/conflicts requiring judgment. Source score alone cannot authorize adoption. Stage material safely and preserve target project changes.",
+        "Allow new compatible, license-approved dependencies without separate user approval; unknown/conflicting checks ask the user. Acquire director-approved existing manifest/lockfile grants and coordinate writes through the shared resource lock before install.",
+        "Record versions, license/compatibility evidence, downloads/cache effects and source provenance. Keep secrets out of artifacts; never describe pub get as lockfile-only.",
+        "Keep RED/GREEN/review/RTK/final behavior routed to already shared owners. Generalize requirements and research entry points while leaving Flutter-specific UI/tooling in adapters; no graphify stage.",
+        "Fixtures prove generic operation without Flutter binaries when no Flutter capability applies, existing Flutter command compatibility, auto-adoption, ambiguous compatibility, dependency conflict and concurrent manifest claims."
+      ],
+      "interfaces": {
+        "produces": [
+          "solution_research.collect(request: dict, adapters: dict) -> dict",
+          "dependency_policy.evaluate(request: dict, evidence: dict) -> dict allow/question",
+          "template_adoption.prepare(request: dict, evidence: dict) -> dict adopted/question/block"
+        ],
+        "consumes": [
+          "R5 tasks 1–5; R3 scope/resource grants; R4 evidence/budgets"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_shared_research.py",
+          "skills/two-model-sdd-pipeline/tests/test_r5_dependency_policy.py",
+          "skills/two-model-sdd-pipeline/tests/test_r5_template_adoption.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Use offline/disposable fixtures; never create a remote repository or publish without the applicable explicit authority.",
+          "Run affected existing checks and final suites; preserve candidate-bound baseline waiver semantics."
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "title": "Integrate reuse into planning and prove ecosystem compatibility",
+      "summary": "Wire profiles, recall and promotion into skills and packaging without per-task inference overhead.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
+        "roadmap.md#d12--skill-discovery-per-task",
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+      ],
+      "touches": [
+        "skills/brainstorming/SKILL.md",
+        "skills/writing-plans/SKILL.md",
+        "skills/two-model-sdd-pipeline/SKILL.md",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "scripts/package-codex-plugin.sh",
+        "README.md",
+        "docs/superpowers/reviews/template-archive-reconciliation.md"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "acceptance": [
+        "Planning resolves profiles and installed skills, consults cached external sources for missing coverage, and automatically adopts compatible templates. Present a consolidated baseline summary; ask only about ambiguous applicability, conflicts or exceptions. External skill installation still requires approval.",
+        "Generic tooling/debug tasks do not receive irrelevant Flutter/category requirements. Missing required skill blocks; optional omissions are explicit.",
+        "Record archive-by-file dispositions with current contract reasons; do not copy stale code or reinstate a graphify dependency.",
+        "Package generic and ecosystem profiles/assets fully; retain compatibility wrappers for existing Flutter callers.",
+        "Acceptance covers one Flutter planning fixture and one Python fixture, migration rollback, adoption outcomes, update conflicts and license/provenance failures; full suites close the round.",
+        "Every Flutter stage inventory row resolves to a tested shared capability or an intentionally specialized adapter. No newly supported language is claimed from a generic fixture."
+      ],
+      "interfaces": {
+        "produces": [
+          "Documented reusable-asset planning flow and ecosystem acceptance report"
+        ],
+        "consumes": [
+          "R5 tasks 1–6; R2 registry and pinned skill/header contracts"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_r5_planning_reuse.py",
+          "skills/two-model-sdd-pipeline/tests/test_r5_ecosystem_acceptance.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r5_*.py' -v",
+        "additional_checks": [
+          "Capture meaningful failing RED before implementation; retain raw output and final candidate identity.",
+          "Use disposable repositories, fake provider responses and isolated configuration; live inference is opt-in with confirmed models.",
+          "Run affected checks and complete configured suites at closure. New regressions block; proven baseline failures require the explicit waiver contract and must not be reported green.",
+          "Validate both backend paths for shared behavior; mock tests do not certify live capability. Bind round acceptance to the final source commit and declared runtime versions."
+        ]
+      }
+    }
+  ],
+  "confirmed_decisions": {
+    "record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+    "scope": "All task acceptance is governed by the confirmed decisions; R6 is deferred."
+  },
+  "decision_record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
+  "active_task_count": 7
+}

@@ -1,0 +1,821 @@
+{
+  "version": 1,
+  "title": "Complete Codex adaptation of the two-model pipeline",
+  "date": "2026-09-25",
+  "status": "superseded_reference_only",
+  "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
+  "review_doc": "docs/superpowers/reviews/2026-09-25-codex-pipeline-review.md",
+  "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
+  "category_skeleton": {
+    "generic_category": "developer tooling",
+    "specific_category": "deterministic orchestration of Codex coding agents",
+    "original_implementations": [
+      "two configurable model tiers",
+      "script-controlled dispatch and routing",
+      "independent semantic review",
+      "task-family session retention",
+      "plan/ledger recovery",
+      "isolated parallel worktrees"
+    ]
+  },
+  "global_constraints": [
+    "GC01: Script CEO owns dispatch, scheduling, gates, authoritative state, commits, and publication; no coordinating LLM is introduced.",
+    "GC02: The Codex path never executes OpenCode or silently changes runtime, model, reasoning effort, or role.",
+    "GC03: Every role receives explicit model and reasoning settings; operator, reviewer, and director have separate identities and permissions.",
+    "GC04: Plans, specs, prompts, ledger summaries, and implementation comments are English; product UI copy retains its established locale.",
+    "GC05: Codex workers inherit no brainstorming transcript; all required task context comes from versioned artifacts and explicit packages.",
+    "GC06: Operator-owned RED/GREEN and independent semantic review remain mandatory; mechanical green alone never approves a task or branch.",
+    "GC07: Raw evidence determines gates; RTK only changes the model-visible rendering and never the command exit code.",
+    "GC08: Unknown, malformed, stale, interrupted, or mismatched results never advance authoritative state.",
+    "GC09: Resume is confined to a recorded task family and role; unrelated tasks and closing use fresh contexts.",
+    "GC10: Parallel workers use distinct worktrees; shared plan writes, integration, and publication are serialized by scripts.",
+    "GC11: Existing user changes, unrelated branches, Codex sessions, credentials, and installed plugin caches are preserved.",
+    "GC12: Jev remains optional advisory inference; it cannot dispatch, select a tier, approve, route, or write the authoritative ledger.",
+    "GC13: Publication policy is explicit and persisted; a Codex run defaults to local completion unless publication was authorized.",
+    "GC14: Compatibility is claimed only for runtime/platform/toolchain combinations backed by the acceptance matrix."
+  ],
+  "execution_handoff": {
+    "implementation_authorized": false,
+    "bootstrap": "Implement through an approved Codex development workflow. The new launcher is introduced by task 10; do not execute this migration plan with the current OpenCode-backed run-pipeline.",
+    "runtime_target": "Codex CLI agents launched directly by deterministic scripts",
+    "live_acceptance": "Task 12 records observed runtime support; no end-to-end compatibility is claimed by this plan.",
+    "publication": "local"
+  },
+  "finding_coverage": {
+    "C01": [
+      1,
+      10,
+      11
+    ],
+    "C02": [
+      11,
+      12
+    ],
+    "C03": [
+      5,
+      10
+    ],
+    "C04": [
+      1,
+      4,
+      11
+    ],
+    "C05": [
+      4,
+      6,
+      7,
+      12
+    ],
+    "C06": [
+      2,
+      5,
+      6
+    ],
+    "C07": [
+      6
+    ],
+    "C08": [
+      9,
+      10
+    ],
+    "C09": [
+      7,
+      8
+    ],
+    "C10": [
+      7,
+      10
+    ],
+    "C11": [
+      5,
+      10
+    ],
+    "C12": [
+      3,
+      11
+    ],
+    "C13": [
+      1,
+      3,
+      12
+    ],
+    "C14": [
+      3,
+      5,
+      10,
+      12
+    ],
+    "C15": [
+      5,
+      7,
+      10
+    ],
+    "C16": [
+      3,
+      7,
+      9
+    ],
+    "C17": [
+      11
+    ],
+    "C18": [
+      9,
+      11
+    ],
+    "C19": [
+      3,
+      4,
+      11
+    ],
+    "C20": [
+      11,
+      12
+    ]
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Define the Codex runtime configuration and read-only doctor",
+      "summary": "Introduce a versioned, explicit Codex runtime manifest and capability preflight. Resolve the actual executable and platform tools, pin role settings and bundle identity, and reject unavailable setup before any worker starts. This is the configuration foundation; it does not launch a model.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#3-global-constraints",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#4-installation-bootstrap-and-preflight"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/codex-doctor",
+        "skills/two-model-sdd-pipeline/scripts/pipeline_config.py",
+        "skills/two-model-sdd-pipeline/scripts/codex_capabilities.py",
+        "skills/two-model-sdd-pipeline/schemas/codex-runtime.schema.json",
+        "skills/two-model-sdd-pipeline/codex/runtime.example.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "codex-doctor --config FILE --project DIR --output REPORT is read-only and returns 0 ready, 2 invalid input, or 3 unavailable capability. It never installs, fetches/resets a checkout, changes user config, or invokes a model.",
+        "Validate version=1 and backend=codex; require explicit model, reasoning_effort, sandbox, and instruction identifier for every role; validate toolchains, publication, retention, positive timeout, and max_parallel. Missing role settings cannot inherit the initiating chat.",
+        "Resolve native codex executable identity on Windows instead of attempting to launch codex.ps1 as a native process. Report Git Bash, Python, git, RTK, and toolchain paths; missing jq is packaging-only when the runtime does not require it.",
+        "Probe installed version/help for fresh/resume JSONL, stdin, schema, final-output, and configuration support. Record CLI 0.156.1 as the initial local baseline; do not equate a version check with authenticated execution or model availability.",
+        "Use supported auth readiness checks without reading, echoing, or copying credentials. Distinguish Codex auth from GitHub/Tavily/TypeSafe setup and distinguish desktop from standalone runtime versions.",
+        "Create immutable run-manifest values for config/bundle hash, role hashes, executable/version, repository identity, canonical plan path, run ID, initial base, target branch and publication policy. A changed configuration requires a new run or explicit migration.",
+        "Include example Terra/low and Sol/high mappings derived from the reviewed main role files, labeled examples requiring setup acceptance. No fallback to a more expensive model or another provider is allowed.",
+        "Unit scenarios cover missing binary, unsupported help, Windows wrapper discovery, invalid roles, malformed JSON, unavailable prerequisites, independent external credentials, and secret-free reports."
+      ],
+      "interfaces": {
+        "produces": [
+          "pipeline_config.load_runtime(path: str) -> dict; validates and raises ValueError on invalid configuration",
+          "codex_capabilities.inspect_runtime(config: dict, project: str) -> dict; returns ready/errors/resolved capabilities without inference"
+        ],
+        "consumes": [
+          "Spec runtime config version 1; installed Codex CLI help; filesystem and executable metadata"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_runtime_config.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_doctor.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Define strict worker outcomes and provider-neutral invocation records",
+      "summary": "Create the normalized invocation contract and semantic output schemas for all Codex roles. Validate final outputs without regex salvage and bind acceptance to supervisor-owned identities. Keep the legacy OpenCode parser behavior separately addressable.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#7-dispatch-result-and-event-contracts",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#8-red-green-independent-review-and-routing",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#11-final-verification-closing-and-publication"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/dispatch_contract.py",
+        "skills/two-model-sdd-pipeline/schemas/dispatch-result.schema.json",
+        "skills/two-model-sdd-pipeline/schemas/codex-operator.schema.json",
+        "skills/two-model-sdd-pipeline/schemas/codex-reviewer.schema.json",
+        "skills/two-model-sdd-pipeline/schemas/codex-director.schema.json",
+        "skills/two-model-sdd-pipeline/schemas/codex-closing.schema.json"
+      ],
+      "depends_on": [],
+      "acceptance": [
+        "Define every request/result identity field and terminal_status exactly as spec section 7; missing usage is null, not fabricated zero. Keep requested settings separate from observed effective settings.",
+        "Operator schema accepts only DONE, DONE_WITH_CONCERNS, BLOCKED, TEST_DEFECT and declared fields. Reviewer schema accepts only APPROVED, SEND_BACK, ESCALATE with typed findings, minors, summary and no extra properties.",
+        "Reject APPROVED with blocking findings, parked Important/Critical severities, missing mandatory arrays, malformed JSON, multiple JSON objects, and SEND_BACK/ESCALATE with no actionable findings. Never recover an approval with regex.",
+        "Director schema carries mode, decision, reason, source_plan_hash, target_task and proposal. Corrective task descriptions omit authoritative ID allocation; closing has its own APPROVED/REOPEN/BLOCKED schema.",
+        "validate_result checks run/dispatch/role/task-family/worktree/config/plan/candidate bindings against the supervisor request, not just model-provided labels. A completed transport result does not imply semantic approval.",
+        "Use the same schema semantics for --output-schema generation and local validation; reject unsupported schema versions before routing. Implement the bounded validators using standard-library code with explicit fields, not a permissive general repair parser.",
+        "Regression fixtures reproduce the observed Codex event mismatch and malformed APPROVED acceptance, then demonstrate that Codex result consumers reject both unsafe paths while accepting correctly bound output."
+      ],
+      "interfaces": {
+        "produces": [
+          "dispatch_contract.validate_semantic(role: str, value: object) -> dict",
+          "dispatch_contract.validate_result(request: dict, result: dict) -> dict",
+          "dispatch_contract.schema_path(role: str) -> str"
+        ],
+        "consumes": [
+          "Spec normalized contract and strict semantic schemas"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_result_contract.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_semantic_schemas.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Build complete context packages and executable toolchain descriptors",
+      "summary": "Make fresh workers self-sufficient by carrying global/task/spec/verification context and platform-correct scoped runner commands. Replace marker-only assumptions with executable toolchain contracts and support the repository's unittest evidence.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#5-planning-research-and-context-packaging",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#6-role-permissions-and-command-execution",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#8-red-green-independent-review-and-routing"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/context_package.py",
+        "skills/two-model-sdd-pipeline/scripts/brief-scaffold",
+        "skills/two-model-sdd-pipeline/scripts/scoped-run",
+        "skills/two-model-sdd-pipeline/scripts/scoped_runner.py",
+        "skills/two-model-sdd-pipeline/scripts/toolchain_contract.py",
+        "skills/two-model-sdd-pipeline/scripts/resolve-toolchain",
+        "skills/two-model-sdd-pipeline/scripts/gate-entry-for",
+        "skills/two-model-sdd-pipeline/scripts/task-lang",
+        "skills/two-model-sdd-pipeline/scripts/red-form-check",
+        "skills/two-model-sdd-pipeline/scripts/red_evidence.py"
+      ],
+      "depends_on": [
+        1,
+        2
+      ],
+      "acceptance": [
+        "build_context produces complete deterministic role packages containing global_constraints, full task, interfaces, verification, spec excerpts, pinned bundle references, family/attempt identity and evidence paths. Missing references or oversized mandatory evidence produce an explicit error, never truncation.",
+        "Brief commands quote paths with spaces/Unicode correctly and resolve pipeline skills against the bundle, project references against the task worktree. Remove the unconditional Flutter runner from non-Flutter briefs.",
+        "Toolchain descriptors use argv arrays plus cwd/environment and a RED adapter; validate the executable and configured test/analyzer commands. package.json with no test script must not automatically become npm test plus npx eslint.",
+        "scoped-run WORKSPACE TASK red|test|analyze|format accepts only declared modes and canonical in-root test paths; delegates full-output capture and RTK rendering to cmd without permitting an arbitrary command argument.",
+        "Retain Flutter/Dart, pytest JSON-report, and Go evidence support; add a unittest adapter which records actual executed tests, failures and errors. A collection/build failure with no executed failing test is invalid RED.",
+        "Bind evidence to task, attempt, runner/command and source snapshot; a previous attempt's evidence is not automatically reusable. Preserve the reviewer as independent judge of whether tests encode acceptance.",
+        "Node/Rust without an explicitly configured tested RED adapter fail preflight as unsupported. Missing adapters are not code failures and cannot enter the unbounded operator loop.",
+        "Multi-toolchain records are resolved by exact task toolchain identity, not first/last ledger line. Define all affected toolchains for later integration/closing.",
+        "Keep existing research/scoring/Jev semantics. Dependency preparation describes pub get accurately as capable of downloads and records necessary network/cache access."
+      ],
+      "interfaces": {
+        "produces": [
+          "context_package.build_context(role: str, request: dict, plan: dict, bundle_root: str) -> dict; returns prompt text and source manifest",
+          "toolchain_contract.resolve_toolchain(task: dict, runtime: dict, project_root: str) -> dict",
+          "red_evidence.validate_evidence(path: str, expected: dict) -> dict"
+        ],
+        "consumes": [
+          "Task 1 runtime configuration; task 2 request/result identity; existing cmd and research tools"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_context_package.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_scoped_runner.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_toolchain_evidence.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Translate role instructions and establish Codex permission guards",
+      "summary": "Create packaged Codex role prompts and deterministic command/edit guards reflecting the operator, reviewer and director boundaries. Verify hook/tool coverage and sandbox prerequisites before permitting runtime dispatch.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#4-installation-bootstrap-and-preflight",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#5-planning-research-and-context-packaging",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#6-role-permissions-and-command-execution"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/codex/operator.md",
+        "skills/two-model-sdd-pipeline/codex/reviewer.md",
+        "skills/two-model-sdd-pipeline/codex/director.md",
+        "skills/two-model-sdd-pipeline/codex/hooks.json",
+        "skills/two-model-sdd-pipeline/scripts/codex-policy",
+        "skills/two-model-sdd-pipeline/scripts/codex_policy.py"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3
+      ],
+      "acceptance": [
+        "Codex role prompts retain RED/GREEN, independent review duties, TEST_DEFECT and bounded director judgment. Worker instructions explicitly operate on approved artifacts and skip recursive brainstorming, self-update, tier questions and manual subagent orchestration.",
+        "Build supported per-invocation settings for explicit model/effort, developer instructions, sandbox, approval_policy=never, and disabled native delegation. Do not transplant OpenCode mode/variant/permission YAML.",
+        "Operator policy permits scoped writes/runners but rejects git/publication, arbitrary interpreters/shell expressions, and plan/ledger/runtime mutations. Reviewer is read-only and cannot run test/analyze/format. Director is read-only, has no shell commands, and returns proposals.",
+        "Normalize documented PreToolUse Bash/unified-exec/apply_patch input forms on Windows and POSIX. A safe-looking command prefix followed by extra shell syntax is rejected. Unknown mutating shapes fail closed.",
+        "Account for hook coverage gaps, inherited AGENTS.md, configured tools and managed policy. Disable unneeded capabilities through supported configuration; if the required policy cannot be enforced, return unavailable rather than weakening it.",
+        "Report required hook trust during setup and never add dangerous bypass flags automatically. Policy setup cannot modify the installed plugin cache or an unrelated global configuration.",
+        "Capture protected-state baselines for supervisor comparison after every worker. A model-written result or ledger edit cannot authorize itself.",
+        "Tests cover shell chaining, Python/PowerShell wrappers, direct git, arbitrary generic cmd usage, unauthorized apply_patch paths, unknown tool shapes and safe scoped commands. Record that hooks are workflow guards and the OS sandbox is the security boundary."
+      ],
+      "interfaces": {
+        "produces": [
+          "codex_policy.build_overrides(role: str, runtime: dict, request: dict) -> list[str]",
+          "codex_policy.check_tool_call(event: dict, policy: dict) -> dict; returns documented hook decision",
+          "codex_policy.capture_protected_state(request: dict) -> dict"
+        ],
+        "consumes": [
+          "Task 1 configuration; task 2 schemas; task 3 context and scoped runner"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_role_policy.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_worker_instructions.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Implement Codex dispatch, result capture, bounded retry and session records",
+      "summary": "Add the direct subprocess Codex backend, immutable attempt evidence, explicit-ID continuation and classified failures. Keep the public dispatch seam and retain OpenCode as an explicit separate backend.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#2-execution-interface-decision",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#7-dispatch-result-and-event-contracts",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#10-resume-retry-interruption-and-retention"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/dispatch",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-opencode",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-codex",
+        "skills/two-model-sdd-pipeline/scripts/codex_dispatch.py",
+        "skills/two-model-sdd-pipeline/scripts/codex_process.py",
+        "skills/two-model-sdd-pipeline/scripts/codex_sessions.py",
+        "skills/two-model-sdd-pipeline/scripts/dispatch-retry",
+        "skills/two-model-sdd-pipeline/scripts/session-clean"
+      ],
+      "depends_on": [
+        1,
+        2,
+        4
+      ],
+      "acceptance": [
+        "dispatch-codex invokes a resolved native CLI with argv arrays, cwd and UTF-8 stdin prompt, using exec fresh or exec resume explicit ID. Never emit opencode commands, --last, inferred --agent, or a model-coordinator request.",
+        "Separate events.jsonl from stderr.log, require fresh final.json, and write request/result atomically in a unique attempt directory. A failed digest may not hide capture errors; disk-write failure cannot yield success.",
+        "Recognize thread/turn/item/error event families, distinguish progress from final output, and require process exit 0 plus matching successful completion and strict semantic output. Unknown terminal behavior or stale final files fail closed.",
+        "Persist thread identity and model/config/worktree/family bindings before continuation. Incompatible or missing identity blocks; explicitly selected fresh recovery records context_reset and reconstructs complete context.",
+        "Implement exit codes 0,2,3,4,5,6,130,124 as specified. Retry only confirmed pre-execution transient code 5, at most three attempts with delays 1 and 3 seconds; ambiguous post-start failure code 6 never blindly launches fresh work.",
+        "Register PID/start/process-tree ownership for each dispatch and expose bounded cancellation to the run controller; test stdout/stderr pressure, Unicode, split lines, and process interruption on both supported platforms.",
+        "Codex session-clean retires only owned handles while preserving audit artifacts and runtime-managed sessions; it never calls OpenCode delete or edits private Codex storage. Fresh tasks/closing do not inherit unrelated sessions.",
+        "Preserve legacy OpenCode behavior behind explicit backend selection, including its existing fake-runtime fixtures. An invalid backend or unavailable Codex capability cannot silently route to OpenCode.",
+        "Tests verify fresh/resume argv and schema options using a fake native executable, missing ID, mismatched ID, invalid output, terminal error, transient startup, ambiguous mutation, stale artifacts, and secret-free compact telemetry."
+      ],
+      "interfaces": {
+        "produces": [
+          "codex_dispatch.run_dispatch(request: dict, runtime: dict) -> dict; result follows dispatch contract",
+          "codex_sessions.load_session(identity: dict) -> dict | None",
+          "codex_sessions.store_session(identity: dict, record: dict) -> None",
+          "codex_process.stop_owned_processes(records: list[dict], grace_seconds: float) -> None"
+        ],
+        "consumes": [
+          "Tasks 1-4 configuration, schemas, context and role policy; existing dispatch arguments"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_dispatch.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_resume_and_retry.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_process_ownership.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Wire normalized outcomes into RED, GREEN and independent review",
+      "summary": "Adapt every generic and Flutter gate path to the new outcomes, with durable candidate identity and explicit review-pending recovery. Stop parsing OpenCode events on the Codex path and stop swallowing reviewer launch failures.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#7-dispatch-result-and-event-contracts",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#8-red-green-independent-review-and-routing"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/coder-gate",
+        "skills/two-model-sdd-pipeline/scripts/red-gate",
+        "skills/two-model-sdd-pipeline/scripts/orchestrator",
+        "skills/two-model-sdd-pipeline/scripts/route-next",
+        "skills/two-model-sdd-pipeline/scripts/parse-review",
+        "skills/two-model-sdd-pipeline/scripts/parse_review.py",
+        "skills/two-model-sdd-pipeline/scripts/review-dispatch",
+        "skills/two-model-sdd-pipeline/scripts/review_dispatch.py",
+        "skills/two-model-sdd-pipeline/scripts/review-package",
+        "skills/two-model-sdd-pipeline/scripts/run-gates",
+        "skills/flutter-app-pipeline/scripts/green-gate",
+        "skills/flutter-app-pipeline/scripts/red-gate"
+      ],
+      "depends_on": [
+        2,
+        3,
+        5
+      ],
+      "acceptance": [
+        "Codex operator status comes from the validated final object. TEST_DEFECT routes arbitration, BLOCKED preserves an actionable block, and DONE still requires authoritative RED-form and GREEN checks.",
+        "Execute configured argv-based gates with raw exits; preserve compression-only RTK semantics and scope checks. Green, commit success, reviewer transport success, reviewer APPROVED and task_complete are separate barriers.",
+        "Remove swallowed reviewer failures from both generic and Flutter Codex branches. A failed reviewer dispatch remains review-pending and resumes/retries the review without a new coder attempt or a new commit.",
+        "Persist original attempt base, candidate HEAD and plan/context hashes. Recovery after a post-commit failure reviews the complete intended diff rather than recomputing base from the already-committed HEAD.",
+        "Codex parse-review consumes strict normalized results and current attempt binding; legacy OpenCode logs remain on their explicit parser path. Reject malformed APPROVED and a valid verdict belonging to an old candidate.",
+        "Review packages carry complete brief/spec/global constraints, full diff including tests, gate/evidence metadata and optional Jev guidance. Jev failures preserve standard mandatory review.",
+        "Review sessions remain role-separated and may resume only inside the same family with a fully refreshed package. Existing arbitration evidence archives and bounded re-escalation behavior are preserved.",
+        "No-op verification tasks require explicit plan semantics and independent review; ordinary tasks cannot invent RED evidence or bypass failed/empty commit barriers.",
+        "Tests cover both language branches, reviewer failure after commit, replayed old verdict, BLOCKED/TEST_DEFECT routing, unchanged candidate recovery, and negative semantic results with transport exit 0."
+      ],
+      "interfaces": {
+        "produces": [
+          "review_dispatch.ensure_review(request: dict, runtime: dict) -> dict; dispatches or reuses only an identity-matching completed review",
+          "Codex-aware gate/route contracts with durable review-pending and attempt-base state"
+        ],
+        "consumes": [
+          "Tasks 2,3,5 normalized dispatch and runner contracts; existing router/gate entry points"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_gate_results.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_review_recovery.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_flutter_gate_results.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "title": "Isolate runs, worktrees and shared state with durable ownership",
+      "summary": "Introduce canonical run/plan identities, scoped worktree ownership, strict plan validation and evidence-preserving integration. Repair cross-plan collisions and mixed-toolchain gate propagation while retaining the current deterministic scheduler.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#5-planning-research-and-context-packaging",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#9-canonical-plan-changes-and-parallel-task-ownership",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#10-resume-retry-interruption-and-retention"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/run_identity.py",
+        "skills/two-model-sdd-pipeline/scripts/plan_validation.py",
+        "skills/two-model-sdd-pipeline/scripts/state_lock.py",
+        "skills/two-model-sdd-pipeline/scripts/pipeline-workspace",
+        "skills/two-model-sdd-pipeline/scripts/worktree-alloc",
+        "skills/two-model-sdd-pipeline/scripts/worktree-release",
+        "skills/two-model-sdd-pipeline/scripts/integrate",
+        "skills/two-model-sdd-pipeline/scripts/wave-next",
+        "skills/two-model-sdd-pipeline/scripts/touches-overlap",
+        "skills/two-model-sdd-pipeline/scripts/keep-discard",
+        "skills/two-model-sdd-pipeline/scripts/ledger-append",
+        "skills/two-model-sdd-pipeline/scripts/ledger-merge",
+        "skills/two-model-sdd-pipeline/scripts/evidence_archive.py"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3
+      ],
+      "acceptance": [
+        "Validate initial and refreshed plans with one strict validator for fields, IDs, DAG, spec paths/anchors, canonical touches and verification metadata. Preserve explicit non-authoritative extensions and reject unsupported runtime controls.",
+        "Namespace plan workspace by canonical plan path/repository identity and worktree/branch by run/family. Codex branch names use codex/pipeline; every consumer resolves persisted ownership rather than task/N string reconstruction.",
+        "Lock the integration writer by repository/branch with owner PID/start/run identity. Concurrent runs on the same integration branch block; unrelated runs/branches and same-basename plans cannot reuse each other's state.",
+        "Scheduler conflicts include declared implementation paths, new-test paths and shared write resources. Explicit existing-test updates require reviewed declaration. Operator plan writes are rejected despite the legacy plan-path exemption.",
+        "Copy all resolved toolchains to workers and run all affected integration toolchains; preserve raw evidence and exact-tree reuse conditions. Rebuild nonportable Flutter caches when paths do not validate.",
+        "Keep dirty-tree integration rejection and bounded recovery. Orphan branches, mismatched worktree ownership, missing paths or corrupt ledger state fail closed before any destructive action.",
+        "Export and validate all task-family logs/results/session manifests/shards before release. Require stopped workers, clean worktree, complete family approval, and merged tip. Remove no unrelated/dirty worktree and never use unconditional force removal.",
+        "Ledger writes remain script-owned, locked and recoverable; partial partition writes can be rebuilt from the authoritative log without fabricating approvals. Do not ignore required state-write failures.",
+        "Tests cover same basename in two directories, task 1 in two plans, concurrent owner claims, Windows case/path aliases, disjoint tests, orphan branch reuse, evidence export failure and mixed-language integration."
+      ],
+      "interfaces": {
+        "produces": [
+          "run_identity.create_identity(repo_root: str, plan_path: str, run_id: str) -> dict",
+          "plan_validation.validate_plan(plan: dict, repo_root: str) -> None",
+          "state_lock.acquire_lock(path: str, owner: dict) -> context manager",
+          "evidence_archive.export_family(source: str, destination: str, manifest: dict) -> dict"
+        ],
+        "consumes": [
+          "Task 1 run manifest; task 2 result identities; task 3 toolchains; existing scheduler and ledger semantics"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_run_identity.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_plan_validation.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_worktree_lifecycle.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_multitoolchain_integration.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "title": "Apply director proposals through canonical script transactions",
+      "summary": "Change Codex correction/arbitration from model edits into validated proposals applied by one canonical plan writer. Preserve task-family continuation and reconcile plan commits, ledger events and snapshots after interruption.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#9-canonical-plan-changes-and-parallel-task-ownership",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#10-resume-retry-interruption-and-retention",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#12-jev-and-resource-boundaries"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/task-run",
+        "skills/two-model-sdd-pipeline/scripts/director_result.py",
+        "skills/two-model-sdd-pipeline/scripts/plan_transaction.py",
+        "skills/two-model-sdd-pipeline/scripts/director-apply",
+        "skills/two-model-sdd-pipeline/scripts/director_prompt.py",
+        "skills/two-model-sdd-pipeline/scripts/director-prompt",
+        "skills/two-model-sdd-pipeline/task-generator-prompt.md"
+      ],
+      "depends_on": [
+        2,
+        5,
+        6,
+        7
+      ],
+      "acceptance": [
+        "On the Codex path director invocations are read-only, receive full current plan and scoped evidence, and return the task-2 proposal schema. Never ask a director to mutate tracked plan or authoritative ledger directly.",
+        "apply_director_proposal holds the canonical integration lock, validates source hash/target/allowed changes/spec scope/DAG, allocates the next ID and atomically commits plan changes. Stale proposals are re-requested, not silently rebased.",
+        "Two simultaneous worktree corrective proposals cannot allocate duplicate IDs or overwrite each other. Workers update derived snapshots at episode boundaries and keep their tracked plan files unchanged.",
+        "Corrective children remain in the original family worktree and continue only its operator session. Persist family membership and valid predecessor requirements; never make a corrective depend on its own incomplete parent.",
+        "Journal proposal identity, old/new plan hashes, assigned IDs, plan commit and state events. Restart after each transaction boundary yields exactly one applied proposal and no false arbitrate_resolved.",
+        "Arbitration resolution requires a valid applied ruling; malformed/unchanged non-rulings cannot reset execution. Keep the established one-ruling/re-escalation block and archive preceding attempt evidence.",
+        "Jev Site 3 receives correctly bound episode/context; off/shadow/failure always retains the mandatory director call. Active guidance cannot bypass validation or allocate tasks.",
+        "Tests cover concurrent corrective proposals, stale plan hashes, unsupported field changes, dependency cycles, crash after commit before ledger, family resume identity and corrective-parent reconciliation."
+      ],
+      "interfaces": {
+        "produces": [
+          "plan_transaction.apply_director_proposal(proposal: dict, manifest: dict) -> dict; returns assigned IDs, hashes and committed transaction",
+          "director_result.validate_proposal(value: dict, expected: dict) -> dict"
+        ],
+        "consumes": [
+          "Task 2 director schema; task 5 dispatch/session API; task 6 gates; task 7 locking/validation/ownership"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_director_proposals.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_plan_transactions.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_corrective_families.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "title": "Require a candidate-bound closing verdict and branch-wide verification",
+      "summary": "Create the closing coordinator and verification barrier. Final approval must explicitly cover the current plan, spec, ledger and Git candidate; rejection reopens work or blocks instead of allowing publication.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#11-final-verification-closing-and-publication",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#12-jev-and-resource-boundaries"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/closing-gate",
+        "skills/two-model-sdd-pipeline/scripts/codex_closing.py",
+        "skills/two-model-sdd-pipeline/scripts/final-gate",
+        "skills/two-model-sdd-pipeline/scripts/doc-check",
+        "skills/two-model-sdd-pipeline/final-review-prompt.md"
+      ],
+      "depends_on": [
+        2,
+        6,
+        7,
+        8
+      ],
+      "acceptance": [
+        "Run final mechanical checks for all tasks/families/toolchains, pending workers/worktrees, snapshots and protected state. Use the recorded initial base and target branch rather than a hard-coded origin/main.",
+        "Dispatch a fresh director against the complete closing package and strict closing schema. Bind approval to candidate HEAD, plan hash, spec hash and ledger revision captured by the supervisor.",
+        "Only an explicit validated APPROVED with no unresolved blocking findings records successful final_review. Process exit 0 with REOPEN, BLOCKED, malformed JSON, missing result or unexpected mutation cannot publish.",
+        "REOPEN passes proposed tasks through the canonical transaction and returns to execution; repeat mechanical checks and fresh closing after changes. Interrupted close-event writes are idempotently reconciled.",
+        "doc-check evaluates the full run range and requires both README.txt and README-LLM.md when pipeline behavior changes. Unrelated docs-only changes do not trigger runtime-change requirements.",
+        "Preserve parked Minor triage while rejecting parked blocking severities. Keep Jev advisory records separate from authoritative closing state.",
+        "Tests prove a director rejection cannot reach push, old candidate approval is unusable after a change, all toolchains are checked, and documentation changes several commits earlier remain visible."
+      ],
+      "interfaces": {
+        "produces": [
+          "codex_closing.assess_candidate(manifest: dict, workspace: str, runtime: dict) -> dict; returns approved/reopen/blocked with bound evidence"
+        ],
+        "consumes": [
+          "Tasks 2,6,7,8 results, gates, plan transactions and identity"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_closing_verdict.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_final_gate.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_branch_doc_gate.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "title": "Connect the complete Codex launcher, cancellation and explicit publication",
+      "summary": "Wire the shared pipeline state machine to the Codex configuration, direct worker backend, canonical plan writer, isolated waves and strict closing. Add durable run control and a Windows launcher without requiring an interactive model in the runtime loop.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#2-execution-interface-decision",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#4-installation-bootstrap-and-preflight",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#9-canonical-plan-changes-and-parallel-task-ownership",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#10-resume-retry-interruption-and-retention",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#11-final-verification-closing-and-publication"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/run-codex-pipeline",
+        "skills/two-model-sdd-pipeline/scripts/run-codex-pipeline.ps1",
+        "skills/two-model-sdd-pipeline/scripts/run-pipeline",
+        "skills/two-model-sdd-pipeline/scripts/run_control.py",
+        "skills/two-model-sdd-pipeline/scripts/publication.py"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "acceptance": [
+        "Expose run-codex-pipeline PLAN --config FILE [--max-parallel N] [--publication local|push|pull_request] and equivalent PowerShell entry. Select Codex before any setup/dispatch and fail if unavailable; never launch opencode.",
+        "Preflight complete plan/config/policy/toolchains, persist the pinned runtime/run manifest, and execute shared deterministic routing. Default Codex publication to local; existing explicit authorized policy is persisted once.",
+        "Track every task-run and Codex process by owned identity; cancellation stops new admissions and owned trees, waits for termination and records interrupted state. Windows launch stays hidden; never terminate a process by name alone.",
+        "Resume from durable state with no caller chat dependency, reject a second active integration owner, refresh canonical plan after transactions/integration, and never interpret a missing task-run exit record as success.",
+        "Run serial and parallel flows with full toolchain and config propagation. Integration and canonical plan transactions share one exclusion boundary; successful sibling work remains recoverable after a failure.",
+        "Honor configured wall-clock limits, quota/provider/policy failures and bounded transport retries without changing the existing semantic correction policy. Surface blocked state with attempt/evidence pointers.",
+        "Publish only after the task-9 approval bound to current candidate. Use recorded remote/base/head, no force push, and idempotent existing-PR detection. Failed push or PR is reported accurately with resumable delivery state.",
+        "Detect detached HEAD and other desktop-managed worktrees at startup. Require a named integration branch or explicit local-only handling; do not call desktop-only tools from the shell or promise native subagent UI linkage.",
+        "Tests execute the full script flow with fake Codex workers, no coordinating LLM, from PowerShell/Git Bash and POSIX shells, including cancellation, resumption, rejected closing and publication failures."
+      ],
+      "interfaces": {
+        "produces": [
+          "run-codex-pipeline CLI contract",
+          "run_control.run(manifest: dict, runtime: dict) -> int",
+          "publication.publish(manifest: dict, approval: dict) -> dict"
+        ],
+        "consumes": [
+          "All task 1-9 contracts; existing shared run-pipeline router and integration mechanics"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_pipeline_e2e.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_run_cancellation.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_publication.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "Ship the Codex workflow through skills, documentation and both package paths",
+      "summary": "Update the user and agent entry instructions for the complete Codex path, include all runtime references in distribution, and reconcile stale claims with the implemented behavior. Preserve explicit legacy OpenCode guidance.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#4-installation-bootstrap-and-preflight",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#5-planning-research-and-context-packaging",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#12-jev-and-resource-boundaries",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#13-delivery-and-acceptance"
+      ],
+      "touches": [
+        "scripts/package-codex-plugin.sh",
+        "scripts/sync-to-codex-plugin.sh",
+        ".codex-plugin/plugin.json",
+        "skills/using-superpowers/SKILL.md",
+        "skills/using-superpowers/references/codex-tools.md",
+        "skills/brainstorming/SKILL.md",
+        "skills/brainstorming/scripts/orient-llm",
+        "skills/writing-plans/SKILL.md",
+        "skills/two-model-sdd-pipeline/SKILL.md",
+        "skills/flutter-app-pipeline/SKILL.md",
+        "skills/two-model-sdd-pipeline/references/codex-runtime.md",
+        "README-LLM.md",
+        "README.txt",
+        "CONTEXT.md",
+        "docs/README.codex-pipeline.md"
+      ],
+      "depends_on": [
+        10
+      ],
+      "acceptance": [
+        "Document the full Codex phase mapping, runnable launcher examples for Windows and POSIX, explicit models/permissions/config, local completion, restart/recovery and limitations. Use current supported commands and explain independent agent sessions.",
+        "Codex startup resolves the installed bundle and uses codex-doctor, never OpenCode install/sync/reset or a restart-OpenCode instruction. Worker mode skips strategist rituals but retains project/managed constraints.",
+        "Place required runtime docs/roles/schemas/hooks under shipped paths. Portal and Git-marketplace packaging include all referenced runtime resources and pass orientation after extraction in a target project unrelated to this repository.",
+        "Keep the existing installed Git bundle's valid orientation path; repair the portal archive omission without requiring machine-specific metadata paths or rewriting cache contents.",
+        "Correct native subagent guidance on full-history model override restrictions and use the actual callable tool contract. Clearly separate optional native SDD delegation from Script CEO runtime dispatch.",
+        "Reconcile models, session retention, reviewer resume, no-op handling, template/dependency downloads, RTK bypass, multi-toolchain support and integration descriptions with the implemented version and evidence.",
+        "Explain optional Jev inference versus deterministic routing, independent credentials, immutable run bundles, supported platforms and Node/Rust adapter requirements.",
+        "Add fixture-driven package/reference/skill tests. If existing documentation-contract tests need semantic updates, list and justify them explicitly as approved expectation changes before modification; never relax runtime evidence tests."
+      ],
+      "interfaces": {
+        "produces": [
+          "Self-contained Codex plugin payload and human/agent operating guide"
+        ],
+        "consumes": [
+          "Implemented task-10 launcher; task-1 runtime contract; actual supported platform matrix"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_packaged_runtime.py",
+          "skills/two-model-sdd-pipeline/tests/test_codex_skill_entry_contract.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "title": "Prove the complete adaptation with an acceptance harness and support matrix",
+      "summary": "Provide deterministic end-to-end scenarios and opt-in live Codex acceptance so compatibility claims can be tied to actual role configuration, sandbox behavior, recovery and distribution. Record every audit finding's implementation and verification evidence.",
+      "spec_refs": [
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#13-delivery-and-acceptance",
+        "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#14-sources-and-decision-provenance"
+      ],
+      "touches": [
+        "skills/two-model-sdd-pipeline/scripts/codex-acceptance",
+        "skills/two-model-sdd-pipeline/scripts/codex_acceptance.py",
+        "docs/testing/codex-pipeline-support-matrix.md"
+      ],
+      "depends_on": [
+        11
+      ],
+      "acceptance": [
+        "codex-acceptance --config FILE --output DIR defaults to deterministic offline fixtures and disposable repositories. Live worker calls require explicit --live and use a tiny local-only project; never publish from the fixture.",
+        "Cover the complete Phase 1 artifact handoff through preflight, BRIEF, operator RED/GREEN, review, corrective, arbitration, parallel integration, strict closing, resume, cancellation and evidence retention.",
+        "Offline failure injection includes malformed/stale/interim outputs, auth/quota failure, ambiguous after-write interruption, concurrent director proposals, duplicate basenames, protected mutations, orphan worktrees, mixed toolchains and rejected closing.",
+        "Live acceptance verifies fresh and explicit-ID resume, operator/reviewer/director role settings, actual Windows sandbox/guard behavior, a two-worker wave and closing without any coordinating model or OpenCode process.",
+        "Run from both the source checkout and extracted portal/Git package fixtures; verify runtime resources and orientation and preserve path-space/Unicode cases.",
+        "Record CLI/bundle/platform/toolchain versions, observed effective settings, unsupported or skipped combinations and test evidence. Failure or missing evidence cannot become a perfect-compatibility statement.",
+        "Provide C01-C20 traceability to tests and resulting evidence and document remaining limitations such as no native parent-child desktop linkage and no guaranteed prompt-cache discount.",
+        "Run the affected existing generic/Flutter/Codex packaging test suites, shell lint for changed scripts, skill lint for changed skills, and new Codex suite. Keep results truthful when a platform prerequisite is missing."
+      ],
+      "interfaces": {
+        "produces": [
+          "codex-acceptance CLI and versioned acceptance report",
+          "Published support matrix grounded in actual execution evidence"
+        ],
+        "consumes": [
+          "Tasks 1-11 implementation, extracted packages, approved runtime config"
+        ]
+      },
+      "verification": {
+        "new_test_files": [
+          "skills/two-model-sdd-pipeline/tests/test_codex_acceptance_harness.py"
+        ],
+        "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_codex_*.py' -v",
+        "additional_checks": [
+          "Use disposable repositories and fake Codex executables for deterministic cases; no live credentials in fixtures.",
+          "Run the affected existing pipeline tests after integration changes; run the Flutter test family when its paths change.",
+          "Capture RED evidence with an executed failing assertion before implementation. Do not weaken previously committed tests to accommodate a failure."
+        ]
+      }
+    }
+  ],
+  "executable": false,
+  "superseded_by": "roadmap.md and the current Round 1 plan.json",
+  "warning": "Historical 12-task design, not an execution plan. Model examples, sequencing and policy may be superseded. Regenerate later round plans from current source."
+}

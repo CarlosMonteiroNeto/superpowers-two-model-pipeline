@@ -5,3 +5,4 @@ graphify-out/*/
 green-gate-report.txt
 green-gate-report.txt.analyze
 green-gate-report.txt.format
+.worktrees/
