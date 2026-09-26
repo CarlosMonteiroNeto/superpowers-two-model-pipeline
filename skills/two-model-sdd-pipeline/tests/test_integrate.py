@@ -3,6 +3,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -158,6 +159,50 @@ class IntegrateTest(unittest.TestCase):
         self.assertNotIn("task/1", self.branches())
         self.assertFalse(self.wt(1).exists())
         self.assertTrue((self.repo / "lib" / "task1.go").is_file())
+
+    def test_integrate_runs_the_task_selected_structured_toolchain(self):
+        markers = [self._tmp / "selected integration one.txt", self._tmp / "selected integration two.txt"]
+        tasks = []
+        gates = []
+        for task_id, marker in enumerate(markers, start=1):
+            toolchain_id = "python-task-%d-v1" % task_id
+            command = [
+                sys.executable, "-c",
+                "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text('exact-%s', encoding='utf-8')" % task_id,
+                str(marker),
+            ]
+            descriptor = {
+                "available": True,
+                "toolchain_id": toolchain_id,
+                "language": "python",
+                "project_root": str(self.repo),
+                "commands": {
+                    "test": {"argv": command, "cwd": str(self.repo), "env": {}},
+                    "analyze": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self.repo), "env": {}},
+                },
+            }
+            tasks.append({"id": task_id, "toolchain_id": toolchain_id,
+                          "touches": ["lib/task%d.py" % task_id]})
+            gates.append({"ts": "t", "type": "gate", "task": "-", "summary": "python",
+                          "toolchain_id": toolchain_id, "lang": "python",
+                          "toolchain_descriptor": json.dumps(descriptor),
+                          "test_cmd": "placeholder test", "analyze_cmd": "placeholder analyze"})
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": tasks}), encoding="utf-8")
+        (self.ws / "ledger.jsonl").write_text(
+            "\n".join(json.dumps(gate) for gate in gates) + "\n", encoding="utf-8",
+        )
+        self.alloc(1)
+        self.task_commit(1, "lib/task1.py", "value = 1\n")
+        self.alloc(2)
+        self.task_commit(2, "lib/task2.py", "value = 2\n")
+        self.shard_complete(1)
+        self.shard_complete(2)
+
+        result = self.run_integrate(1, 2, RTK_ENABLED="0")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([marker.read_text(encoding="utf-8") for marker in markers],
+                         ["exact-1", "exact-2"])
 
     def test_unapproved_shard_is_not_merged_or_released(self):
         """Critical: coder-gate commits BEFORE the revisor runs, so a shard
