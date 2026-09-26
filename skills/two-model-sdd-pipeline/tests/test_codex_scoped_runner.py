@@ -46,6 +46,10 @@ class ScopedRunnerTests(unittest.TestCase):
             "open(r'{}', 'w').write('executed')".format(self.sentinel),
         )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(
+            any(word in (result.stdout + result.stderr).lower() for word in ("mode", "usage", "invalid")),
+            result.stdout + result.stderr,
+        )
         self.assertFalse(self.sentinel.exists(), "an undeclared mode must not execute caller-supplied commands")
 
     def test_rejects_extra_command_after_a_declared_mode(self):
@@ -55,6 +59,10 @@ class ScopedRunnerTests(unittest.TestCase):
             "open(r'{}', 'w').write('executed')".format(self.sentinel),
         )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(
+            any(word in (result.stdout + result.stderr).lower() for word in ("argument", "usage", "unexpected")),
+            result.stdout + result.stderr,
+        )
         self.assertFalse(self.sentinel.exists(), "scoped-run must not accept an arbitrary trailing command")
 
     def test_rejects_out_of_root_test_paths(self):
@@ -62,8 +70,10 @@ class ScopedRunnerTests(unittest.TestCase):
         outside = pathlib.Path("..").joinpath("outside_test.py")
         result = self.run_scoped("9", "red", str(outside))
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertNotIn(str(outside), result.stdout + result.stderr,
-                         "a noncanonical path must not be treated as an executable test path")
+        self.assertTrue(
+            any(word in (result.stdout + result.stderr).lower() for word in ("path", "root", "canonical", "escape")),
+            result.stdout + result.stderr,
+        )
 
 
 if __name__ == "__main__":
