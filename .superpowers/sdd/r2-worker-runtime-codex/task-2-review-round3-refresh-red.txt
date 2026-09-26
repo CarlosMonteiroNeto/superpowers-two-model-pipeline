@@ -1,0 +1,17 @@
+test_discovery_refreshes_a_stale_source_even_when_global_clock_is_fresh (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_discovery_refreshes_a_stale_source_even_when_global_clock_is_fresh) ... FAIL
+
+======================================================================
+FAIL: test_discovery_refreshes_a_stale_source_even_when_global_clock_is_fresh (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_discovery_refreshes_a_stale_source_even_when_global_clock_is_fresh)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_skill_source_refresh.py", line 589, in test_discovery_refreshes_a_stale_source_even_when_global_clock_is_fresh
+    self.assertEqual(result["candidates"][0]["revision"], "fresh-revision")
+AssertionError: 'old-revision' != 'fresh-revision'
+- old-revision
++ fresh-revision
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.035s
+
+FAILED (failures=1)

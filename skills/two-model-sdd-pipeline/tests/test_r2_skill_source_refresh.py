@@ -535,6 +535,61 @@ class SkillSourceRefreshTests(unittest.TestCase):
         self.assertEqual(sources["Acme/second-skills"]["last_checked_at"],
                          "2026-08-01T00:00:00Z")
 
+    def test_discovery_refreshes_a_stale_source_even_when_global_clock_is_fresh(self):
+        source = {
+            "repository": "Acme/python-skills",
+            "source_url": "https://github.com/Acme/python-skills",
+            "category": "publisher",
+            "revision": "old-revision",
+            "last_checked_at": "2026-08-01T00:00:00Z",
+            "review_status": "reviewed",
+            "description": "Python skills",
+            "stars": 20,
+            "topics": ["python"],
+            "license": {"spdx_id": "MIT", "name": "MIT License"},
+            "refresh_status": "fresh",
+            "skills": [{
+                "name": "Python tests",
+                "path": "skills/python-tests/SKILL.md",
+                "topics": ["python"],
+                "compatibility": ["codex"],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+                "review_status": "reviewed",
+            }],
+        }
+        self.registry.write_text(json.dumps({
+            "schema_version": 1,
+            "last_refreshed_at": "2026-09-26T14:00:00Z",
+            "status": "fresh",
+            "sources": [source],
+            "queries": [],
+        }), encoding="utf-8")
+
+        def github_get(url):
+            parsed = urlsplit(url)
+            if parsed.path == "/repos/Acme/python-skills":
+                return repo_details("Acme/python-skills")
+            if parsed.path == "/repos/Acme/python-skills/commits/main":
+                return {"sha": "fresh-revision"}
+            if parsed.path == "/repos/Acme/python-skills/git/trees/fresh-revision":
+                return {"tree": [
+                    {"path": "skills/python-tests/SKILL.md", "type": "blob"},
+                ], "truncated": False}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_now_iso",
+                               return_value="2026-09-26T14:30:00Z"), \
+                mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.discover(
+                {"topics": ["python"], "compatibility": ["codex"]},
+                [], str(self.registry),
+            )
+
+        self.assertEqual(result["cache_status"], "fresh")
+        self.assertEqual(result["candidates"][0]["revision"], "fresh-revision")
+        self.assertEqual(result["candidates"][0]["last_checked_at"],
+                         "2026-09-26T14:30:00Z")
+
     def test_expired_discovery_keeps_last_usable_results_when_github_is_rate_limited(self):
         query = {"topics": ["python", "testing"]}
         last_search = {
