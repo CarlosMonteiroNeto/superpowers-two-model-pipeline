@@ -152,8 +152,13 @@ Task 2 — closure
 - Task 2 is approved. Task 3 begins on the same R1-based branch.
 
 Task 3 — source pin and controller-owned RED
-- Verified the original upstream release tag `obra/superpowers` `v6.3.0` at commit `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`; the locally cached 6.3.0 copy is a modified fork and is not the source pin. Confirmed MIT `LICENSE` SHA-256 `0da33ed814ee87e72db078f489c4447af72f13d9f25d9e17476f32efd77705fc` and relevant source file hashes directly from that commit.
+- Verified the original upstream release tag `obra/superpowers` `v6.3.0` at commit `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`; the locally cached 6.3.0 copy is a modified fork and is not the source pin. Confirmed the raw MIT `LICENSE` Git blob SHA-256 `a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400` and relevant source file hashes directly from that commit.
 - Controller-authored tests `test_r2_skill_manifest.py` and `test_r2_prompt_headers.py` are RED before implementation. The required R2 family command ran 44 tests: the 29 existing R2.1/R2.2 tests passed and all 15 new tests failed as expected because the R2.3 modules, source lock and adaptation map do not exist. Raw output: `.superpowers/sdd/r2-worker-runtime-codex/task-3-red.txt`.
 - Rulings were added to the task brief for immutable installed revisions, selected headings and roles, required versus optional omissions, discovery-only external suggestions, mandatory prompt inputs/order, full-prompt hashing, and fail-closed budget/conflict handling.
 - Controller-owned files must remain unchanged during implementation: `skills/two-model-sdd-pipeline/tests/test_r2_skill_manifest.py` and `skills/two-model-sdd-pipeline/tests/test_r2_prompt_headers.py`.
 - Implementation BASE is the RED-test commit. Do not close Task 3 until focused tests, review, test-integrity, and required suite are green.
+
+Task 3 — controller correction of the source-hash RED
+- A first implementation checkpoint ran 44 tests green against the RED fixture, but an independent `git cat-file blob <commit>:<path>` check showed two fixture/lock values came from the Windows-normalized checkout instead of raw upstream blobs: `LICENSE` and `skills/subagent-driven-development/SKILL.md`.
+- Corrected both expected raw blob hashes and the task brief's pin ruling. Re-ran the complete R2 family command: 43 passed and one failed on the mismatched MIT license hash. Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-3-red-hash-correction.txt`. The same pinned-source assertion also checks the subagent-skill blob after the license assertion is green.
+- The implementation agent is holding production edits while the controller records a fresh RED cycle; no implementation commit has been made. The corrected test commit becomes the implementation BASE.

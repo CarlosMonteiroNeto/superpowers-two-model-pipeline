@@ -278,7 +278,7 @@ Do not skip the failing-test proof.
         )
         self.assertEqual(
             lock["license"]["sha256"],
-            "sha256:0da33ed814ee87e72db078f489c4447af72f13d9f25d9e17476f32efd77705fc",
+            "sha256:a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
         )
         hashes = {item["path"]: item["sha256"] for item in lock["sources"]}
         self.assertEqual(hashes["skills/test-driven-development/SKILL.md"],
@@ -286,7 +286,7 @@ Do not skip the failing-test proof.
         self.assertEqual(hashes["skills/test-driven-development/writing-good-tests.md"],
                          "sha256:51471c853306ff92ca8bb41dcaea05f31c0e46b03651f8f3c99754b7172f4ae1")
         self.assertEqual(hashes["skills/subagent-driven-development/SKILL.md"],
-                         "sha256:8dd1b8e698edec3706c0d89517dbe96febd3bacd3f6ea21c1a3569c62ea104b5")
+                         "sha256:8dd1b8e698edec3700c6d89517dbe96febd3bacd3f6ea21c1a3569c62ea104b5")
         self.assertIn("skills/subagent-driven-development/task-reviewer-prompt.md", hashes)
 
     def test_adaptation_map_records_retained_and_replaced_source_sections(self):
