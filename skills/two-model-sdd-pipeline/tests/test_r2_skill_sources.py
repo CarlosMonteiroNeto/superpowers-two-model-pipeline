@@ -128,6 +128,44 @@ class SkillSourceDiscoveryTests(unittest.TestCase):
         self.assertFalse(result["installation_performed"])
         self.assertEqual(result["candidates"][0]["review_status"], "unreviewed")
 
+    def test_registered_skill_metadata_is_searched_before_external_sources(self):
+        query = {"topics": ["python"], "compatibility": ["codex"]}
+        value = empty_registry()
+        value["sources"] = [{
+            "repository": "Acme/registered-python-skills",
+            "source_url": "https://github.com/Acme/registered-python-skills",
+            "category": "publisher",
+            "revision": "rev-abc",
+            "last_checked_at": "2026-09-20T12:00:00Z",
+            "review_status": "unreviewed",
+            "description": "Reusable Python skills",
+            "stars": 77,
+            "topics": ["python"],
+            "license": {"spdx_id": "MIT", "name": "MIT License"},
+            "skills": [{
+                "name": "Python test helper",
+                "path": "skills/python-test/SKILL.md",
+                "topics": ["python"],
+                "compatibility": ["codex"],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+                "review_status": "unreviewed",
+            }],
+        }]
+        self.write_registry(value)
+
+        with mock.patch.object(self.module, "_now_iso",
+                               return_value="2026-09-26T12:00:00Z"), \
+                mock.patch.object(self.module, "_github_get_json", return_value={
+                    "total_count": 0, "incomplete_results": False, "items": [],
+                }) as external:
+            result = self.module.discover(query, [], str(self.registry))
+
+        external.assert_not_called()
+        self.assertEqual([item["repository"] for item in result["candidates"]],
+                         ["Acme/registered-python-skills"])
+        self.assertEqual(result["candidates"][0]["skills"][0]["recommendation_status"],
+                         "review_required")
+
     def test_missing_installed_coverage_searches_github_and_filters_irrelevant_repositories(self):
         query = {"topics": ["python", "testing"]}
         value = empty_registry()
