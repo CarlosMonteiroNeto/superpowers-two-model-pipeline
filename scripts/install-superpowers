@@ -2,10 +2,14 @@
 # install-superpowers
 #
 # Full clone of the fork when nothing is installed, then verify with the
-# pipeline test suite. Deterministic install gate:
+# pipeline test suite, then stage a validated immutable harness bundle.
+# Deterministic install gate:
 #
-#   exit 0 = installed (fresh clone, or already present) and tests pass
-#   exit 1 = installed but the pipeline test suite failed
+#   exit 0 = installed (fresh clone, or already present) and tests pass,
+#            with a staged immutable bundle and project-aware entry points
+#   exit 1 = installed but the pipeline test suite failed, or the bundle
+#            candidate failed validation (no half-installed selection is
+#            left behind)
 #   exit 2 = refused to clobber a non-empty, non-repo path
 #   exit 2 = usage error
 #
@@ -16,19 +20,62 @@
 #
 # A pre-existing path is only acceptable when it is already a git checkout of
 # this fork; anything else (non-empty, non-repo) is refused rather than
-# clobbered. After cloning it verifies with the same pipeline test suite that
-# sync-superpowers uses (every run-tests.sh under skills/*/tests/).
+# clobbered — an unrelated installed plugin cache is never patched. After
+# cloning it verifies with the same pipeline test suite that
+# sync-superpowers uses (every run-tests.sh under skills/*/tests/), then
+# stages the checkout as an immutable bundle
+# (.harness/bundles/<id>/), validates it (runtime files, prompts, skills,
+# canonical docs, license), and atomically selects it
+# (.harness/selected) with backend-specific entry points
+# (.harness/entrypoints/codex.sh and opencode.sh) resolving project pins.
+# Failed bundle validation preserves the prior selection: on a fresh
+# install no selection file is left behind. Project pins
+# (.superpowers/harness.json) and active runs always keep their own
+# bundle; installation updates never rewrite them. See README.md (the
+# single canonical harness reference) for bundles, entry points and
+# project binding.
 
 set -euo pipefail
 
 VENDOR_DIR="${1:-${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}}"
 REPO_URL="${REPO_URL:-https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git}"
 
+stage_and_select_current() {
+  HARNESS_INSTALL="$VENDOR_DIR/skills/two-model-sdd-pipeline/scripts/harness_install.py"
+  BUNDLE_ID="git-$(git -C "$VENDOR_DIR" rev-parse --short=12 HEAD)"
+  echo "INSTALL-SUPERPOWERS: staging immutable bundle $BUNDLE_ID"
+  if ! python3 "$HARNESS_INSTALL" stage --install-root "$VENDOR_DIR" \
+      --bundle "$BUNDLE_ID" --source "$VENDOR_DIR"; then
+    echo "INSTALL-SUPERPOWERS: bundle candidate failed validation" >&2
+    echo "INSTALL-SUPERPOWERS: prior selection preserved" >&2
+    return 1
+  fi
+  if ! python3 "$HARNESS_INSTALL" select --install-root "$VENDOR_DIR" \
+      --bundle "$BUNDLE_ID"; then
+    echo "INSTALL-SUPERPOWERS: bundle selection failed" >&2
+    return 1
+  fi
+  echo "INSTALL-SUPERPOWERS: bundle $BUNDLE_ID selected"
+}
+
 if [[ -e "$VENDOR_DIR" ]]; then
   if [[ -d "$VENDOR_DIR/.git" ]]; then
     echo "INSTALL-SUPERPOWERS: checkout already present at $VENDOR_DIR"
     echo "INSTALL-SUPERPOWERS: running check-superpowers to report freshness"
-    exec bash "$(dirname "$0")/check-superpowers" "$VENDOR_DIR"
+    if ! bash "$(dirname "$0")/check-superpowers" "$VENDOR_DIR"; then
+      echo "INSTALL-SUPERPOWERS: checkout needs user resolution; no bundle changed" >&2
+      exit 1
+    fi
+    HARNESS_INSTALL="$VENDOR_DIR/skills/two-model-sdd-pipeline/scripts/harness_install.py"
+    if [[ -f "$VENDOR_DIR/.harness/selected" ]]; then
+      selected="$(cat "$VENDOR_DIR/.harness/selected")"
+      echo "INSTALL-SUPERPOWERS: validating existing bundle $selected"
+      python3 "$HARNESS_INSTALL" select --install-root "$VENDOR_DIR" \
+        --bundle "$selected" >/dev/null
+    else
+      stage_and_select_current
+    fi
+    exit 0
   fi
   if [[ -n "$(ls -A "$VENDOR_DIR" 2>/dev/null)" ]]; then
     echo "INSTALL-SUPERPOWERS: refusing to clobber non-empty, non-repo path: $VENDOR_DIR" >&2
@@ -60,5 +107,14 @@ if [[ $failed -ne 0 ]]; then
   exit 1
 fi
 
+# Stage the fresh checkout as a validated immutable bundle and select it
+# atomically, with backend-specific entry points resolving the selection.
+# The bundle store lives under .harness/ (git-ignored), so safe updates
+# keep working and project pins are never rewritten by installation.
+stage_and_select_current
+
 echo "INSTALL-SUPERPOWERS: installed and verified at $VENDOR_DIR"
+echo "INSTALL-SUPERPOWERS: entry points:"
+echo "INSTALL-SUPERPOWERS:   $VENDOR_DIR/.harness/entrypoints/codex.sh"
+echo "INSTALL-SUPERPOWERS:   $VENDOR_DIR/.harness/entrypoints/opencode.sh"
 exit 0

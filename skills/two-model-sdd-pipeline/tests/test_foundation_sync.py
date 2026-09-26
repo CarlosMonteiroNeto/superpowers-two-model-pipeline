@@ -10,6 +10,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -96,6 +97,66 @@ class SyncBase(unittest.TestCase):
         r = run_git(repo, "commit", "-qm", message)
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def add_harness_fixture(self, repo):
+        """Add a small complete-enough package source to a disposable repo."""
+        (repo / ".gitignore").write_text(
+            ".harness/\n__pycache__/\n", encoding="utf-8")
+        paths = (
+            "agent/two-model-coder.md",
+            "agent/two-model-reviewer.md",
+            "agent/two-model-task-generator.md",
+            "skills/brainstorming/SKILL.md",
+            "skills/two-model-sdd-pipeline/SKILL.md",
+            "skills/two-model-sdd-pipeline/scripts/pipeline_config.py",
+            "skills/two-model-sdd-pipeline/scripts/dispatch_contract.py",
+            "skills/two-model-sdd-pipeline/scripts/run-pipeline",
+            "skills/two-model-sdd-pipeline/scripts/task-run",
+            "skills/two-model-sdd-pipeline/scripts/harness_install.py",
+            "skills/two-model-sdd-pipeline/scripts/harness-project",
+            "skills/two-model-sdd-pipeline/schemas/runtime.schema.json",
+            "skills/using-superpowers/SKILL.md",
+            "skills/test-driven-development/SKILL.md",
+            "scripts/install-superpowers",
+            "scripts/sync-superpowers",
+            "hooks/session-start",
+            ".codex-plugin/plugin.json",
+            ".opencode/INSTALL.md",
+            "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
+            "RELEASE-NOTES.md",
+            "README.md",
+            "LICENSE",
+        )
+        for rel in paths:
+            path = repo / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture version 1: %s\n" % rel, encoding="utf-8")
+        harness_scripts = (
+            repo / "skills" / "two-model-sdd-pipeline" / "scripts")
+        shutil.copyfile(
+            REPO_ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
+            / "harness_install.py",
+            harness_scripts / "harness_install.py")
+        shutil.copyfile(
+            REPO_ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
+            / "harness-project",
+            harness_scripts / "harness-project")
+
+    def stage_fixture_bundle(self, vendor, bundle_id):
+        harness_install = (
+            vendor / "skills" / "two-model-sdd-pipeline" / "scripts"
+            / "harness_install.py")
+        result = subprocess.run(
+            [sys.executable, str(harness_install), "stage",
+             "--install-root", str(vendor), "--bundle", bundle_id,
+             "--source", str(vendor)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = subprocess.run(
+            [sys.executable, str(harness_install), "select",
+             "--install-root", str(vendor), "--bundle", bundle_id],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def head_sha(self, repo):
         r = run_git(repo, "rev-parse", "HEAD")
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -154,6 +215,87 @@ class TestSyncJsonContract(SyncBase):
         self.assertEqual((vendor / "file.txt").read_text(encoding="utf-8"), "v2\n")
         combined = (r.stdout + r.stderr).lower()
         self.assertNotIn("rollback", combined)
+
+    def test_applies_exact_sha_that_passed_validation_if_origin_main_moves(self):
+        origin, vendor = self.make_pair()
+        self.commit_on(origin, "file.txt", "v2\n", "validated-commit")
+        validated_sha = self.head_sha(origin)
+        self.commit_on(origin, "file.txt", "v3\n", "later-commit")
+        later_sha = self.head_sha(origin)
+        fetched = run_git(vendor, "fetch", "origin")
+        self.assertEqual(fetched.returncode, 0, fetched.stderr)
+        reset_tracking_ref = run_git(
+            vendor, "update-ref", "refs/remotes/origin/main", validated_sha)
+        self.assertEqual(reset_tracking_ref.returncode, 0, reset_tracking_ref.stderr)
+
+        # Git calls this hook while checking out the detached candidate
+        # worktree, after sync has captured remote_sha but before it applies
+        # the update. Move origin/main to simulate another fetch in that gap.
+        write_stub(
+            vendor / ".git" / "hooks",
+            "post-checkout",
+            'git update-ref refs/remotes/origin/main "$R1_LATER_SHA"\n',
+        )
+        env = {"R1_LATER_SHA": later_sha, "CHECK_SKIP_FETCH": "1"}
+
+        result = run_script(SYNC, [str(vendor), "--json"], env_extra=env)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        data = self.parse_json_stdout(result)
+        self.assertEqual(data["state"], "updated")
+        self.assertEqual(data["remote_sha"], validated_sha)
+        self.assertEqual(self.head_sha(vendor), validated_sha)
+        self.assertEqual((vendor / "file.txt").read_text(encoding="utf-8"), "v2\n")
+
+    def test_fast_forward_selects_new_bundle_and_preserves_project_pin(self):
+        origin, vendor = self.make_pair()
+        self.add_harness_fixture(origin)
+        run_git(origin, "add", "-A")
+        result = run_git(origin, "commit", "-qm", "add-harness-fixture")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        run_git(vendor, "pull", "--ff-only", "origin", "main")
+        old_head = self.head_sha(vendor)
+        old_bundle = "git-" + old_head[:12]
+        self.stage_fixture_bundle(vendor, old_bundle)
+        status = run_git(vendor, "status", "--porcelain")
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(status.stdout, "", "fixture install must remain clean")
+        project = self.tmp / "project"
+        harness_project = (
+            vendor / "skills" / "two-model-sdd-pipeline" / "scripts"
+            / "harness-project")
+        result = subprocess.run(
+            [sys.executable, str(harness_project), "init",
+             "--project", str(project), "--bundle", old_bundle,
+             "--backend", "opencode", "--install-root", str(vendor)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        old_pin = (project / ".superpowers" / "harness.json").read_bytes()
+        status = run_git(vendor, "status", "--porcelain")
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(status.stdout, "", "project enrollment must not dirty install")
+
+        self.commit_on(origin, "README.md", "fixture version 2\n",
+                       "origin-harness-update")
+        new_head = self.head_sha(origin)
+        result = run_script(SYNC, [str(vendor), "--json"])
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        data = self.parse_json_stdout(result)
+        self.assertEqual(data["state"], "updated")
+        self.assertEqual(self.head_sha(vendor), new_head)
+        selected = (vendor / ".harness" / "selected").read_text(
+            encoding="utf-8").strip()
+        self.assertEqual(selected, "git-" + new_head[:12])
+        self.assertTrue(
+            (vendor / ".harness" / "bundles" / old_bundle).is_dir())
+        self.assertTrue(
+            (vendor / ".harness" / "bundles" / selected
+             / "skills" / "two-model-sdd-pipeline" / "scripts"
+             / "run-pipeline").is_file())
+        self.assertEqual(
+            (project / ".superpowers" / "harness.json").read_bytes(),
+            old_pin)
 
     def test_behind_shows_diff_summary_before_update(self):
         origin, vendor = self.make_pair()

@@ -13,7 +13,7 @@ This is the fork's skill-authoring chain. When `writing-skills` drafts or edits 
 
 1. `skill-scripter` audits that skill (and the stage it governs) for steps that are mechanical but still prose.
 2. Each approved candidate is implemented with `write-script` (exit-code family, ledger entry, resource header, unit test).
-3. The skill is then rewritten to *reference the script* rather than restate the procedure, and `doc-check` requires `README.txt` / `README-LLM.md` to change in the same branch.
+3. The skill is then rewritten to *reference the script* rather than restate the procedure, and `doc-check` requires `README.md` to change in the same branch.
 
 The plan is always a file, approved before implementation — never delivered in conversation.
 
@@ -114,4 +114,4 @@ One `.md` under `docs/superpowers/specs/<date>-<slug>-scriptization.md`, structu
 - Do not scriptize genuine judgment because it looks tractable. Breaking the revisor's semantic role is how the pipeline loses its only independent guarantee that the tests encode the acceptance.
 - Every candidate that adds a new `route-next` action must specify the ledger entry that *resolves* it. The `ARBITRATE` loop existed because a new action shipped without one.
 - The plan is always a file, reviewed and approved before any implementation. It is not delivered in conversation.
-- After approval, each script is implemented with `write-script`, and `doc-check` will require `README.txt` and `README-LLM.md` to change in the same branch.
+- After approval, each script is implemented with `write-script`, and `doc-check` will require `README.md` to change in the same branch.

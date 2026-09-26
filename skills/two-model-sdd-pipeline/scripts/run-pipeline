@@ -446,7 +446,7 @@ spec_doc=$(plan_json | python3 -c "import json,sys; print(json.load(sys.stdin).g
 dispatch_task_generator "$WS/diretor-closing.md" "$WS/task-generator-closing.log" \
   || block "diretor dispatch failed"
 ledger final_review "-" "diretor closing complete"
-"$SCRIPT_DIR/doc-check" "$ROOT" || block "update README.txt and README-LLM.md, then re-run"
+"$SCRIPT_DIR/doc-check" "$ROOT" || block "update README.md, then re-run"
 
 if [ "$NO_PUSH" -eq 1 ]; then
   say "closing complete (--no-push): package $WS/closing-review.diff, assessment $WS/task-generator-closing.log"

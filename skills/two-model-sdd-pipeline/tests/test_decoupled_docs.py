@@ -4,11 +4,14 @@ These read the shipped markdown artifacts and assert task 6's acceptance:
 brainstorming/writing-plans author a complete plan.json without expected_red;
 the two-model and TDD skills describe the deterministic form check and the
 revisor as the sole semantic guarantee; ADR-0008 records the decision and
-supersedes ADR-0006; README.txt and README-LLM.md reflect the change.
+supersedes ADR-0006; the canonical README.md reflects the change.
 
-Task 7 adds the negative half: the READMEs must carry no trace of the retired
+Task 7 adds the negative half: README.md must carry no trace of the retired
 plan-shell / RED-evidence / RED-proof model, and the red-gate/coder-gate rows
 must name `red-form-check` instead.
+
+Round 1 Task 4 migrates these assertions to the single canonical README.md
+(retiring README-LLM.md); every content assertion is preserved.
 
 Expectations are hand-derived literals naming the documented behavior, not
 values computed by any code under test.
@@ -89,7 +92,26 @@ class TestAdr0008(unittest.TestCase):
         self.assertIn("no `expected_red`", text)
 
 
-class TestReadmesReflectChange(unittest.TestCase):
+class TestReadmeReflectsChange(unittest.TestCase):
+    def test_readme_documents_form_check(self):
+        text = read("README.md")
+        self.assertIn("red-form-check", text)
+
+    def test_readme_documents_decoupled_plan(self):
+        text = read("README.md")
+        self.assertIn("complete `plan.json`", text)
+        self.assertIn("punctual", text)
+        self.assertNotIn("expands plan tasks", text)
+
+    def test_readme_documents_sole_guarantee(self):
+        text = read("README.md")
+        self.assertIn("sole independent semantic guarantee", text)
+
+    def test_readme_documents_punctual_ownership(self):
+        text = read("README.md")
+        self.assertIn("complete `plan.json`", text)
+        self.assertNotIn("expands plan tasks", text)
+
     def test_readme_txt_documents_form_check(self):
         text = read("README.txt")
         self.assertIn("red-form-check", text)
@@ -100,63 +122,50 @@ class TestReadmesReflectChange(unittest.TestCase):
         self.assertIn("punctual", text)
         self.assertNotIn("expands plan tasks", text)
 
-    def test_readme_llm_documents_form_check(self):
-        text = read("README-LLM.md")
-        self.assertIn("red-form-check", text)
 
-    def test_readme_llm_documents_sole_guarantee(self):
-        text = read("README-LLM.md")
-        self.assertIn("sole independent semantic guarantee", text)
-
-    def test_readme_llm_documents_punctual_ownership(self):
-        text = read("README-LLM.md")
-        self.assertIn("complete `plan.json`", text)
-        self.assertNotIn("expands plan tasks", text)
-
-
-class TestReadmesDroppedRetiredRedTerms(unittest.TestCase):
+class TestReadmeDroppedRetiredRedTerms(unittest.TestCase):
     """Task 7: the retired model wording is gone and the script rows name
     the deterministic form check.
 
     Retired terms are asserted absent over the whole README text, so a
-    regression that reintroduces any of them in either document fails the
-    suite (this is the acceptance's "fails when reintroduced" requirement).
+    regression that reintroduces any of them fails the suite (this is the
+    acceptance's "fails when reintroduced" requirement).
     """
 
     RETIRED = ("plan shell", "RED-evidence", "RED-proof")
 
-    def test_readme_llm_has_no_retired_terms(self):
-        text = read("README-LLM.md")
+    def test_readme_has_no_retired_terms(self):
+        text = read("README.md")
         for term in self.RETIRED:
-            self.assertNotIn(term, text, f"README-LLM.md still mentions {term!r}")
+            self.assertNotIn(term, text, f"README.md still mentions {term!r}")
 
     def test_readme_txt_has_no_retired_terms(self):
         text = read("README.txt")
         for term in self.RETIRED:
             self.assertNotIn(term, text, f"README.txt still mentions {term!r}")
 
-    def test_readme_llm_role_table_authors_complete_plan(self):
+    def test_readme_role_table_authors_complete_plan(self):
         rows = [
             line
-            for line in read("README-LLM.md").splitlines()
+            for line in read("README.md").splitlines()
             if line.startswith("| Agente estratégico ")
         ]
         self.assertEqual(1, len(rows), "expected exactly one estrategista role row")
         self.assertIn("complete `plan.json`", rows[0])
 
-    def test_readme_llm_red_gate_row_names_form_check(self):
+    def test_readme_red_gate_row_names_form_check(self):
         rows = [
             line
-            for line in read("README-LLM.md").splitlines()
+            for line in read("README.md").splitlines()
             if line.startswith("| `red-gate WORKSPACE TASK` ")
         ]
         self.assertEqual(1, len(rows), "expected exactly one red-gate script row")
         self.assertIn("red-form-check", rows[0])
 
-    def test_readme_llm_coder_gate_row_names_form_check(self):
+    def test_readme_coder_gate_row_names_form_check(self):
         rows = [
             line
-            for line in read("README-LLM.md").splitlines()
+            for line in read("README.md").splitlines()
             if line.startswith("| `coder-gate WORKSPACE TASK` ")
         ]
         self.assertEqual(1, len(rows), "expected exactly one coder-gate script row")

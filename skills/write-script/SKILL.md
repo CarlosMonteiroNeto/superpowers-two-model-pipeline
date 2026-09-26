@@ -121,7 +121,7 @@ A Strategic dispatch inside a retry loop is the single most expensive thing you 
 
 Tests live in `skills/<skill>/tests/test_<script>.py`, run by `run-tests.sh`. They fake the workspace and ledger; they never need the whole pipeline. Test the exit codes, not the prose.
 
-`doc-check` blocks the branch if pipeline files changed and `README.txt` / `README-LLM.md` did not. Budget for it — the doc edit is part of the task, not a follow-up.
+`doc-check` blocks the branch if pipeline files changed and `README.md` did not. Budget for it — the doc edit is part of the task, not a follow-up.
 
 ## Using this skill
 

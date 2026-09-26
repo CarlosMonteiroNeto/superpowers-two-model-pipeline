@@ -10,7 +10,7 @@ Add superpowers to the `plugin` array in your `opencode.json` (global or project
 
 ```json
 {
-  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"]
+  "plugin": ["superpowers@git+https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git"]
 }
 ```
 
@@ -21,6 +21,37 @@ Verify by asking: "Tell me about your superpowers"
 
 OpenCode uses its own plugin install. If you also use Claude Code, Codex, or
 another harness, install Superpowers separately for each one.
+
+## Immutable harness bundles and entry points
+
+`scripts/install-superpowers` stages the checkout as a validated
+immutable bundle (`.harness/bundles/<id>/`: runtime files, prompts,
+skills, canonical docs, license) and atomically selects it
+(`.harness/selected`). Backend-specific entry points resolve the
+selection without hard-coding the install root. They live inside the installed
+vendor checkout, which defaults to `~/.config/opencode/vendor/superpowers` or
+the custom `SUPERPOWERS_DIR` used during installation:
+
+```
+~/.config/opencode/vendor/superpowers/.harness/entrypoints/codex.sh
+~/.config/opencode/vendor/superpowers/.harness/entrypoints/opencode.sh
+```
+
+Failed bundle validation preserves the prior selection. Start OpenCode
+from a project root through its generated entry point:
+
+```
+"${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}/.harness/entrypoints/opencode.sh" --project "$PWD" docs/superpowers/plans/example-plan.json
+```
+
+The entry point enrolls only that project on first use and preserves its
+existing AGENTS.md content through harness-project prepare. Before a new run
+it reports changed paths in a newer selected bundle and asks whether to update the project pin
+(.superpowers/harness.json). A plan with an existing ledger keeps its
+original bundle when resumed. The Codex entry point resolves project
+configuration only; R1 does not include Codex pipeline execution. See
+README.md (the single canonical harness reference) for the full bundle,
+binding, and safe-update contract.
 
 ## Migrating from the old symlink-based install
 
@@ -59,9 +90,10 @@ To pin a specific version:
 
 ```json
 {
-  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git#v5.0.3"]
+  "plugin": ["superpowers@git+https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git#main"]
 }
 ```
+Replace `main` with a commit SHA or tag when you want a fixed revision.
 
 ## Troubleshooting
 
@@ -80,7 +112,7 @@ the plugin, try installing with system npm and pointing OpenCode at the local
 package:
 
 ```powershell
-npm install superpowers@git+https://github.com/obra/superpowers.git --prefix "$HOME\.config\opencode"
+npm install superpowers@git+https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline.git --prefix "$HOME\.config\opencode"
 ```
 
 Then use the installed package path in `opencode.json`:
@@ -111,5 +143,5 @@ Skills speak in actions ("create a todo", "dispatch a subagent", "read a file").
 
 ## Getting Help
 
-- Report issues: https://github.com/obra/superpowers/issues
-- Full documentation: https://github.com/obra/superpowers/blob/main/docs/README.opencode.md
+- Report fork-specific issues: https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline/issues
+- Full documentation: https://github.com/CarlosMonteiroNeto/superpowers-two-model-pipeline/blob/main/docs/README.opencode.md

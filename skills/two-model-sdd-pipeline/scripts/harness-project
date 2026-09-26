@@ -1,0 +1,419 @@
+#!/usr/bin/env python3
+"""Safe project enrollment for the immutable harness (Round 1 Task 4).
+
+Usage:
+  harness-project init --project DIR --bundle ID --backend NAME
+    [--install-root DIR]
+  harness-project prepare --project DIR --backend NAME
+    [--install-root DIR] [--accept-upgrade|--keep-pinned|--resume]
+
+Writes a versioned .superpowers/harness.json pin (bundle id, bundle
+hash, backend, relocatable backend configuration and policy references)
+and idempotently merges a marked AGENTS.md section while preserving
+existing user instructions. Only the given project is touched; unrelated
+projects are never scanned or altered.
+
+The bundle must already be staged in the install root (install roots
+are created by scripts/install-superpowers; $SUPERPOWERS_HARNESS_ROOT
+supplies the default). Enrollment is idempotent: repeated runs write
+identical bytes and keep exactly one marked section.
+
+Exit codes: 0 = enrolled; 2 = invalid invocation (unknown backend,
+unknown bundle, missing install root); 3 = operational failure.
+No LLM call: only file reads, hashing and pure text merging.
+"""
+import json
+import os
+import sys
+import tempfile
+
+# Avoid creating mutable bytecode inside the immutable selected bundle when
+# this CLI imports its adjacent harness_install module.
+sys.dont_write_bytecode = True
+
+BACKENDS = ("codex", "opencode")
+BUNDLE_VERSION = 1
+
+AGENTS_START = "<!-- superpowers-harness:start -->"
+AGENTS_END = "<!-- superpowers-harness:end -->"
+
+POLICY_REFS = {
+    "codex": (
+        "policies/codex/operator-workspace-write",
+        "policies/codex/reviewer-read-only",
+        "policies/codex/director-read-only",
+    ),
+    "opencode": (
+        "policies/opencode/role-variants",
+    ),
+}
+
+
+def fail_usage(message):
+    print("harness-project: %s" % message, file=sys.stderr)
+    return 2
+
+
+def backend_config_ref(backend):
+    return "entrypoints/%s.sh" % backend
+
+
+def managed_section(pin):
+    lines = [
+        AGENTS_START,
+        "## Superpowers harness (managed section - edits between the "
+        "markers are overwritten)",
+        "",
+        "- bundle: %s" % pin["bundle"],
+        "- backend: %s" % pin["backend"],
+        "- pin: .superpowers/harness.json",
+        AGENTS_END,
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def merge_agents(existing, section):
+    """Merge the managed section idempotently, preserving user text."""
+    if existing is None:
+        return section
+    start = existing.find(AGENTS_START)
+    end = existing.find(AGENTS_END)
+    if start == -1 and end == -1:
+        if not existing.endswith("\n"):
+            existing += "\n"
+        return existing + "\n" + section
+    if start == -1 or end == -1 or end < start:
+        print("harness-project: AGENTS.md has a torn harness section",
+              file=sys.stderr)
+        return None
+    after = end + len(AGENTS_END)
+    return existing[:start] + section + existing[after:].lstrip("\n")
+
+
+def _bundle_path(install_root, bundle_id):
+    return os.path.abspath(os.path.join(
+        str(install_root), ".harness", "bundles", bundle_id))
+
+
+def _print_bundle_path(install_root, bundle_id):
+    print(_bundle_path(install_root, bundle_id))
+
+
+def cmd_init(project, bundle_id, backend, install_root, announce=True,
+             allow_update=False):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import harness_install
+
+    if backend not in BACKENDS:
+        print("harness-project: unsupported backend %r (expected one of %s)"
+              % (backend, list(BACKENDS)), file=sys.stderr)
+        return 2
+    if not os.path.isdir(str(project)):
+        try:
+            os.makedirs(str(project), exist_ok=True)
+        except OSError as exc:
+            print("harness-project: cannot create project %s: %s"
+                  % (project, exc), file=sys.stderr)
+            return 3
+    bundle_dir = _bundle_path(install_root, bundle_id)
+    if not os.path.isdir(bundle_dir):
+        print("harness-project: bundle %r is not staged in %s"
+              % (bundle_id, install_root), file=sys.stderr)
+        return 2
+    try:
+        bundle_hash = harness_install.bundle_hash(bundle_dir)
+    except harness_install.HarnessInstallError as exc:
+        print("harness-project: staged bundle %r is invalid: %s"
+              % (bundle_id, exc), file=sys.stderr)
+        return 2
+    pin = {
+        "version": BUNDLE_VERSION,
+        "bundle": bundle_id,
+        "bundle_hash": bundle_hash,
+        "backend": backend,
+        "backend_config": backend_config_ref(backend),
+        "policy_refs": list(POLICY_REFS[backend]),
+    }
+    meta_dir = os.path.join(str(project), ".superpowers")
+    pin_path = os.path.join(meta_dir, "harness.json")
+    if os.path.isfile(pin_path):
+        try:
+            with open(pin_path, encoding="utf-8") as handle:
+                existing_pin = json.load(handle)
+        except (OSError, ValueError) as exc:
+            print("harness-project: cannot read existing project pin; "
+                  "refusing to overwrite it: %s" % exc, file=sys.stderr)
+            return 3
+        same_binding = (
+            isinstance(existing_pin, dict)
+            and existing_pin.get("bundle") == bundle_id
+            and existing_pin.get("bundle_hash") == bundle_hash
+            and existing_pin.get("backend") == backend)
+        if not same_binding and not allow_update:
+            current = existing_pin.get("bundle", "unknown") \
+                if isinstance(existing_pin, dict) else "unknown"
+            print("harness-project: project is already pinned to bundle %s; "
+                  "use prepare to review changed paths and explicitly accept "
+                  "an upgrade" % current, file=sys.stderr)
+            return 2
+    agents_path = os.path.join(str(project), "AGENTS.md")
+    try:
+        if os.path.exists(agents_path):
+            with open(agents_path, encoding="utf-8") as handle:
+                existing = handle.read()
+        else:
+            existing = None
+    except OSError as exc:
+        print("harness-project: cannot read AGENTS.md: %s" % exc,
+              file=sys.stderr)
+        return 3
+    merged = merge_agents(existing, managed_section(pin))
+    if merged is None:
+        return 3
+    agents_tmp = pin_tmp = None
+    try:
+        os.makedirs(meta_dir, exist_ok=True)
+        agents_fd, agents_tmp = tempfile.mkstemp(
+            dir=str(project), prefix=".AGENTS.md.", suffix=".tmp")
+        pin_fd, pin_tmp = tempfile.mkstemp(
+            dir=meta_dir, prefix=".harness.json.", suffix=".tmp")
+        with os.fdopen(agents_fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(merged)
+        with os.fdopen(pin_fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(pin, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(agents_tmp, agents_path)
+        agents_tmp = None
+        try:
+            os.replace(pin_tmp, pin_path)
+            pin_tmp = None
+        except OSError:
+            if existing is None:
+                try:
+                    os.remove(agents_path)
+                except OSError:
+                    pass
+            else:
+                rollback_fd, rollback_tmp = tempfile.mkstemp(
+                    dir=str(project), prefix=".AGENTS.md.rollback.",
+                    suffix=".tmp")
+                with os.fdopen(
+                        rollback_fd, "w", encoding="utf-8",
+                        newline="\n") as handle:
+                    handle.write(existing)
+                os.replace(rollback_tmp, agents_path)
+            raise
+    except OSError as exc:
+        print("harness-project: cannot commit project enrollment: %s" % exc,
+              file=sys.stderr)
+        return 3
+    finally:
+        for temporary in (agents_tmp, pin_tmp):
+            if temporary:
+                try:
+                    os.remove(temporary)
+                except OSError:
+                    pass
+    if announce:
+        print("harness-project: enrolled %s with bundle %s (%s)"
+              % (project, bundle_id, backend))
+        print("harness-project: pin %s"
+              % os.path.join(meta_dir, "harness.json"))
+    return 0
+
+
+def _changed_paths(old_dir, new_dir, old_manifest, new_manifest):
+    old_files = set(old_manifest["files"])
+    new_files = set(new_manifest["files"])
+    old_modes = old_manifest.get("modes", {})
+    new_modes = new_manifest.get("modes", {})
+    changed = []
+    for rel in sorted(old_files | new_files):
+        if rel not in old_files or rel not in new_files:
+            changed.append(rel)
+            continue
+        old_path = os.path.join(old_dir, *rel.split("/"))
+        new_path = os.path.join(new_dir, *rel.split("/"))
+        if old_modes.get(rel) != new_modes.get(rel):
+            changed.append(rel)
+            continue
+        with open(old_path, "rb") as old_file:
+            old_bytes = old_file.read()
+        with open(new_path, "rb") as new_file:
+            if old_bytes != new_file.read():
+                changed.append(rel)
+    return changed
+
+
+def cmd_prepare(project, backend, install_root, accept_upgrade=False,
+                keep_pinned=False, resume=False):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import harness_install
+
+    if backend not in BACKENDS:
+        return fail_usage("unsupported backend %r (expected one of %s)"
+                          % (backend, list(BACKENDS)))
+    pin_path = os.path.join(str(project), ".superpowers", "harness.json")
+    if not os.path.isfile(pin_path):
+        if resume:
+            print("harness-project: resume has no project pin; "
+                  "refusing to choose a new bundle", file=sys.stderr)
+            return 2
+        agents_path = os.path.join(str(project), "AGENTS.md")
+        managed_before = False
+        if os.path.isfile(agents_path):
+            try:
+                with open(agents_path, encoding="utf-8") as handle:
+                    managed_before = AGENTS_START in handle.read()
+            except OSError as exc:
+                print("harness-project: cannot inspect AGENTS.md: %s" % exc,
+                      file=sys.stderr)
+                return 3
+        if os.path.lexists(os.path.join(str(project), ".superpowers")) \
+                or managed_before:
+            print("harness-project: existing project is missing its harness "
+                  "pin; refusing to fall back to the selected bundle",
+                  file=sys.stderr)
+            return 2
+        selected = harness_install.selected_bundle(install_root)
+        if not selected:
+            print("harness-project: no validated bundle is selected",
+                  file=sys.stderr)
+            return 2
+        result = cmd_init(
+            project, selected, backend, install_root, announce=False)
+        if result == 0:
+            _print_bundle_path(install_root, selected)
+        return result
+
+    try:
+        binding = harness_install.resolve_bundle(project, install_root)
+    except harness_install.HarnessInstallError as exc:
+        print("harness-project: cannot prepare project: %s" % exc,
+              file=sys.stderr)
+        return 2
+    if binding["backend"] != backend:
+        print("harness-project: project is pinned to backend %s; "
+              "cannot prepare it as %s" % (binding["backend"], backend),
+              file=sys.stderr)
+        return 2
+
+    selected = harness_install.selected_bundle(install_root)
+    if not selected:
+        print("harness-project: no validated bundle is selected; "
+              "keeping project pin %s" % binding["bundle_id"],
+              file=sys.stderr)
+        return 2
+    if selected == binding["bundle_id"]:
+        _print_bundle_path(install_root, binding["bundle_id"])
+        return 0
+
+    candidate_dir = _bundle_path(install_root, selected)
+    try:
+        candidate_manifest = harness_install._read_manifest(candidate_dir)
+        if (candidate_manifest.get("version") != BUNDLE_VERSION
+                or candidate_manifest.get("id") != selected):
+            raise harness_install.HarnessInstallError(
+                "selected bundle version or identity mismatch")
+        candidate_hash = harness_install.bundle_hash(candidate_dir)
+        if candidate_manifest.get("bundle_hash") != candidate_hash:
+            raise harness_install.HarnessInstallError(
+                "selected bundle hash mismatch")
+        current_manifest = harness_install._read_manifest(
+            binding["bundle_dir"])
+        paths = _changed_paths(
+            binding["bundle_dir"], candidate_dir,
+            current_manifest, candidate_manifest)
+    except (harness_install.HarnessInstallError, OSError, KeyError) as exc:
+        print("harness-project: selected upgrade is invalid: %s" % exc,
+              file=sys.stderr)
+        return 2
+
+    if resume or keep_pinned:
+        reason = "active run" if resume else "user choice"
+        print("harness-project: keeping bundle %s for %s"
+              % (binding["bundle_id"], reason), file=sys.stderr)
+        _print_bundle_path(install_root, binding["bundle_id"])
+        return 0
+
+    if accept_upgrade:
+        result = cmd_init(
+            project, selected, backend, install_root, announce=False,
+            allow_update=True)
+        if result == 0:
+            _print_bundle_path(install_root, selected)
+        return result
+
+    print("harness-project: upgrade available: %s -> %s"
+          % (binding["bundle_id"], selected), file=sys.stderr)
+    if paths:
+        print("Changed package paths:", file=sys.stderr)
+        for rel in paths:
+            print("  %s" % rel, file=sys.stderr)
+    else:
+        print("Changed package paths: none (bundle identity changed)",
+              file=sys.stderr)
+    print("Accept with --accept-upgrade or retain with --keep-pinned.",
+          file=sys.stderr)
+    return 4
+
+
+def main(argv=None):
+    args = list(sys.argv[1:] if argv is None else argv)
+    if not args or args[0] not in ("init", "prepare"):
+        return fail_usage("usage: harness-project init|prepare "
+                          "--project DIR [--bundle ID] --backend NAME "
+                          "[--install-root DIR]")
+    command = args[0]
+    project = bundle_id = backend = install_root = None
+    accept_upgrade = keep_pinned = resume = False
+    rest = args[1:]
+    index = 0
+    while index < len(rest):
+        option = rest[index]
+        if option == "--project" and index + 1 < len(rest):
+            project = rest[index + 1]
+            index += 2
+        elif option == "--bundle" and index + 1 < len(rest):
+            bundle_id = rest[index + 1]
+            index += 2
+        elif option == "--backend" and index + 1 < len(rest):
+            backend = rest[index + 1]
+            index += 2
+        elif option == "--install-root" and index + 1 < len(rest):
+            install_root = rest[index + 1]
+            index += 2
+        elif option == "--accept-upgrade" and command == "prepare":
+            accept_upgrade = True
+            index += 1
+        elif option == "--keep-pinned" and command == "prepare":
+            keep_pinned = True
+            index += 1
+        elif option == "--resume" and command == "prepare":
+            resume = True
+            index += 1
+        else:
+            return fail_usage("unknown or incomplete option: %s" % option)
+    if not project or not backend:
+        return fail_usage("%s requires --project and --backend" % command)
+    if command == "init" and not bundle_id:
+        return fail_usage("init requires --bundle")
+    if command == "prepare" and sum(
+            (accept_upgrade, keep_pinned, resume)) > 1:
+        return fail_usage(
+            "prepare accepts only one of --accept-upgrade, "
+            "--keep-pinned and --resume")
+    if not install_root:
+        install_root = os.environ.get("SUPERPOWERS_HARNESS_ROOT")
+    if not install_root:
+        return fail_usage("no install root: pass --install-root or set "
+                          "SUPERPOWERS_HARNESS_ROOT")
+    if command == "init":
+        return cmd_init(project, bundle_id, backend, install_root)
+    return cmd_prepare(
+        project, backend, install_root, accept_upgrade,
+        keep_pinned, resume)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

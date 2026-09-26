@@ -9,6 +9,8 @@ description: Flutter/Dart specialization layered on top of two-model-sdd-pipelin
 
 This is the Flutter/Dart specialization. It does **not** replace the generic engine; it layers on it. Read `two-model-sdd-pipeline` first — the gate (opt-in, tier models, test/analyze commands), worktree, ledger, the `scripts/cmd` command runner (RTK compression), and the Agente estratégico / Agente diretor / Agente operador / Agente revisor roles all come from there. This skill adds the Flutter phases and the deterministic script set below, and overrides the Phase 2/3 details.
 
+**Execution honesty.** OpenCode executes this pipeline today. Round 1 does not yet supply a working Codex pipeline: the Codex backend shares configuration and contracts only, and later rounds wire dispatch. Package smoke checks validate files and contract fixtures, not live model behavior.
+
 ## 1. Phase 1 — Requirements (once, project-level)
 
 ### 1a. Commercial requirements verification
@@ -33,7 +35,7 @@ off release velocity", "expand animation is critically damped (no overshoot)",
 "reduced-motion replaces the slide with a cross-fade". A UI task whose acceptance
 does not trace to an `apple-design` principle is underspecified.
 
-Persist resolved terms/decisions per the fork's Incremental Persistence (`CONTEXT.md` glossary + ADRs, architectural path only). The spec doc stays branch-specific.
+Persist resolved terms/decisions per the fork's Incremental Persistence (`README.md` glossary + ADRs, architectural path only). The spec doc stays branch-specific.
 
 ## 2. Phase 2 — Research & Planning (project-level + per task)
 
@@ -157,7 +159,7 @@ outputs; dispatch is owned by scripts):
 - Revalidate the branch with `scripts/green-gate --no-commit` (full suite + analyze; report only, never commits).
 - Full codebase code review after all tasks are green, including the interface as a whole: verify the assembled UI against the `apple-design` principles (consistent motion, materials, typography, reduced-motion support), not only per-task diffs.
 - Any correction re-enters the Phase 3 loop (red → fix → green → review → commit).
-- **Repository documentation:** if this session changed the pipeline itself (scripts, skills, invariants, phases), update `README.txt` and `README-LLM.md` to reflect the changes and include them in the push. Run `scripts/doc-check` as a deterministic gate to verify before the merge — exit 1 means READMEs were not updated with pipeline changes; the Orchestrator must amend them.
+- **Repository documentation:** if this session changed the pipeline itself (scripts, skills, invariants, phases), update `README.md` (the single canonical reference) to reflect the changes and include it in the push. Run `scripts/doc-check` as a deterministic gate to verify before the merge — exit 1 means README.md was not updated with pipeline changes; the Orchestrator must amend it.
 
 ## 5. Deterministic Scripts (no AI involvement)
 

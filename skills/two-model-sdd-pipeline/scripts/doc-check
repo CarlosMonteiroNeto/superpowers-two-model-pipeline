@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Deterministic post-commit gate: if pipeline files changed, READMEs must
+# Deterministic post-commit gate: if pipeline files changed, README.md must
 # also be updated. Prevents the end-of-session rule from being skipped.
+# README.md is the single canonical operational and architectural reference;
+# later rounds must not recreate retired documents or require duplicate
+# README updates.
 #
 # Usage: doc-check [REPO]    (defaults to cwd)
-# Exit codes: 0 = OK (no violation), 1 = pipeline changed but READMEs not
+# Exit codes: 0 = OK (no violation), 1 = pipeline changed but README.md not
 #             updated, 2 = usage / not a repo.
 set -euo pipefail
 
@@ -25,13 +28,13 @@ if [ -z "$pipeline_changed" ]; then
   exit 0
 fi
 
-readme_changed=$(printf '%s\n' "$changed" | grep -E '^README.*\.(txt|md)$' || true)
+readme_changed=$(printf '%s\n' "$changed" | grep -Fx 'README.md' || true)
 
 if [ -z "$readme_changed" ]; then
-  echo "DOC-CHECK: pipeline files changed but READMEs not updated" >&2
-  echo "DOC-CHECK: update README.txt and README-LLM.md then amend or commit" >&2
+  echo "DOC-CHECK: pipeline files changed but README.md not updated" >&2
+  echo "DOC-CHECK: update README.md then amend or commit" >&2
   exit 1
 fi
 
-echo "DOC-CHECK: pipeline files and READMEs both updated - OK"
+echo "DOC-CHECK: pipeline files and README.md both updated - OK"
 exit 0

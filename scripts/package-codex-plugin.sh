@@ -39,8 +39,8 @@ Options:
   --keep-stage             Print and keep the temporary staging directory.
   -h, --help               Show this help.
 
-The archive is rootless: .codex-plugin/, assets/, skills/, README.md, LICENSE,
-and CODE_OF_CONDUCT.md sit at the archive root. Source-only repo files, hooks, tests,
+The archive is rootless: .codex-plugin/, agent/, assets/, skills/, README.md,
+LICENSE, and CODE_OF_CONDUCT.md sit at the archive root. Source-only repo files, hooks, tests,
 docs, and other harness manifests are intentionally not shipped.
 EOF
 }
@@ -131,10 +131,9 @@ else
 fi
 
 command -v git >/dev/null || die "git not found in PATH"
-command -v jq >/dev/null || die "jq not found in PATH"
+command -v python3 >/dev/null || die "python3 not found in PATH"
 command -v tar >/dev/null || die "tar not found in PATH"
 command -v gzip >/dev/null || die "gzip not found in PATH"
-command -v shasum >/dev/null || die "shasum not found in PATH"
 if [[ "$FORMAT" == "zip" ]]; then
   command -v zip >/dev/null || die "zip not found in PATH"
   command -v unzip >/dev/null || die "unzip not found in PATH"
@@ -234,6 +233,7 @@ METADATA_ROOT="$(prepare_metadata_root "$METADATA_SOURCE")"
 # regardless of the builder's git config or process umask.
 git -C "$REPO_ROOT" -c tar.umask=0022 archive --format=tar "$REF" -- \
   .codex-plugin \
+  agent \
   CODE_OF_CONDUCT.md \
   LICENSE \
   README.md \
@@ -241,7 +241,7 @@ git -C "$REPO_ROOT" -c tar.umask=0022 archive --format=tar "$REF" -- \
   skills \
   | tar -xpf - -C "$STAGE"
 
-VERSION="$(jq -r '.version // empty' "$STAGE/.codex-plugin/plugin.json")"
+VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$STAGE/.codex-plugin/plugin.json")"
 [[ -n "$VERSION" ]] || die "could not read version from .codex-plugin/plugin.json"
 
 if [[ -z "$OUTPUT" ]]; then
@@ -341,7 +341,7 @@ if [[ -n "$unexpected_paths" ]]; then
 fi
 
 entry_count="$(printf '%s\n' "$archive_paths" | wc -l | tr -d ' ')"
-checksum="$(shasum -a 256 "$OUTPUT" | awk '{print $1}')"
+checksum="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$OUTPUT")"
 
 echo "Archive: $OUTPUT"
 echo "Format:  $FORMAT"

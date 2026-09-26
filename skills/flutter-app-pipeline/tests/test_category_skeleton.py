@@ -31,25 +31,27 @@ class TestCategorySkeletonInBrainstorming(unittest.TestCase):
         self.assertLess(idx_generic, idx_specific, "generic category must precede specific category")
         self.assertLess(idx_specific, idx_original, "specific category must precede original implementations")
 
-    def test_required_fields_persist_to_context(self):
+    def test_required_fields_persist_to_canonical_glossary(self):
         """The three fields are REQUIRED outputs of Phase 1a, persisted to
-        CONTEXT.md; the spec cannot be written without them."""
+        the canonical README.md glossary; the spec cannot be written
+        without them."""
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("REQUIRED", text)
-        self.assertIn("CONTEXT.md", text)
+        self.assertIn("README.md", text)
+        self.assertNotIn("CONTEXT.md", text)
 
 
-class TestCategorySkeletonInContext(unittest.TestCase):
+class TestCategorySkeletonInCanonicalReadme(unittest.TestCase):
     def setUp(self):
-        self.context = REPO / "CONTEXT.md"
+        self.readme = REPO / "README.md"
 
-    def test_context_exists(self):
-        self.assertTrue(self.context.exists(), "CONTEXT.md is missing")
+    def test_readme_exists(self):
+        self.assertTrue(self.readme.exists(), "README.md is missing")
 
     def test_category_skeleton_fields_documented(self):
-        """CONTEXT.md must document the Category Skeleton fields (generic
+        """README.md must document the Category Skeleton fields (generic
         category, specific category, original implementations)."""
-        text = self.context.read_text(encoding="utf-8")
+        text = self.readme.read_text(encoding="utf-8")
         self.assertIn("Category Skeleton", text)
         self.assertIn("generic category", text)
         self.assertIn("specific category", text)

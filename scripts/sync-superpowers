@@ -20,8 +20,11 @@
 #
 # The candidate is validated in isolation (a detached worktree at the remote
 # revision runs every skills/*/tests/run-tests.sh found there) before any
-# working-tree change. Divergence is never reset, cleaned, stashed, rebased
-# or auto-merged; the working tree, index and untracked files are preserved.
+# working-tree change. If the candidate contains the R1 bundle installer, it
+# is staged before the checkout update and selected only after the fast-forward
+# succeeds; existing project pins are never rewritten. Divergence is never
+# reset, cleaned, stashed, rebased or auto-merged; the working tree, index and
+# untracked files are preserved.
 
 set -euo pipefail
 
@@ -32,6 +35,7 @@ APPLY=0
 
 CHANGED_PATHS=()
 ERRORS=()
+BUNDLE_ID=""
 
 usage() {
   echo "usage: sync-superpowers [VENDOR_DIR] [--check-only] [--json] [--apply]" >&2
@@ -390,6 +394,18 @@ if git -C "$VENDOR_DIR" worktree add --detach "$isolated" "$remote_sha" >/dev/nu
       validation_err="$name candidate suite failed"
     fi
   done
+  candidate_installer="$isolated/skills/two-model-sdd-pipeline/scripts/harness_install.py"
+  if [[ "$validation_failed" -eq 0 && -f "$candidate_installer" ]]; then
+    BUNDLE_ID="git-${remote_sha:0:12}"
+    say "SYNC-SUPERPOWERS: staging validated bundle $BUNDLE_ID"
+    if ! python3 "$candidate_installer" stage \
+        --install-root "$VENDOR_DIR" --bundle "$BUNDLE_ID" \
+        --source "$isolated" >/dev/null 2>&1; then
+      say_err "SYNC-SUPERPOWERS: candidate bundle staging FAILED"
+      validation_failed=1
+      validation_err="candidate bundle staging failed"
+    fi
+  fi
   git -C "$VENDOR_DIR" worktree remove --force "$isolated" >/dev/null 2>&1 || true
   rm -rf "$tmp_base"
   if [[ "$validation_failed" -ne 0 ]]; then
@@ -411,7 +427,7 @@ if [[ "$validation" != "pass" ]]; then
   report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
 fi
 
-if ! git -C "$VENDOR_DIR" merge --ff-only origin/main >/dev/null 2>&1; then
+if ! git -C "$VENDOR_DIR" merge --ff-only "$remote_sha" >/dev/null 2>&1; then
   ERRORS=("fast-forward update to $remote_sha failed - current checkout preserved")
   CHANGED_PATHS=()
   say_err "SYNC-SUPERPOWERS: fast-forward update failed; current checkout preserved at $before_sha"
@@ -429,6 +445,20 @@ if [[ "$new_head" != "$remote_sha" ]]; then
   ERRORS=("update incomplete: HEAD $new_head != $remote_sha")
   say_err "SYNC-SUPERPOWERS: update incomplete"
   report_and_exit "error" "$before_sha" "$remote_sha" "error" 3
+fi
+
+if [[ -n "$BUNDLE_ID" ]]; then
+  installer="$VENDOR_DIR/skills/two-model-sdd-pipeline/scripts/harness_install.py"
+  if ! python3 "$installer" select --install-root "$VENDOR_DIR" \
+      --bundle "$BUNDLE_ID" >/dev/null 2>&1; then
+    ERRORS=("checkout updated to $new_head but bundle $BUNDLE_ID could not be selected; prior selection preserved")
+    CHANGED_PATHS=()
+    say_err "SYNC-SUPERPOWERS: checkout updated to $new_head but bundle selection failed"
+    say_err "SYNC-SUPERPOWERS: prior selection and all project pins are preserved"
+    report_and_exit "error" "$before_sha" "$remote_sha" \
+      "fast-forward-bundle-selection-failed" 3
+  fi
+  say "SYNC-SUPERPOWERS: selected immutable bundle $BUNDLE_ID"
 fi
 
 ERRORS=()

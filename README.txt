@@ -99,8 +99,8 @@ WHAT THIS FORK ADDS
 
 1. two-model-sdd-pipeline (new skill)
    A script-autonomous fork of subagent-driven-development. A deterministic
-   "Script CEO" (modular bash, invokable anywhere as `scripts/run-pipeline
-   PLAN_FILE`) owns the per-task loop: gates, test/analyze
+   "Script CEO" (modular bash, launched through
+   `"${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}/.harness/entrypoints/opencode.sh" PLAN_FILE`) owns the per-task loop: gates, test/analyze
    decisions, subagent dispatch (headless `opencode run --agent`), routing,
    and commits. The interactive session (Agente estratégico) writes
    the spec and a complete `plan.json` (acceptance; no `expected_red`),
@@ -117,10 +117,12 @@ WHAT THIS FORK ADDS
 
 2. brainstorming enrichment
    grill-with-docs merged into brainstorming, plus Incremental
-   Persistence: resolved terms and decisions are written to CONTEXT.md as
-   they resolve; ADRs require three simultaneous gates; fact-finding
-   questions stay open-ended; the approaches step presents exactly 3
-   options plus a free-form custom answer.
+   Persistence: resolved terms and decisions are written to the
+   README.md glossary as they resolve; ADRs require three simultaneous
+   gates; fact-finding questions stay open-ended; the approaches step
+   presents exactly 3 options plus a free-form custom answer. Design
+   approval permits writing both the spec and the plan without another
+   written-spec approval.
 
 3. flutter-app-pipeline (new skill, layered on top)
    A Flutter/Dart specialization that adds package research with a
@@ -514,7 +516,7 @@ skills/two-model-sdd-pipeline/scripts/:
 
 skills/brainstorming/scripts/:
   orient-llm           pre-flight orientation gate: locate and print
-                       README-LLM.md (the agent-facing harness reference)
+                       README.md (the single canonical harness reference)
                        before work starts (exit 0 printed; 1 missing; 2 usage)
 
 Every LLM-invoked command line runs through scripts/cmd, so no raw command
@@ -592,7 +594,7 @@ self-update scripts under `scripts/` (they auto-detect the checkout dir,
 or take it as the first argument):
 
   scripts/check-superpowers    exit 0 = up to date; 1 = behind; 2 = not installed
-  scripts/sync-superpowers     fetch + reset to origin/main + run the pipeline tests
+  scripts/sync-superpowers     validate a candidate and fast-forward a clean strictly-behind checkout; no reset
   scripts/install-superpowers  full clone when not installed (refuses to clobber)
 
 The agent runs check-superpowers at session start and, if behind or not
@@ -618,8 +620,9 @@ REPOSITORY LAYOUT
 -----------------
 
 README.txt            this file (for people)
-README-LLM.md         harness reference (for LLM agents)
-CONTEXT.md            resolved glossary (architectural path)
+README.md             the single canonical harness reference (for people
+                      and LLM agents; retired CONTEXT.md and README-LLM.md
+                      were migrated into it)
 agent/                mirrored tier agent definitions (kept byte-identical
                       to the live ~/.config/opencode/agent/ definitions)
 docs/superpowers/     ADRs, specs, plans

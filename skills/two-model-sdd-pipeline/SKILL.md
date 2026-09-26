@@ -98,9 +98,29 @@ Before `brainstorming` starts:
   answer yourself so it is never asked again on this branch.
 - Ask about tier models **only when the local pipeline is not installed**
   (no pre-configured tier agents found).
+- **Every pipeline run starts through its backend entry point.** For the
+  existing OpenCode runtime, use
+  `"${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}/.harness/entrypoints/opencode.sh" PLAN_FILE [TOTAL] [--no-push]
+  [--max-parallel N]` from the installed vendor checkout. It enrolls only the project in use on first use,
+  preserving existing `AGENTS.md` instructions, then starts the runtime from
+  the project's pinned bundle. Before a new run it reports changed paths in a
+  newer selected bundle and asks whether to accept the upgrade; noninteractive
+  callers can pass `--accept-upgrade` or `--keep-pinned`. An existing plan
+  ledger is detected as a resume and keeps its original bundle.
+
+  First-use enrollment calls `harness-project init` under the entry point.
+  It enrolls only the project in use. The Codex entry point resolves project
+  configuration only. R1 does not provide Codex dispatch or claim that the
+  Codex execution path works.
 
 If declined, fall back to native superpowers:subagent-driven-development
 behavior. Do not run both pipelines on one branch.
+
+**Execution honesty.** OpenCode executes this pipeline today.
+Round 1 does not yet supply a working Codex pipeline: the Codex backend
+shares configuration and contracts only, and later rounds wire dispatch.
+Package smoke checks validate files and contract fixtures, not live
+model behavior.
 
 Record the answers in the ledger (`gate` entry) — every later dispatch
 depends on them, and they must survive compaction.
@@ -185,9 +205,11 @@ the spike: subagent-mode agents cannot be targeted headlessly by
 
 ### Script CEO (deterministic — bash, no LLM)
 
-- **`run-pipeline PLAN_FILE [TOTAL]`** — top-level driver, invokable
-  anywhere: loops `route-next` → executes each action → re-routes until
-  `FINAL_REVIEW` → closing → push+PR. No Agente estratégico in the loop.
+- **`run-pipeline PLAN_FILE [TOTAL]`** — internal top-level driver,
+  launched through the installed vendor checkout's
+  `.harness/entrypoints/opencode.sh`; loops
+  `route-next` → executes each action → re-routes until `FINAL_REVIEW`
+  → closing → push+PR. No Agente estratégico in the loop.
 - **`orchestrator WS TASK [TOTAL]`** — thin driver: runs `route-next`, executes
   the emitted action, re-routes, prints `OUTCOME:` (consumed by
   `run-pipeline`).
@@ -560,12 +582,9 @@ For each task in order:
  4. Findings become new corrective tasks at task scope (same loop as step 6).
     If structural, diretor re-plans instead.
  5. Export every `Ruling`-bearing ledger line into the closing report.
- 6. Run `scripts/doc-check` — if the branch changed pipeline files and
-    `README.txt` / `README-LLM.md` were not updated, exit 1. Update them
-    before proceeding.
- 6. Run `scripts/doc-check` — if the branch changed pipeline files and
-   `README.txt` / `README-LLM.md` were not updated, exit 1. Update them
-   before proceeding.
+  6. Run `scripts/doc-check` — if the branch changed pipeline files and
+     `README.md` (the single canonical reference) was not updated, exit 1.
+     Update it before proceeding.
 
  Then delete the workspace (git history is the record) and use
  superpowers:finishing-a-development-branch (default push+PR). The merge
@@ -600,7 +619,8 @@ For each task in order:
 ## Language Policy
 
 - All artifacts and all assistant responses are produced in English by
-  default — task briefs, RED tests, design docs, `CONTEXT.md`, ADRs, ledger
+  default — task briefs, RED tests, design docs, `README.md` glossary
+  entries, ADRs, ledger
   summaries, review reports — regardless of the developer's own language.
 - Exception: the software's UI (user-facing strings, labels, copy) defaults
   to the developer's language, not English.
@@ -625,7 +645,7 @@ For each task in order:
 Human: Build the invoice export feature.
 
 Agente estratégico: [complete plan.json + spec approved]
-[scripts/run-pipeline docs/superpowers/plans/invoice-plan.json]
+["${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}/.harness/entrypoints/opencode.sh" docs/superpowers/plans/invoice-plan.json]
   Script CEO: plan is complete (acceptance; no expected_red) -> no expand dispatch
   Task 1: brief-scaffold -> dispatch operador (headless)
     operador writes RED tests, runs them (saves machine-readable RED),

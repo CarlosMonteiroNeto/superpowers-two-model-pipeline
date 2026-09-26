@@ -22,7 +22,8 @@ the approval gate never does.
 ## Pipeline Integration (two-model-sdd-pipeline / flutter-app-pipeline)
 
 - **Pre-flight is deterministic, not memory.** Before classifying anything,
-  run `scripts/orient-llm` — it locates and prints this repo's `README-LLM.md`
+  run `scripts/orient-llm` — it locates and prints this repo's `README.md`
+  (the single canonical harness reference)
   so every session starts from the same mental model instead of relying on
   what the LLM "remembers" from earlier in the conversation. Exit 1 (missing)
   is a hard gate: stop.
@@ -36,8 +37,10 @@ the approval gate never does.
   `spec_refs`, `touches`, `depends_on`, and `acceptance` — with **no
   `expected_red`**. `writing-plans` carries the exact schema. The plan is
   complete when brainstorming ends: a separate clean session launches
-  `run-pipeline PLAN_FILE`, and the script reads only the plan file and the
-  ledger (never this session).
+  `"${SUPERPOWERS_DIR:-$HOME/.config/opencode/vendor/superpowers}/.harness/entrypoints/opencode.sh" PLAN_FILE`
+  from the installed vendor checkout; the entry point resolves the project
+  pin and the run-pipeline script reads the plan and ledger (never this
+  session).
 - `depends_on`: the task ids that must be `task_complete` before this task may
   run (empty array = no predecessor). `touches`: the exclusive file set; tasks
   with overlapping `touches` never share a wave. Because of that, a file whose
@@ -51,10 +54,15 @@ the approval gate never does.
   (`skills/apple-design/SKILL.md`) before making design decisions, and encode the
   resulting requirements into the plan tasks' `acceptance` — not prose. This is
   the concrete case of the `flutter-app-pipeline` §1c mandate.
-- **Artifacts are English-only.** The spec document, `CONTEXT.md`, and any
+- **Artifacts are English-only.** The spec document, `README.md` glossary
+  entries, and any
   ADRs this phase produces are written in English regardless of the
   developer's spoken language — the one exception anywhere in the pipeline is
   user-facing UI copy.
+- **Design approval permits spec and plan without a second written-spec
+  approval.** Once the human partner approves the design, write the spec
+  and then invoke `writing-plans` directly, without another written-spec
+  approval.
 - **The human-approval gate is untouched by automation.** Nothing above
   changes the HARD-GATE: no script substitutes for the human's explicit "yes"
   on scope or design.
@@ -67,7 +75,7 @@ the approval gate never does.
 
 Before classifying anything, if this skill's `scripts/orient-llm` exists,
 run it: `scripts/orient-llm`. Its stdout is the pipeline's orientation
-(the agent-facing harness reference, README-LLM.md) — read it before doing
+(the single canonical harness reference, README.md) — read it before doing
 work. The script is a deterministic gate: exit 0 means oriented and
 printed; exit 1 means the harness reference is missing — STOP and report
 that instead of proceeding; exit 2 is a usage error, fix the invocation.
@@ -155,15 +163,14 @@ your path and complete them in order.
    - **specific category** — the niche within that family (e.g. women's fashion POS)
    - **original implementations** — the features that make it yours (e.g. voice command, auto-calc installments)
 
-   Persist all three fields to `CONTEXT.md`. The generic + specific category drive the template search query; each original implementation becomes a per-task dependency-research target in Phase 2a.
+    Persist all three fields to `README.md` (the single canonical glossary). The generic + specific category drive the template search query; each original implementation becomes a per-task dependency-research target in Phase 2a.
 
-4. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria; fact-finding questions stay open-ended (no preset options), and each resolved term/decision/constraint goes to `CONTEXT.md` as it resolves
+4. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria; fact-finding questions stay open-ended (no preset options), and each resolved term/decision/constraint goes to `README.md` as it resolves
 5. **Propose 3 approaches** — with trade-offs and your recommendation, plus a free-form custom-answer option
 6. **Present design** — in sections scaled to their complexity, get user approval after each section
 7. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
 8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-9. **User reviews written spec** — ask user to review the spec file before proceeding
-10. **Transition to implementation** — invoke writing-plans skill to write the complete `plan.json` (every task with acceptance and `spec_refs`; no `expected_red`)
+9. **Transition to implementation** — invoke writing-plans skill to write the complete `plan.json` (every task with acceptance and `spec_refs`; no `expected_red`), without another written-spec approval
 
 **After any path — reusable technique?** If the session surfaced a technique
 others would reuse across projects (`writing-skills` "When to Create"
@@ -189,7 +196,6 @@ digraph brainstorming {
     "User approves design?" [shape=diamond];
     "Write design doc" [shape=box];
     "Spec self-review\n(fix inline)" [shape=box];
-    "User reviews spec?" [shape=diamond];
     "Invoke writing-plans skill" [shape=doublecircle];
     "Hidden complexity? Upgrade path" [shape=box];
 
@@ -208,9 +214,7 @@ digraph brainstorming {
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Write design doc" [label="yes"];
     "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
+    "Spec self-review\n(fix inline)" -> "Invoke writing-plans skill";
 }
 ```
 
@@ -244,9 +248,9 @@ is the whole process.
 
 **Incremental persistence (architectural path only):**
 
-- Applies ONLY to tasks classified as architectural. Bounded tasks and spikes NEVER create `CONTEXT.md` or ADRs — their resolved decisions live in the in-chat design and in the artifact itself. Creating `CONTEXT.md` for a bounded task or spike is a process violation; stop and remove it.
-- On architectural work: the moment a term, decision, or constraint resolves during the dialogue — at any step, not only at the end — write it immediately to `CONTEXT.md` (repo root) as a glossary entry. Never batch resolved knowledge into the final spec; a session that dies mid-design must not take its resolved vocabulary with it.
-- Scope stays separated so the two artifacts never duplicate: `CONTEXT.md` and ADRs hold vocabulary and decisions that persist beyond this branch (project-level); the design spec doc holds what is specific to this feature/branch.
+- Applies ONLY to tasks classified as architectural. Bounded tasks and spikes NEVER create glossary entries or ADRs — their resolved decisions live in the in-chat design and in the artifact itself. Creating `README.md` glossary entries for a bounded task or spike is a process violation; stop and remove them.
+- On architectural work: the moment a term, decision, or constraint resolves during the dialogue — at any step, not only at the end — write it immediately to `README.md` (repo root) as a glossary entry. Never batch resolved knowledge into the final spec; a session that dies mid-design must not take its resolved vocabulary with it.
+- Scope stays separated so the two artifacts never duplicate: `README.md` glossary entries and ADRs hold vocabulary and decisions that persist beyond this branch (project-level); the design spec doc holds what is specific to this feature/branch.
 - A resolved decision becomes an ADR (`docs/superpowers/adr/NNNN-title.md`) only when it passes all three gates simultaneously:
   1. **Reversal cost** — undoing it later would be expensive.
   2. **Reach** — it binds work beyond this branch (project-level).
@@ -288,7 +292,7 @@ is the whole process.
 
 - Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
-- The spec holds branch-specific design only. Vocabulary and decisions that persist beyond the branch already live in `CONTEXT.md` and `docs/superpowers/adr/` — reference them, do not restate them.
+- The spec holds branch-specific design only. Vocabulary and decisions that persist beyond the branch already live in `README.md` glossary entries and `docs/superpowers/adr/` — reference them, do not restate them.
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git
 
@@ -302,14 +306,11 @@ After writing the spec document, look at it with fresh eyes:
 
 Fix any issues inline. No need to re-review — just fix and move on.
 
-**User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
-
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
-
-Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
-
 **Implementation:**
+
+Design approval already permits both the spec and the plan, so there is
+no second written-spec approval here: after the self-review passes,
+proceed directly.
 
 - Invoke the writing-plans skill to create a detailed implementation plan
 - Do NOT invoke any other skill. writing-plans is the next step.

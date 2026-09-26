@@ -26,14 +26,14 @@ class TestOrientLlm(unittest.TestCase):
     def test_readme_present_prints_and_exits_zero(self):
         r = run_it(REPO)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("README-LLM.md", r.stdout)
+        self.assertIn("single canonical", r.stdout)
 
     def test_missing_readme_exits_one(self):
         tmp = tempfile.mkdtemp(prefix="orient-llm-tests-")
         try:
             r = run_it(tmp)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-            self.assertIn("README-LLM.md", r.stdout + r.stderr)
+            self.assertIn("README.md", r.stdout + r.stderr)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
