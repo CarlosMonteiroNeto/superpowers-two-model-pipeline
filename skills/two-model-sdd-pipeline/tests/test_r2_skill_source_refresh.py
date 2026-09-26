@@ -47,6 +47,12 @@ class SkillSourceRefreshTests(unittest.TestCase):
         self.temp = pathlib.Path(tempfile.mkdtemp(prefix="skill-refresh-"))
         self.registry = self.temp / "registry.json"
         self.module = load_skill_sources(self)
+        guard = mock.patch.object(
+            self.module, "_github_get_json",
+            side_effect=AssertionError("tests must not make live GitHub requests"),
+        )
+        guard.start()
+        self.addCleanup(guard.stop)
 
     def tearDown(self):
         import shutil
@@ -270,4 +276,3 @@ class SkillSourceRefreshTests(unittest.TestCase):
         self.assertEqual(len({item["repository"] for item in result["candidates"]}), 100)
         self.assertEqual(result["candidates"][0]["stars"], 1000)
         self.assertEqual(result["candidates"][-1]["stars"], 901)
-

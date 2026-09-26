@@ -38,11 +38,13 @@ def empty_registry(last_refreshed_at="2026-09-20T12:00:00Z"):
 
 
 def cached_query(query, repositories, collected_at="2026-09-20T12:00:00Z"):
+    terms = list(query.get("topics", [])) + list(query.get("keywords", []))
+    search_query = " ".join(terms + ["skill", "in:name,description,readme"])
     return {
         "query": query,
-        "search_query": "python testing skill in:name,description,readme",
+        "search_query": search_query,
         "collected_at": collected_at,
-        "scope": "GitHub repository search for this query; up to 100 matching results sorted by stars, not exhaustive.",
+        "scope": "Query-scoped GitHub repository search for this query; up to 100 matching results sorted by stars, not exhaustive.",
         "status": "fresh",
         "repositories": repositories,
     }
@@ -69,6 +71,12 @@ class SkillSourceDiscoveryTests(unittest.TestCase):
         self.temp = pathlib.Path(tempfile.mkdtemp(prefix="skill-sources-"))
         self.registry = self.temp / "registry.json"
         self.module = load_skill_sources(self)
+        guard = mock.patch.object(
+            self.module, "_github_get_json",
+            side_effect=AssertionError("tests must not make live GitHub requests"),
+        )
+        guard.start()
+        self.addCleanup(guard.stop)
 
     def tearDown(self):
         import shutil
@@ -115,7 +123,7 @@ class SkillSourceDiscoveryTests(unittest.TestCase):
         self.assertEqual([item["repository"] for item in result["candidates"]],
                          ["Acme/python-test-skills"])
         self.assertEqual(result["cache_status"], "fresh")
-        self.assertIn("query-scoped", result["scope"])
+        self.assertIn("query-scoped", result["scope"].casefold())
         self.assertTrue(result["external_installation_requires_approval"])
         self.assertFalse(result["installation_performed"])
         self.assertEqual(result["candidates"][0]["review_status"], "unreviewed")
