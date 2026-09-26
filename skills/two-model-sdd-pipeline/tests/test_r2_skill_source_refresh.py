@@ -482,6 +482,73 @@ class SkillSourceRefreshTests(unittest.TestCase):
                          {"decision": "reject"})
         self.assertEqual(skills["skills/special"]["review_status"], "unreviewed")
 
+    def test_catalog_link_without_license_preserves_registered_skill_license(self):
+        catalog = {
+            "repository": "VoltAgent/awesome-agent-skills",
+            "source_url": "https://github.com/VoltAgent/awesome-agent-skills",
+            "category": "catalog",
+            "review_status": "candidate",
+        }
+        target = {
+            "repository": "Acme/test-skills",
+            "source_url": "https://github.com/Acme/test-skills",
+            "category": "publisher",
+            "revision": "target-revision",
+            "last_checked_at": "2026-09-20T12:00:00Z",
+            "review_status": "reviewed",
+            "description": "Reviewed Python skills",
+            "stars": 44,
+            "topics": ["python"],
+            "license": {"spdx_id": "MIT", "name": "MIT License"},
+            "refresh_status": "fresh",
+            "skills": [{
+                "name": "Python tests",
+                "path": "skills/python-testing/SKILL.md",
+                "topics": ["python"],
+                "compatibility": ["codex"],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+                "review_status": "reviewed",
+            }],
+        }
+        self.registry.write_text(json.dumps({
+            "schema_version": 1,
+            "last_refreshed_at": "2026-09-20T12:00:00Z",
+            "status": "fresh",
+            "sources": [target],
+            "queries": [],
+        }), encoding="utf-8")
+        readme = (
+            "# Catalog\n"
+            "[Python tests](https://github.com/Acme/test-skills/tree/main/skills/python-testing/SKILL.md)\n"
+        )
+        encoded = base64.b64encode(readme.encode("utf-8")).decode("ascii")
+
+        def github_get(url):
+            parsed = urlsplit(url)
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills":
+                return repo_details("VoltAgent/awesome-agent-skills")
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills/commits/main":
+                return {"sha": "catalog-revision"}
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills/git/trees/catalog-revision":
+                return {"tree": [], "truncated": False}
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills/readme":
+                return {"content": encoded, "encoding": "base64"}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.refresh(
+                str(self.registry), "2026-09-26T14:30:00Z", [catalog],
+            )
+
+        refreshed_target = next(item for item in result["sources"]
+                                if item["repository"] == "Acme/test-skills")
+        skill = refreshed_target["skills"][0]
+        self.assertEqual(skill["path"], "skills/python-testing/SKILL.md")
+        self.assertEqual(skill["license"], {"spdx_id": "MIT", "name": "MIT License"})
+        checks = self.module._skill_checks(skill, refreshed_target,
+                                           {"topics": ["python"]}, ["python"])
+        self.assertTrue(checks["license"])
+
     def test_selective_refresh_does_not_mark_unselected_sources_fresh(self):
         source_a = {
             "repository": "Acme/first-skills",

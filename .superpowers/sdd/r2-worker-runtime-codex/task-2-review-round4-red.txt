@@ -1,0 +1,14 @@
+test_catalog_link_without_license_preserves_registered_skill_license (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_catalog_link_without_license_preserves_registered_skill_license) ... FAIL
+
+======================================================================
+FAIL: test_catalog_link_without_license_preserves_registered_skill_license (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_catalog_link_without_license_preserves_registered_skill_license)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_skill_source_refresh.py", line 547, in test_catalog_link_without_license_preserves_registered_skill_license
+    self.assertEqual(skill["license"], {"spdx_id": "MIT", "name": "MIT License"})
+AssertionError: None != {'spdx_id': 'MIT', 'name': 'MIT License'}
+
+----------------------------------------------------------------------
+Ran 1 test in 0.153s
+
+FAILED (failures=1)
