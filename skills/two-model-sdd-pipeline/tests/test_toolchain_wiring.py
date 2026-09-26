@@ -107,15 +107,28 @@ class TestTaskLang(ToolchainWiringBase):
             ],
         }
         (self.ws / "plan.json").write_text(json.dumps(self.plan), encoding="utf-8")
-        self.write_ledger([gate_entry("go", "go test ./...", "go vet ./...", "go-unit-v1")])
+        self.write_ledger([
+            gate_entry("go", "go test ./...", "go vet ./...", "go-unit-v1"),
+            gate_entry("node", "node --test", "eslint .", "node-test-v1"),
+        ])
 
     def run_lang(self, task, root):
         return run_script("task-lang", [str(self.ws), task, root],
                           cwd=self._tmp, env_extra={})
 
-    def test_resolves_the_task_declared_toolchain_identity(self):
+    def run_toolchain(self, task, root):
+        return run_script("task-toolchain", [str(self.ws), task, root],
+                          cwd=self._tmp, env_extra={})
+
+    def test_resolves_language_through_exact_task_toolchain_identity(self):
         (self.repo / "go.mod").write_text("module test\n", encoding="utf-8")
         r = self.run_lang("1", str(self.repo))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(r.stdout.strip(), "go")
+
+    def test_task_toolchain_returns_exact_declared_identity(self):
+        (self.repo / "go.mod").write_text("module test\n", encoding="utf-8")
+        r = self.run_toolchain("1", str(self.repo))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(r.stdout.strip(), "go-unit-v1")
 
@@ -125,7 +138,7 @@ class TestTaskLang(ToolchainWiringBase):
         (self.repo / "src" / "package.json").write_text("{}\n", encoding="utf-8")
         r = self.run_lang("2", str(self.repo))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(r.stdout.strip(), "node-test-v1")
+        self.assertEqual(r.stdout.strip(), "node")
 
     def test_missing_task_identity_is_not_guessed_from_branch_gate(self):
         r = self.run_lang("3", str(self.repo))

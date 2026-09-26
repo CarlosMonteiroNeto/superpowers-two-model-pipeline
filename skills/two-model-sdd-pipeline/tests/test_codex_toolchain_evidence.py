@@ -208,6 +208,88 @@ class ToolchainEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(go_red.returncode, 0, go_red.stdout + go_red.stderr)
 
+    def test_red_form_check_rejects_unittest_collection_error_even_when_named_as_executed(self):
+        workspace = self.temp / "strict-red-workspace"
+        workspace.mkdir()
+        identity = {
+            "version": 1,
+            "task_id": 1,
+            "task_family_id": "family-1",
+            "attempt_id": "attempt-9",
+            "toolchain_id": "python-unittest",
+            "runner": "scoped-run-v1",
+            "command": [sys.executable, "-m", "unittest", "tests.test_acceptance"],
+            "source_snapshot": "commit:fedcba9876543210",
+            "adapter": "unittest",
+        }
+        (workspace / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
+        failed_test = "test_missing_module (unittest.loader._FailedTest.test_missing_module)"
+        evidence = dict(identity)
+        evidence.update({
+            "tests_run": 1,
+            "executed_tests": [failed_test],
+            "failures": [],
+            "errors": [failed_test],
+            "exit_code": 1,
+        })
+        (workspace / "task-1-red.txt").write_text(json.dumps(evidence), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_red_form_check_requires_attempt_identity_when_runner_manifest_exists(self):
+        workspace = self.temp / "unbound-red-workspace"
+        workspace.mkdir()
+        identity = {
+            "version": 1,
+            "task_id": 1,
+            "task_family_id": "family-1",
+            "attempt_id": "attempt-9",
+            "toolchain_id": "python-unittest",
+            "runner": "scoped-run-v1",
+            "command": [sys.executable, "-m", "unittest", "tests.test_acceptance"],
+            "source_snapshot": "commit:fedcba9876543210",
+            "adapter": "unittest",
+        }
+        (workspace / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
+        unbound = {
+            "adapter": "unittest",
+            "tests_run": 1,
+            "executed_tests": ["test_acceptance"],
+            "failures": ["test_acceptance"],
+            "errors": [],
+            "tests": [{"id": "test_acceptance", "outcome": "failure"}],
+            "exit_code": 1,
+        }
+        (workspace / "task-1-red.txt").write_text(json.dumps(unbound), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_legacy_red_form_check_does_not_accept_unittest_failedtest_collection_error(self):
+        workspace = self.temp / "legacy-collection-workspace"
+        workspace.mkdir()
+        failed_test = "test_missing_module (unittest.loader._FailedTest.test_missing_module)"
+        legacy_evidence = {
+            "adapter": "unittest",
+            "tests_run": 1,
+            "executed_tests": [failed_test],
+            "failures": [],
+            "errors": [failed_test],
+            "tests": [{"id": failed_test, "outcome": "error"}],
+            "exit_code": 1,
+        }
+        (workspace / "task-1-red.txt").write_text(json.dumps(legacy_evidence), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "unittest"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
