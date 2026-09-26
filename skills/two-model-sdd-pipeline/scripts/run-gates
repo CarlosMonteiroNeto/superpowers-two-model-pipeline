@@ -5,13 +5,14 @@
 #   run-gates WORKSPACE TEST_CMD ANALYZE_CMD   (legacy-compatible)
 #   run-gates WORKSPACE --toolchains ID [ID...]
 #   run-gates WORKSPACE --tasks TASK [TASK...]
-# Exit codes: 0 = configured gates passed, 1 = tests failed, 2 = analysis
-# failed, 3 = usage or descriptor/preflight error.
+#   run-gates WORKSPACE --format TOOLCHAIN_ID [ID...]
+# Exit codes: 0 = configured gates passed, 1 = tests or formatting failed,
+# 2 = analysis failed, 3 = usage or descriptor/preflight error.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 if [ $# -lt 2 ]; then
-  echo "usage: run-gates WORKSPACE TEST_CMD ANALYZE_CMD | --toolchains ID... | --tasks TASK..." >&2
+  echo "usage: run-gates WORKSPACE TEST_CMD ANALYZE_CMD | --toolchains ID... | --tasks TASK... | --format TOOLCHAIN_ID..." >&2
   exit 3
 fi
 

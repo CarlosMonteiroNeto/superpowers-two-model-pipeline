@@ -268,7 +268,9 @@ def run_gates(workspace: str, entries: list[dict[str, Any]]) -> int:
     multiple = len(entries) > 1
     for entry in entries:
         identity = str(entry.get("toolchain_id") or entry.get("lang") or "legacy")
-        suffix = "-" + "".join(char if char.isalnum() or char in "-_." else "_" for char in identity) if multiple else ""
+        suffix = "-" + "".join(
+            char if char.isalnum() or char in "-_." else "_" for char in identity
+        ) if multiple else ""
         test_log = str(Path(workspace) / ("run-gates-test%s.txt" % suffix))
         analyze_log = str(Path(workspace) / ("run-gates-analyze%s.txt" % suffix))
         test_rc = _run_one(workspace, entry, "test", test_log)
@@ -283,9 +285,27 @@ def run_gates(workspace: str, entries: list[dict[str, Any]]) -> int:
     return 0
 
 
+def run_formats(workspace: str, entries: list[dict[str, Any]]) -> int:
+    """Run configured formatters for exact toolchain identities only."""
+    Path(workspace).mkdir(parents=True, exist_ok=True)
+    multiple = len(entries) > 1
+    for entry in entries:
+        identity = str(entry.get("toolchain_id") or entry.get("lang") or "legacy")
+        suffix = "-" + "".join(char if char.isalnum() or char in "-_." else "_" for char in identity) if multiple else ""
+        log_path = str(Path(workspace) / ("run-gates-format%s.txt" % suffix))
+        if command_spec(entry, "format") is None:
+            print("RUN-GATES: formatting unavailable for %s (no formatter configured)" % identity)
+            continue
+        if _run_one(workspace, entry, "format", log_path):
+            print("RUN-GATES: formatter failed (see %s)" % log_path, file=sys.stderr)
+            return 1
+    print("RUN-GATES: configured formatters completed")
+    return 0
+
+
 def run_cli(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: toolchain_gate.py run WORKSPACE (--toolchains ID...|--tasks ID...|--commands TEST ANALYZE)", file=sys.stderr)
+        print("usage: toolchain_gate.py run WORKSPACE (--toolchains ID...|--tasks ID...|--format ID...|--commands TEST ANALYZE)", file=sys.stderr)
         return 2
     mode, workspace, *args = argv
     if mode != "run":
@@ -294,7 +314,12 @@ def run_cli(argv: list[str]) -> int:
     try:
         if not args:
             raise GateContractError("missing gate selection")
-        if args[0] == "--toolchains":
+        if args[0] == "--format":
+            if len(args) < 2:
+                raise GateContractError("--format requires at least one exact toolchain_id")
+            entries = [gate_for_toolchain(workspace, item) for item in args[1:]]
+            return run_formats(workspace, entries)
+        elif args[0] == "--toolchains":
             if len(args) < 2:
                 raise GateContractError("--toolchains requires at least one ID")
             entries = [gate_for_toolchain(workspace, item) for item in args[1:]]

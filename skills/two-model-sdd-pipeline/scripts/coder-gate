@@ -132,6 +132,7 @@ scope_ok() {
 }
 
 while true; do
+  flutter_green_gate=0
   if [ -f "$log" ]; then
     # Scoped TEST_DEFECT detection: only the operador's final status line counts.
     # A whole-log grep would false-positive on the fix prompt text this script
@@ -199,12 +200,16 @@ PY
       fi
     } > "$report"
   elif [ "$lang" = "flutter" ]; then
-    # B7: formatting drift is mechanical, not LLM work. The write-only
-    # operador cannot run `dart format`, so Script CEO applies the resolved
-    # toolchain's formatter best-effort before the check - drift never
-    # costs an LLM round-trip.
-    DART_BIN="${DART_BIN:-dart}"
-    "$DART_BIN" format . >/dev/null 2>&1 || true
+    # B7: formatting drift is mechanical, not LLM work. Structured Flutter
+    # toolchains run their configured formatter; only a legacy unstructured
+    # gate uses the historical Dart command.
+    if [ -n "$task_toolchain" ]; then
+      RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
+      "$RUN_GATES_BIN" "$ws" --format "$task_toolchain" || true
+    else
+      DART_BIN="${DART_BIN:-dart}"
+      "$DART_BIN" format . >/dev/null 2>&1 || true
+    fi
     if ! scope_ok; then
       exit 2
     fi
