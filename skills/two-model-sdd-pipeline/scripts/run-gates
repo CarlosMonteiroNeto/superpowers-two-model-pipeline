@@ -17,9 +17,9 @@ fi
 
 ws=$1
 shift
-if [ $# -eq 2 ] && [ -f "$ws/ledger.jsonl" ]; then
-  # Read a structured descriptor directly from the ledger. Do not pass its
-  # JSON argv summary through the Windows Bash command-line parser.
+if [ $# -eq 2 ] && [[ "$1" != --* ]] && [ -f "$ws/ledger.jsonl" ]; then
+  # Preserve the single unstructured legacy gate path. Its command summaries
+  # come from the ledger, never directly from the caller's shell arguments.
   exec python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" --ledger
 fi
 exec python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" "$@"

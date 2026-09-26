@@ -117,9 +117,25 @@ run_gate() {
     return "$rc"
   fi
   for task_id in "${selected[@]}"; do
-    lang=$(python3 "$script_dir/toolchain_gate.py" task-lang "$ws" "$task_id" 2>/dev/null || printf '%s' "$LEGACY_LANG")
+    if ! lang=$(python3 "$script_dir/toolchain_gate.py" task-lang "$ws" "$task_id"); then
+      echo "INTEGRATE: cannot resolve language for task $task_id; refusing gate fallback" >&2
+      return 3
+    fi
     if [ "$lang" != "flutter" ]; then all_flutter=0; fi
-    identity=$(python3 "$script_dir/toolchain_gate.py" task-toolchain "$ws" "$task_id" 2>/dev/null || printf 'legacy:%s' "$lang")
+    if identity=$(python3 "$script_dir/toolchain_gate.py" task-toolchain "$ws" "$task_id" 2>/dev/null); then
+      :
+    else
+      # The sole compatibility case is task-lang's validated fallback to one
+      # unstructured legacy gate. Confirm that boundary before using its
+      # language; structured descriptors always need the plan's exact ID.
+      local legacy_lang
+      if ! legacy_lang=$(python3 "$script_dir/toolchain_gate.py" legacy-lang "$ws" 2>/dev/null) \
+         || [ "$legacy_lang" != "$lang" ]; then
+        echo "INTEGRATE: cannot resolve exact toolchain for task $task_id; refusing gate fallback" >&2
+        return 3
+      fi
+      identity="legacy:$lang"
+    fi
     if [ -z "$selected_identity" ]; then selected_identity=$identity
     elif [ "$identity" != "$selected_identity" ]; then multiple_toolchains=1
     fi

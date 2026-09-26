@@ -101,6 +101,9 @@ def resolve_toolchain(task: dict, runtime: dict, project_root: str) -> dict:
     raw = all_toolchains[toolchain_id]
     if not isinstance(raw, dict):
         return _failure("toolchain %s must be an object" % toolchain_id)
+    if raw.get("available") is False:
+        reason = raw.get("preflight_error") or "preflight marked the descriptor unavailable"
+        return _failure("toolchain %s is unavailable: %s" % (toolchain_id, reason))
     try:
         adapter = raw.get("red_adapter")
         if not isinstance(adapter, str) or adapter not in ADAPTER_LANGUAGES:
@@ -233,6 +236,7 @@ def resolve_cli(workspace: str, root_value: str, all_markers: bool, runtime_path
 
     results = []
     errors = []
+    resolved_ids = set()
     for marker in markers:
         language = _language_for_marker(marker)
         configured = _configured_for_language(runtime, language)
@@ -245,6 +249,9 @@ def resolve_cli(workspace: str, root_value: str, all_markers: bool, runtime_path
                 errors.append(str(exc))
                 continue
         for toolchain_id, descriptor in candidates:
+            if toolchain_id in resolved_ids:
+                continue
+            resolved_ids.add(toolchain_id)
             resolved = resolve_toolchain(
                 {"toolchain_id": toolchain_id},
                 {"toolchains": {toolchain_id: descriptor}},

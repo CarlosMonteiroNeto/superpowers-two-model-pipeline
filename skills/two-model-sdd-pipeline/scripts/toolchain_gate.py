@@ -96,6 +96,8 @@ def legacy_gate_language(workspace: str) -> str:
     entries = load_gate_entries(workspace)
     if len(entries) != 1:
         raise GateContractError("legacy language selection requires exactly one gate entry")
+    if "toolchain_descriptor" in entries[0]:
+        raise GateContractError("structured gate selection requires an exact task toolchain_id")
     language = entries[0].get("lang")
     if not isinstance(language, str) or not language.strip():
         language = _descriptor(entries[0]).get("language")
@@ -323,14 +325,14 @@ def run_cli(argv: list[str]) -> int:
                 raise GateContractError("--commands requires TEST_CMD and ANALYZE_CMD")
             entry = _try_match_entry_for_argv(workspace, args[1], args[2])
             if entry is None:
-                entry = {"test_cmd": args[1], "analyze_cmd": args[2]}
+                raise GateContractError("commands do not match a ledgered legacy gate")
+            if "toolchain_descriptor" in entry:
+                raise GateContractError("structured gate selection requires an exact task toolchain_id")
             entries = [entry]
         elif args[0] == "--ledger":
             if len(args) != 1:
                 raise GateContractError("--ledger takes no extra arguments")
-            entries = load_gate_entries(workspace)
-            if len(entries) != 1:
-                raise GateContractError("--ledger requires exactly one gate entry; select task toolchains explicitly")
+            entries = [_legacy_default_entry(workspace)]
         elif args[0] == "--legacy":
             if len(args) != 1:
                 raise GateContractError("--legacy takes no extra arguments")
@@ -341,7 +343,9 @@ def run_cli(argv: list[str]) -> int:
                 raise GateContractError("expected TEST_CMD and ANALYZE_CMD")
             entry = _try_match_entry_for_argv(workspace, args[0], args[1])
             if entry is None:
-                entry = {"test_cmd": args[0], "analyze_cmd": args[1]}
+                raise GateContractError("commands do not match a ledgered legacy gate")
+            if "toolchain_descriptor" in entry:
+                raise GateContractError("structured gate selection requires an exact task toolchain_id")
             entries = [entry]
         return run_gates(workspace, entries)
     except GateContractError as exc:

@@ -173,37 +173,36 @@ def main(argv):
         envelope = None
     attempt_path = os.path.join(workspace.rstrip("/\\"), "task-%s-attempt.json" % task)
     identity_fields = ("task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot")
-    has_identity = isinstance(envelope, dict) and any(key in envelope for key in identity_fields)
-    if os.path.isfile(attempt_path) or has_identity:
-        if not os.path.isfile(attempt_path):
-            print("RED-FORM-CHECK: missing current attempt identity: %s" % attempt_path,
-                  file=sys.stderr)
-            return 1
-        if not isinstance(envelope, dict) or not all(key in envelope for key in identity_fields):
-            print("RED-FORM-CHECK: evidence is not bound to the current attempt", file=sys.stderr)
-            return 1
-        try:
-            with open(attempt_path, encoding="utf-8") as handle:
-                expected = json.load(handle)
-        except (OSError, ValueError) as exc:
-            print("RED-FORM-CHECK: invalid current attempt identity: %s" % exc, file=sys.stderr)
-            return 1
-        result = validate_evidence(evidence, expected)
-        if not result.get("valid_red"):
-            print("RED-FORM-CHECK: invalid or stale RED evidence: %s" % result.get("error", "unknown"),
-                  file=sys.stderr)
-            return 1
-        print("RED-FORM-CHECK: valid red - executed test failed (%s)" % lang)
-        return 0
-    if classify(text):
-        print("RED-FORM-CHECK: valid red - executed test failed (%s)" % lang)
-        return 0
-    print(
-        "RED-FORM-CHECK: invalid red - suite did not run a failing test (%s)"
-        % lang,
-        file=sys.stderr,
-    )
-    return 1
+    if not os.path.isfile(attempt_path):
+        print("RED-FORM-CHECK: missing current attempt identity: %s" % attempt_path,
+              file=sys.stderr)
+        return 1
+    if not isinstance(envelope, dict) or not all(key in envelope for key in identity_fields):
+        print("RED-FORM-CHECK: evidence is not bound to the current attempt", file=sys.stderr)
+        return 1
+    try:
+        with open(attempt_path, encoding="utf-8") as handle:
+            expected = json.load(handle)
+    except (OSError, ValueError) as exc:
+        print("RED-FORM-CHECK: invalid current attempt identity: %s" % exc, file=sys.stderr)
+        return 1
+    expected_adapters = {
+        "flutter": {"flutter_machine", "flutter"},
+        "dart": {"flutter_machine", "flutter"},
+        "python": {"pytest_json_report", "pytest", "python"},
+        "unittest": {"unittest"},
+        "go": {"go_test_json", "go"},
+    }
+    if envelope.get("adapter") not in expected_adapters.get(lang.lower(), set()):
+        print("RED-FORM-CHECK: evidence adapter does not match task language", file=sys.stderr)
+        return 1
+    result = validate_evidence(evidence, expected)
+    if not result.get("valid_red"):
+        print("RED-FORM-CHECK: invalid or stale RED evidence: %s" % result.get("error", "unknown"),
+              file=sys.stderr)
+        return 1
+    print("RED-FORM-CHECK: valid red - executed test failed (%s)" % lang)
+    return 0
 
 
 if __name__ == "__main__":
