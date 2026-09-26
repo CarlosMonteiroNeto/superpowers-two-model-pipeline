@@ -220,8 +220,9 @@ def _task_selection_is_legacy(workspace: str, task_ids: list[str]) -> bool:
         if len(matches) != 1:
             return False
         toolchain_id = matches[0].get("toolchain_id")
-        if isinstance(toolchain_id, str) and toolchain_id.strip():
-            return False
+        if toolchain_id is not None:
+            if not isinstance(toolchain_id, str) or toolchain_id.strip():
+                return False
     return True
 
 
