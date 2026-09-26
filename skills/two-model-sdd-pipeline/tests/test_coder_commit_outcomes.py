@@ -59,8 +59,20 @@ class CoderCommitOutcomesTest(unittest.TestCase):
             "test_cmd": "go test ./...", "analyze_cmd": "go vet ./...",
             "lang": "go"}) + "\n", encoding="utf-8")
         (self.ws / "task-1-brief.md").write_text("# Task 1\n", encoding="utf-8")
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE,
-                                                encoding="utf-8")
+        identity = {
+            "task_id": 1,
+            "attempt_id": "fixture-attempt-1",
+            "toolchain_id": "legacy-go-v1",
+            "runner": "scoped-run-v1",
+            "command": ["go", "test", "-json"],
+            "source_snapshot": "tree:fixture-go-red",
+            "adapter": "go_test_json",
+        }
+        (self.ws / "task-1-attempt.json").write_text(
+            json.dumps(identity), encoding="utf-8")
+        evidence = dict(identity, raw_output=GO_TEST_FAILURE)
+        (self.ws / "task-1-red.txt").write_text(
+            json.dumps(evidence), encoding="utf-8")
         self.repo = self._tmp / "repo"
         self.repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=str(self.repo), check=True)
