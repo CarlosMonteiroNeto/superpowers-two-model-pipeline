@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superpowers.dev/schemas/skill-source.schema.json",
+  "title": "Skill source seed and registry",
+  "oneOf": [
+    { "$ref": "#/$defs/seed" },
+    { "$ref": "#/$defs/registry" }
+  ],
+  "$defs": {
+    "license": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["spdx_id", "name"],
+          "properties": {
+            "spdx_id": { "type": "string", "minLength": 1 },
+            "name": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "skill": {
+      "type": "object",
+      "required": ["name", "path", "topics", "compatibility", "license", "review_status"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "topics": { "type": "array", "items": { "type": "string" } },
+        "compatibility": { "type": "array", "items": { "type": "string" } },
+        "license": { "$ref": "#/$defs/license" },
+        "review_status": { "enum": ["candidate", "unreviewed", "reviewed", "rejected"] }
+      },
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "object",
+      "required": ["repository", "source_url", "category", "revision", "last_checked_at", "review_status", "topics", "license", "skills"],
+      "properties": {
+        "repository": { "type": ["string", "null"] },
+        "source_url": { "type": "string", "format": "uri" },
+        "category": { "type": "string", "minLength": 1 },
+        "revision": { "type": ["string", "null"] },
+        "last_checked_at": { "type": ["string", "null"], "format": "date-time" },
+        "review_status": { "enum": ["candidate", "unreviewed", "reviewed", "rejected"] },
+        "description": { "type": ["string", "null"] },
+        "stars": { "type": ["integer", "null"], "minimum": 0 },
+        "topics": { "type": "array", "items": { "type": "string" } },
+        "license": { "$ref": "#/$defs/license" },
+        "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } }
+      },
+      "additionalProperties": true
+    },
+    "seed": {
+      "type": "object",
+      "required": ["schema_version", "sources"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } }
+      },
+      "additionalProperties": false
+    },
+    "query": {
+      "type": "object",
+      "required": ["query", "search_query", "collected_at", "scope", "status", "repositories"],
+      "properties": {
+        "query": { "type": "object" },
+        "search_query": { "type": "string", "minLength": 1 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "per_page": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "collected_at": { "type": ["string", "null"], "format": "date-time" },
+        "scope": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["fresh", "stale", "incomplete"] },
+        "repositories": { "type": "array", "items": { "$ref": "#/$defs/source" } }
+      },
+      "additionalProperties": true
+    },
+    "registry": {
+      "type": "object",
+      "required": ["schema_version", "last_refreshed_at", "status", "sources", "queries"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "last_refreshed_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_attempted_at": { "type": ["string", "null"], "format": "date-time" },
+        "status": { "enum": ["fresh", "stale", "incomplete"] },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+        "queries": { "type": "array", "items": { "$ref": "#/$defs/query" } }
+      },
+      "additionalProperties": true
+    }
+  }
+}

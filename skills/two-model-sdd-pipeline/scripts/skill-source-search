@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Search installed skills and query-scoped cached/external sources."""
+from skill_sources import search_cli
+
+
+if __name__ == "__main__":
+    raise SystemExit(search_cli())

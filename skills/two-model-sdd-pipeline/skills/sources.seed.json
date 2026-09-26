@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "repository": "anthropics/skills",
+      "source_url": "https://github.com/anthropics/skills",
+      "category": "publisher",
+      "revision": null,
+      "last_checked_at": null,
+      "review_status": "candidate",
+      "description": null,
+      "stars": null,
+      "topics": [],
+      "license": null,
+      "skills": []
+    },
+    {
+      "repository": "VoltAgent/awesome-agent-skills",
+      "source_url": "https://github.com/VoltAgent/awesome-agent-skills",
+      "category": "catalog",
+      "revision": null,
+      "last_checked_at": null,
+      "review_status": "candidate",
+      "description": null,
+      "stars": null,
+      "topics": [],
+      "license": null,
+      "skills": []
+    },
+    {
+      "repository": "vercel-labs/skills",
+      "source_url": "https://github.com/vercel-labs/skills",
+      "category": "tool",
+      "revision": null,
+      "last_checked_at": null,
+      "review_status": "candidate",
+      "description": null,
+      "stars": null,
+      "topics": [],
+      "license": null,
+      "skills": []
+    },
+    {
+      "repository": null,
+      "source_url": "https://www.skills.sh/docs",
+      "category": "documentation",
+      "revision": null,
+      "last_checked_at": null,
+      "review_status": "candidate",
+      "description": "Documentation for the skills.sh directory",
+      "stars": null,
+      "topics": [],
+      "license": null,
+      "skills": []
+    }
+  ]
+}
