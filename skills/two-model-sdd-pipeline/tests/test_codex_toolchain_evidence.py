@@ -145,6 +145,26 @@ class ToolchainEvidenceTests(unittest.TestCase):
         rejected = module.validate_evidence(str(evidence_path), expected)
         self.assertFalse(rejected["valid_red"], rejected)
 
+    def test_unittest_import_collection_error_is_not_an_executed_test(self):
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            module = load_module(self, "scoped_runner.py", "scoped_runner", "_parse_unittest")
+        finally:
+            sys.path.pop(0)
+        output = (
+            "test_missing_module (unittest.loader._FailedTest.test_missing_module) ... ERROR\n"
+            "\n======================================================================\n"
+            "ERROR: test_missing_module (unittest.loader._FailedTest.test_missing_module)\n"
+            "----------------------------------------------------------------------\n"
+            "ImportError: Failed to import test module\n"
+            "\nRan 1 test in 0.001s\n\nFAILED (errors=1)\n"
+        )
+        tests_run, executed, failures, errors = module._parse_unittest(output)
+        self.assertEqual(tests_run, 1)
+        self.assertEqual(executed, [], "a loader _FailedTest is collection failure, not an executed test")
+        self.assertEqual(failures, [])
+        self.assertEqual(errors, [])
+
     def test_red_form_check_accepts_valid_unittest_evidence_and_keeps_existing_adapters(self):
         workspace = self.temp / "red-workspace"
         workspace.mkdir()
