@@ -1,0 +1,273 @@
+"""R2.2 acceptance tests for persistent skill-source refresh."""
+
+import base64
+import importlib.util
+import json
+import pathlib
+import tempfile
+import unittest
+from urllib.parse import parse_qs, urlsplit
+from unittest import mock
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[3]
+SCRIPTS = ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
+SEED = ROOT / "skills" / "two-model-sdd-pipeline" / "skills" / "sources.seed.json"
+
+
+def load_skill_sources(testcase):
+    path = SCRIPTS / "skill_sources.py"
+    testcase.assertTrue(
+        path.is_file(),
+        "R2.2 requires skill_sources.py with discover and refresh APIs",
+    )
+    spec = importlib.util.spec_from_file_location("skill_sources_refresh", path)
+    testcase.assertIsNotNone(spec)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    testcase.assertTrue(callable(getattr(module, "discover", None)))
+    testcase.assertTrue(callable(getattr(module, "refresh", None)))
+    return module
+
+
+def repo_details(repository):
+    return {
+        "full_name": repository,
+        "html_url": "https://github.com/" + repository,
+        "description": "Reusable agent skills",
+        "stargazers_count": 123,
+        "topics": ["agent-skills", "python"],
+        "default_branch": "main",
+        "license": {"spdx_id": "MIT", "name": "MIT License"},
+    }
+
+
+class SkillSourceRefreshTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = pathlib.Path(tempfile.mkdtemp(prefix="skill-refresh-"))
+        self.registry = self.temp / "registry.json"
+        self.module = load_skill_sources(self)
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.temp, ignore_errors=True)
+
+    def test_seed_sources_are_candidates_not_implicitly_trusted(self):
+        self.assertTrue(SEED.is_file(), "R2.2 requires the confirmed source seed")
+        seed = json.loads(SEED.read_text(encoding="utf-8"))
+        repositories = {item.get("repository"): item for item in seed["sources"]}
+
+        self.assertIn("anthropics/skills", repositories)
+        self.assertIn("VoltAgent/awesome-agent-skills", repositories)
+        self.assertIn("vercel-labs/skills", repositories)
+        self.assertTrue(all(item["review_status"] == "candidate"
+                            for item in seed["sources"]))
+        self.assertFalse(any(item["review_status"] in ("trusted", "approved")
+                             for item in seed["sources"]))
+
+    def test_refresh_persists_revision_metadata_and_the_supplied_clock(self):
+        sources = [{
+            "repository": "Acme/agent-skills",
+            "source_url": "https://github.com/Acme/agent-skills",
+            "category": "publisher",
+            "review_status": "candidate",
+        }]
+
+        def github_get(url):
+            parsed = urlsplit(url)
+            if parsed.path == "/repos/Acme/agent-skills":
+                return repo_details("Acme/agent-skills")
+            if parsed.path == "/repos/Acme/agent-skills/commits/main":
+                return {"sha": "commit-abc123"}
+            if parsed.path == "/repos/Acme/agent-skills/git/trees/commit-abc123":
+                return {"tree": [
+                    {"path": "skills/review/SKILL.md", "type": "blob"},
+                    {"path": "skills/testing/SKILL.md", "type": "blob"},
+                ], "truncated": False}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.refresh(
+                str(self.registry), "2026-09-26T14:30:00Z", sources,
+            )
+
+        self.assertEqual(result["last_refreshed_at"], "2026-09-26T14:30:00Z")
+        self.assertEqual(result["status"], "fresh")
+        self.assertEqual(len(result["sources"]), 1)
+        source = result["sources"][0]
+        self.assertEqual(source["repository"], "Acme/agent-skills")
+        self.assertEqual(source["category"], "publisher")
+        self.assertEqual(source["revision"], "commit-abc123")
+        self.assertEqual(source["last_checked_at"], "2026-09-26T14:30:00Z")
+        self.assertEqual(source["review_status"], "candidate")
+        self.assertEqual(source["license"]["spdx_id"], "MIT")
+        self.assertEqual([item["path"] for item in source["skills"]], [
+            "skills/review/SKILL.md", "skills/testing/SKILL.md",
+        ])
+        saved = json.loads(self.registry.read_text(encoding="utf-8"))
+        self.assertEqual(saved, result)
+
+    def test_refresh_deduplicates_repositories_regardless_of_case(self):
+        source = {
+            "repository": "Acme/Agent-Skills",
+            "source_url": "https://github.com/Acme/Agent-Skills",
+            "category": "publisher",
+            "review_status": "candidate",
+        }
+        calls = []
+
+        def github_get(url):
+            calls.append(url)
+            parsed = urlsplit(url)
+            if parsed.path.lower() == "/repos/acme/agent-skills":
+                return repo_details("Acme/Agent-Skills")
+            if parsed.path.lower() == "/repos/acme/agent-skills/commits/main":
+                return {"sha": "same-revision"}
+            if "/git/trees/" in parsed.path:
+                return {"tree": [], "truncated": False}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.refresh(
+                str(self.registry), "2026-09-26T14:30:00Z",
+                [source, dict(source, repository="acme/agent-skills")],
+            )
+
+        self.assertEqual(len(result["sources"]), 1)
+        self.assertEqual(sum("/repos/" in url for url in calls), 3)
+
+    def test_catalog_links_are_saved_as_unreviewed_targets_without_fetching_them(self):
+        catalog = {
+            "repository": "VoltAgent/awesome-agent-skills",
+            "source_url": "https://github.com/VoltAgent/awesome-agent-skills",
+            "category": "catalog",
+            "review_status": "candidate",
+        }
+        readme = (
+            "# Catalog\n"
+            "[Python tests](https://github.com/Acme/test-skills/tree/main/skills/python-testing)\n"
+            "[Same repo](https://github.com/acme/test-skills)\n"
+        )
+        encoded = base64.b64encode(readme.encode("utf-8")).decode("ascii")
+        calls = []
+
+        def github_get(url):
+            calls.append(url)
+            parsed = urlsplit(url)
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills":
+                return repo_details("VoltAgent/awesome-agent-skills")
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills/commits/main":
+                return {"sha": "catalog-revision"}
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills/git/trees/catalog-revision":
+                return {"tree": [], "truncated": False}
+            if parsed.path == "/repos/VoltAgent/awesome-agent-skills/readme":
+                return {"content": encoded, "encoding": "base64"}
+            self.fail("unexpected GitHub request: " + url)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_get):
+            result = self.module.refresh(
+                str(self.registry), "2026-09-26T14:30:00Z", [catalog],
+            )
+
+        targets = [item for item in result["sources"]
+                   if item["repository"].lower() == "acme/test-skills"]
+        self.assertEqual(len(targets), 1)
+        self.assertEqual(targets[0]["review_status"], "unreviewed")
+        self.assertEqual(targets[0]["discovered_from"], "VoltAgent/awesome-agent-skills")
+        self.assertEqual(targets[0]["skills"][0]["path"], "skills/python-testing")
+        self.assertIsNone(targets[0]["revision"])
+        self.assertFalse(any("/repos/Acme/test-skills" in url for url in calls))
+
+    def test_expired_discovery_keeps_last_usable_results_when_github_is_rate_limited(self):
+        query = {"topics": ["python", "testing"]}
+        last_search = {
+            "query": query,
+            "search_query": "python testing skill in:name,description,readme",
+            "collected_at": "2026-08-01T00:00:00Z",
+            "scope": "GitHub query-scoped top 100",
+            "status": "fresh",
+            "repositories": [{
+                "repository": "Acme/old-python-skills",
+                "url": "https://github.com/Acme/old-python-skills",
+                "category": "github-search",
+                "revision": None,
+                "last_checked_at": "2026-08-01T00:00:00Z",
+                "review_status": "unreviewed",
+                "stars": 17,
+                "topics": ["python", "testing"],
+                "description": "Cached Python testing skills",
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+                "skills": [],
+            }],
+        }
+        self.registry.write_text(json.dumps({
+            "schema_version": 1,
+            "last_refreshed_at": "2026-08-01T00:00:00Z",
+            "status": "fresh",
+            "sources": [],
+            "queries": [last_search],
+        }), encoding="utf-8")
+
+        def rate_limited(url):
+            from urllib.error import HTTPError
+
+            raise HTTPError(url, 403, "rate limit", {"Retry-After": "60"}, None)
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=rate_limited):
+            result = self.module.discover(query, [], str(self.registry))
+
+        self.assertEqual([item["repository"] for item in result["candidates"]],
+                         ["Acme/old-python-skills"])
+        self.assertIn(result["cache_status"], ("stale", "incomplete"))
+        saved = json.loads(self.registry.read_text(encoding="utf-8"))
+        self.assertEqual(saved["queries"][0]["collected_at"], "2026-08-01T00:00:00Z")
+        self.assertEqual(saved["queries"][0]["repositories"][0]["repository"],
+                         "Acme/old-python-skills")
+        self.assertEqual(saved["queries"][0]["status"], "incomplete")
+
+    def test_search_paginates_deduplicates_and_caps_each_query_at_100_results(self):
+        query = {"topics": ["python"], "per_page": 50, "limit": 100}
+        now = "2026-09-20T12:00:00Z"
+        self.registry.write_text(json.dumps({
+            "schema_version": 1,
+            "last_refreshed_at": now,
+            "status": "fresh",
+            "sources": [],
+            "queries": [],
+        }), encoding="utf-8")
+        urls = []
+
+        def make_item(index):
+            return {
+                "full_name": "Acme/python-skill-%03d" % index,
+                "html_url": "https://github.com/Acme/python-skill-%03d" % index,
+                "description": "Python testing skills",
+                "stargazers_count": 1000 - index,
+                "topics": ["python", "testing"],
+                "license": {"spdx_id": "MIT", "name": "MIT License"},
+            }
+
+        def github_page(url):
+            urls.append(url)
+            params = parse_qs(urlsplit(url).query)
+            page = int(params["page"][0])
+            self.assertEqual(params["per_page"], ["50"])
+            if page == 1:
+                return {"total_count": 150, "incomplete_results": False,
+                        "items": [make_item(index) for index in range(50)]}
+            if page == 2:
+                return {"total_count": 150, "incomplete_results": False,
+                        "items": [make_item(49)] +
+                                 [make_item(index) for index in range(50, 100)]}
+            self.fail("search exceeded the requested top 100 results")
+
+        with mock.patch.object(self.module, "_github_get_json", side_effect=github_page):
+            result = self.module.discover(query, [], str(self.registry))
+
+        self.assertEqual(len(urls), 2)
+        self.assertEqual(len(result["candidates"]), 100)
+        self.assertEqual(len({item["repository"] for item in result["candidates"]}), 100)
+        self.assertEqual(result["candidates"][0]["stars"], 1000)
+        self.assertEqual(result["candidates"][-1]["stars"], 901)
+
