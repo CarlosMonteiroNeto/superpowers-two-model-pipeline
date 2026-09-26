@@ -189,7 +189,7 @@ def main(argv):
     expected_adapters = {
         "flutter": {"flutter_machine", "flutter"},
         "dart": {"flutter_machine", "flutter"},
-        "python": {"pytest_json_report", "pytest", "python"},
+        "python": {"pytest_json_report", "pytest", "python", "unittest"},
         "unittest": {"unittest"},
         "go": {"go_test_json", "go"},
     }

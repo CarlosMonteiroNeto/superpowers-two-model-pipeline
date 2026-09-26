@@ -20,8 +20,9 @@
 #             2 = usage.
 #
 # Resolves each task's toolchain ID from the plan and runs every selected
-# descriptor. A single Flutter toolchain uses its Flutter gate; multiple IDs
-# run through the generic descriptor runner. The batch gate deliberately runs
+# descriptor. Exact structured toolchains run through the generic descriptor
+# runner, including Flutter; the Flutter adapter is retained for the
+# unstructured legacy gate. The batch gate deliberately runs
 # WITHOUT the scope gate: each task's coder-gate already proved its own scope in
 # its worktree, and a single keep-discard pass could only judge one task's
 # `touches`.
@@ -106,7 +107,7 @@ alloc_base() {
 # run_gate [TASK] - a TASK id enables the Flutter scope gate (single-task path);
 # no id means the batch gate, which this script's contract explains.
 run_gate() {
-  local rc=0 all_flutter=1 lang task_id identity selected_identity="" multiple_toolchains=0
+  local rc=0 all_flutter=1 lang task_id identity selected_identity="" multiple_toolchains=0 structured_toolchains=0
   local -a selected=("$@")
   if [ "${#selected[@]}" -eq 0 ]; then
     if [ "$LEGACY_LANG" = "flutter" ]; then
@@ -123,7 +124,7 @@ run_gate() {
     fi
     if [ "$lang" != "flutter" ]; then all_flutter=0; fi
     if identity=$(python3 "$script_dir/toolchain_gate.py" task-toolchain "$ws" "$task_id" 2>/dev/null); then
-      :
+      structured_toolchains=1
     else
       # The sole compatibility case is task-lang's validated fallback to one
       # unstructured legacy gate. Confirm that boundary before using its
@@ -140,7 +141,7 @@ run_gate() {
     elif [ "$identity" != "$selected_identity" ]; then multiple_toolchains=1
     fi
   done
-  if [ "$multiple_toolchains" -eq 1 ]; then
+  if [ "$multiple_toolchains" -eq 1 ] || [ "$structured_toolchains" -eq 1 ]; then
     "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
   elif [ "$all_flutter" -eq 1 ]; then
     if [ "${#selected[@]}" -eq 1 ]; then

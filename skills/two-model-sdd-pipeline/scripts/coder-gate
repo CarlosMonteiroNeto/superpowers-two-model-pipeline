@@ -208,18 +208,31 @@ PY
     if ! scope_ok; then
       exit 2
     fi
-    gg_rc=0
-    GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" \
-        -w "$ws" -t "$task" -b "$base" -l "$ledger" \
-        -m "task $task green" || gg_rc=$?
-    if [ "$gg_rc" -eq 0 ]; then
-      passed=1
-    elif [ "$gg_rc" -eq 4 ]; then
-      # green-gate's own scope guard (defence in depth)
-      "$SCRIPT_DIR/ledger-append" "$ledger" scope_violation "$task" \
-        "out-of-scope changes reported by green-gate" || true
-      echo "CODER-GATE: scope violation from green-gate - refusing to commit" >&2
-      exit 2
+    if [ -z "$task_toolchain" ]; then
+      # Preserve the pre-R2 Flutter adapter only for the single unstructured
+      # legacy gate. Structured toolchains must execute their exact argv/cwd/
+      # env contract through run-gates just like every other language.
+      gg_rc=0
+      GREEN_GATE_REPORT="$report" "$FLUTTER_GATE" \
+          -w "$ws" -t "$task" -b "$base" -l "$ledger" \
+          -m "task $task green" || gg_rc=$?
+      if [ "$gg_rc" -eq 0 ]; then
+        passed=1
+        flutter_green_gate=1
+      elif [ "$gg_rc" -eq 4 ]; then
+        # green-gate's own scope guard (defence in depth)
+        "$SCRIPT_DIR/ledger-append" "$ledger" scope_violation "$task" \
+          "out-of-scope changes reported by green-gate" || true
+        echo "CODER-GATE: scope violation from green-gate - refusing to commit" >&2
+        exit 2
+      fi
+    else
+      RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
+      gate_status=0
+      "$RUN_GATES_BIN" "$ws" --toolchains "$task_toolchain" || gate_status=$?
+      if [ "$gate_status" -eq 0 ]; then
+        passed=1
+      fi
     fi
   else
     RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
@@ -239,9 +252,9 @@ PY
     "$SCRIPT_DIR/ledger-append" "$ledger" coder_round "$task" \
       "Coder passed the gate" status=PASS
 
-    if [ "$lang" != "flutter" ]; then
-      # Flutter's green-gate owns the commit + revisor dispatch above. The
-      # generic engine's run-gates deliberately never commits (it is a
+    if [ "${flutter_green_gate:-0}" -eq 0 ]; then
+      # The legacy Flutter green-gate owns its commit + revisor dispatch above.
+      # The generic engine's run-gates deliberately never commits (it is a
       # check-only mirror) - Script CEO (this script) owns that step here.
       # Scope gate first: never stage out-of-scope files.
       if ! scope_ok; then
