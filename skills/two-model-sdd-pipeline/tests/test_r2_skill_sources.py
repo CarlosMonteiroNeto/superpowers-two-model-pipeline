@@ -71,6 +71,11 @@ class SkillSourceDiscoveryTests(unittest.TestCase):
         self.temp = pathlib.Path(tempfile.mkdtemp(prefix="skill-sources-"))
         self.registry = self.temp / "registry.json"
         self.module = load_skill_sources(self)
+        clock = mock.patch.object(
+            self.module, "_now_iso", return_value="2026-09-26T12:00:00Z",
+        )
+        clock.start()
+        self.addCleanup(clock.stop)
         guard = mock.patch.object(
             self.module, "_github_get_json",
             side_effect=AssertionError("tests must not make live GitHub requests"),
