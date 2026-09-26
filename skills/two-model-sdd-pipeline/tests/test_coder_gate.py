@@ -200,7 +200,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         env.update(extra)
         return env
 
-    def _install_structured_flutter_toolchain(self, test_marker, analyze_marker):
+    def _install_structured_flutter_toolchain(self, test_marker, analyze_marker, format_marker):
         toolchain_id = "flutter-custom-v1"
         def marker_command(path, value):
             return [
@@ -218,6 +218,8 @@ exit "${STUB_DISPATCH_EXIT:-0}"
                          "cwd": str(self.repo), "env": {}},
                 "analyze": {"argv": marker_command(analyze_marker, "selected-analyze"),
                             "cwd": str(self.repo), "env": {}},
+                "format": {"argv": marker_command(format_marker, "selected-format"),
+                           "cwd": str(self.repo), "env": {}},
             },
         }
         (self.ws / "plan.json").write_text(json.dumps({
@@ -277,8 +279,10 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         test_marker = self._tmp / "selected-flutter-test.txt"
         analyze_marker = self._tmp / "selected-flutter-analyze.txt"
+        format_marker = self._tmp / "selected-flutter-format.txt"
         flutter_marker = self._tmp / "legacy-flutter-gate.txt"
-        self._install_structured_flutter_toolchain(test_marker, analyze_marker)
+        legacy_dart_marker = self._tmp / "legacy-dart-format.txt"
+        self._install_structured_flutter_toolchain(test_marker, analyze_marker, format_marker)
         (self.repo / "file.txt").write_text("changed\n", encoding="utf-8")
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
@@ -287,7 +291,10 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             self.stub_dir, "flutter-cli",
             'printf "%s\\n" "$*" >> "${FLUTTER_MARKER:?}"\nexit 0\n',
         )
-        dart_cli = write_stub(self.stub_dir, "dart-cli", "exit 0\n")
+        dart_cli = write_stub(
+            self.stub_dir, "dart-cli",
+            'printf "%s\\n" "$*" >> "${DART_MARKER:?}"\nexit 0\n',
+        )
 
         result = run_script(
             "coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
@@ -296,6 +303,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
                 FLUTTER_BIN=flutter_cli,
                 FLUTTER_MARKER=str(flutter_marker),
                 DART_BIN=dart_cli,
+                DART_MARKER=str(legacy_dart_marker),
                 STUB_GATE_EXIT="0",
             ),
         )
@@ -303,14 +311,44 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(test_marker.exists(), "selected Flutter test command did not run")
         self.assertTrue(analyze_marker.exists(), "selected Flutter analyze command did not run")
+        self.assertTrue(format_marker.exists(), "selected Flutter formatter did not run")
         self.assertEqual(test_marker.read_text(encoding="utf-8"), "selected-test")
         self.assertEqual(analyze_marker.read_text(encoding="utf-8"), "selected-analyze")
+        self.assertEqual(format_marker.read_text(encoding="utf-8"), "selected-format")
         self.assertFalse(flutter_marker.exists(), "legacy Flutter CLI bypassed the selected descriptor")
+        self.assertFalse(legacy_dart_marker.exists(), "legacy Dart formatter bypassed the selected descriptor")
         self.assertEqual(
             subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
                            capture_output=True, text=True).stdout.count("\n"),
             2,
         )
+
+    def test_inherited_flutter_green_gate_flag_cannot_skip_structured_commit(self):
+        self.brief()
+        test_marker = self._tmp / "inherited-flag-test.txt"
+        analyze_marker = self._tmp / "inherited-flag-analyze.txt"
+        format_marker = self._tmp / "inherited-flag-format.txt"
+        self._install_structured_flutter_toolchain(test_marker, analyze_marker, format_marker)
+        (self.repo / "file.txt").write_text("changed\n", encoding="utf-8")
+        gate_log = self._tmp / "gate.log"
+        dispatch_log = self._tmp / "dispatch.log"
+        self._stubs(gate_log, dispatch_log)
+        dart_cli = write_stub(self.stub_dir, "dart-inherited-flag", "exit 0\n")
+
+        result = run_script(
+            "coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
+            env_extra=self._env(
+                RUN_GATES_BIN=str(SCRIPTS / "run-gates"),
+                DART_BIN=dart_cli,
+                flutter_green_gate="1",
+            ),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        log = subprocess.run(["git", "log", "--oneline"], cwd=str(self.repo),
+                             capture_output=True, text=True).stdout
+        self.assertEqual(log.count("\n"), 2, log)
+        self.assertIn("two-model-reviewer", dispatch_log.read_text(encoding="utf-8"))
 
     def test_missing_baseline_package_stops_reviewer_dispatch(self):
         self.brief()
