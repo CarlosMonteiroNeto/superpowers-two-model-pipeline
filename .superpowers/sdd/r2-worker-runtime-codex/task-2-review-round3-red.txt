@@ -1,0 +1,58 @@
+test_catalog_link_merge_preserves_existing_source_category_and_skill_decisions (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_catalog_link_merge_preserves_existing_source_category_and_skill_decisions) ... FAIL
+test_catalog_links_are_saved_as_unreviewed_targets_without_fetching_them (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_catalog_links_are_saved_as_unreviewed_targets_without_fetching_them) ... ok
+test_expired_discovery_keeps_last_usable_results_when_github_is_rate_limited (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_expired_discovery_keeps_last_usable_results_when_github_is_rate_limited) ... ok
+test_refresh_deduplicates_repositories_regardless_of_case (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_deduplicates_repositories_regardless_of_case) ... ok
+test_refresh_keeps_case_distinct_skill_paths_and_their_decisions_separate (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_keeps_case_distinct_skill_paths_and_their_decisions_separate) ... FAIL
+test_refresh_persists_revision_metadata_and_the_supplied_clock (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_persists_revision_metadata_and_the_supplied_clock) ... ok
+test_refresh_preserves_explicit_unknown_and_per_skill_license_overrides (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_preserves_explicit_unknown_and_per_skill_license_overrides) ... FAIL
+test_refresh_preserves_skill_decisions_and_annotations_by_path (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_preserves_skill_decisions_and_annotations_by_path) ... ok
+test_search_paginates_deduplicates_and_caps_each_query_at_100_results (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_search_paginates_deduplicates_and_caps_each_query_at_100_results) ... ok
+test_seed_sources_are_candidates_not_implicitly_trusted (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_seed_sources_are_candidates_not_implicitly_trusted) ... ok
+test_selective_refresh_does_not_mark_unselected_sources_fresh (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_selective_refresh_does_not_mark_unselected_sources_fresh) ... FAIL
+test_truncated_tree_preserves_inventory_and_marks_refresh_incomplete (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_truncated_tree_preserves_inventory_and_marks_refresh_incomplete) ... ok
+
+======================================================================
+FAIL: test_catalog_link_merge_preserves_existing_source_category_and_skill_decisions (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_catalog_link_merge_preserves_existing_source_category_and_skill_decisions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_skill_source_refresh.py", line 470, in test_catalog_link_merge_preserves_existing_source_category_and_skill_decisions
+    self.assertEqual(target["category"], "publisher")
+AssertionError: 'linked-candidate' != 'publisher'
+- linked-candidate
++ publisher
+
+
+======================================================================
+FAIL: test_refresh_keeps_case_distinct_skill_paths_and_their_decisions_separate (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_keeps_case_distinct_skill_paths_and_their_decisions_separate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_skill_source_refresh.py", line 223, in test_refresh_keeps_case_distinct_skill_paths_and_their_decisions_separate
+    self.assertEqual(skills["skills/Go/SKILL.md"]["review_status"], "reviewed")
+AssertionError: 'rejected' != 'reviewed'
+- rejected
++ reviewed
+
+
+======================================================================
+FAIL: test_refresh_preserves_explicit_unknown_and_per_skill_license_overrides (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_refresh_preserves_explicit_unknown_and_per_skill_license_overrides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_skill_source_refresh.py", line 275, in test_refresh_preserves_explicit_unknown_and_per_skill_license_overrides
+    self.assertIsNone(skills["skills/unknown/SKILL.md"]["license"])
+AssertionError: {'spdx_id': 'MIT', 'name': 'MIT License'} is not None
+
+======================================================================
+FAIL: test_selective_refresh_does_not_mark_unselected_sources_fresh (test_r2_skill_source_refresh.SkillSourceRefreshTests.test_selective_refresh_does_not_mark_unselected_sources_fresh)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_skill_source_refresh.py", line 531, in test_selective_refresh_does_not_mark_unselected_sources_fresh
+    self.assertEqual(result["status"], "stale")
+AssertionError: 'fresh' != 'stale'
+- fresh
++ stale
+
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.516s
+
+FAILED (failures=4)
