@@ -249,6 +249,7 @@ def _merge_sources(existing, incoming):
                 old.get("skills", []),
                 preserve_missing=True,
                 previous_source_license=old.get("license"),
+                preserve_existing_licenses=True,
             )
             for field, value in old.items():
                 if field not in candidate:
@@ -307,7 +308,8 @@ def _skill_entries(tree, license_info):
 
 
 def _merge_skill_entries(refreshed, previous, preserve_missing=False,
-                         previous_source_license=None):
+                         previous_source_license=None,
+                         preserve_existing_licenses=False):
     previous_by_path = {
         item["path"]: item
         for item in previous
@@ -328,7 +330,8 @@ def _merge_skill_entries(refreshed, previous, preserve_missing=False,
             if "license" in old:
                 old_license = _normal_license(old.get("license"))
                 inherited_license = _normal_license(previous_source_license)
-                if old.get("license") is None or old_license != inherited_license:
+                if (preserve_existing_licenses or old.get("license") is None
+                        or old_license != inherited_license):
                     entry["license"] = copy.deepcopy(old["license"])
             seen.add(key)
         merged.append(entry)
