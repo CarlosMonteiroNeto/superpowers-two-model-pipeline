@@ -101,6 +101,21 @@ class PromptHeaderTests(unittest.TestCase):
         self.assertEqual(first["provenance"]["skills"][0]["id"], "domain-test-skill")
         self.assertEqual(first["provenance"]["skills"][0]["revision"], "sha256:domain-r1")
 
+    def test_prompt_hash_changes_when_skill_revision_changes_without_content_change(self):
+        first = self.module.build(
+            "operator", context(), skill_bundle("UNCHANGED-DOMAIN-SKILL", "sha256:domain-r1"),
+            "CODEX-POLICY",
+        )
+        changed_revision = self.module.build(
+            "operator", context(), skill_bundle("UNCHANGED-DOMAIN-SKILL", "sha256:domain-r2"),
+            "CODEX-POLICY",
+        )
+
+        self.assertIn("UNCHANGED-DOMAIN-SKILL", first["text"])
+        self.assertIn("UNCHANGED-DOMAIN-SKILL", changed_revision["text"])
+        self.assertIn("sha256:domain-r2", changed_revision["text"])
+        self.assertNotEqual(first["hash"], changed_revision["hash"])
+
     def test_required_prompt_context_is_rejected_when_over_budget(self):
         with self.assertRaisesRegex(self.module.PromptHeaderError, "budget"):
             self.module.build(
