@@ -109,20 +109,19 @@ class TestBriefScaffold(BriefScaffoldTestBase):
         self.assertNotIn("declaration", lower)
         self.assertNotIn("confirm", lower)
 
-    def test_brief_offers_the_scoped_runner_without_mandating_it(self):
-        """The RED order points at the rtk-run scoped runner (compressed
-        output, RED evidence at the gate's path) but leaves the choice to the
-        operador: running the project's runner directly and redirecting its
-        machine-readable output to the same path is equally acceptable, and
-        coder-gate owns the authoritative full suite."""
+    def test_brief_offers_the_backend_neutral_scoped_runner(self):
+        """Worker briefs use the shared scoped runner, not the Flutter-only
+        runner; task-scoped execution still writes RED evidence."""
         self.write_plan(plan_with(FULL_TASK))
         r = run_scaffold(self.ws, 3)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
-        self.assertIn("rtk-run", text)
-        self.assertIn("--task 3", text)
+        self.assertIn("scoped-run", text)
+        self.assertIn("3 red", text)
         self.assertIn("red <test-file...>", text)
         self.assertIn("task-3-red.txt", text)
+        self.assertNotIn("flutter-app-pipeline", text)
+        self.assertNotIn("rtk-run", text)
         lower = text.lower()
         self.assertIn("optional", lower)
         self.assertNotIn("do not run the full test suite", lower)

@@ -43,6 +43,7 @@ class ToolchainEvidenceTests(unittest.TestCase):
     def test_toolchain_descriptor_uses_argv_cwd_and_environment(self):
         module = load_module(self, "toolchain_contract.py", "toolchain_contract", "resolve_toolchain")
         test_argv = [sys.executable, "-m", "unittest", "discover", "-s", "tests"]
+        integration_argv = [sys.executable, "-m", "unittest", "discover", "-s", "integration"]
         runtime = {
             "toolchains": {
                 "python-unittest": {
@@ -51,6 +52,14 @@ class ToolchainEvidenceTests(unittest.TestCase):
                         "red": {"argv": test_argv, "cwd": ".", "env": {"PYTHONUTF8": "1"}},
                         "test": {"argv": test_argv, "cwd": ".", "env": {"PYTHONUTF8": "1"}},
                         "analyze": {"argv": [sys.executable, "-m", "compileall", "src"], "cwd": ".", "env": {}},
+                    },
+                    "red_adapter": "unittest",
+                },
+                "python-integration": {
+                    "executable": sys.executable,
+                    "commands": {
+                        "red": {"argv": integration_argv, "cwd": ".", "env": {}},
+                        "test": {"argv": integration_argv, "cwd": ".", "env": {}},
                     },
                     "red_adapter": "unittest",
                 },
@@ -67,6 +76,15 @@ class ToolchainEvidenceTests(unittest.TestCase):
         self.assertEqual(pathlib.Path(resolved["commands"]["test"]["cwd"]), self.project)
         self.assertEqual(resolved["commands"]["test"]["env"]["PYTHONUTF8"], "1")
         self.assertEqual(resolved["red_adapter"], "unittest")
+        self.assertEqual(
+            module.resolve_toolchain(
+                {"toolchain_id": "python-integration", "touches": ["tests/integration/test_api.py"]},
+                runtime,
+                str(self.project),
+            )["commands"]["test"]["argv"],
+            integration_argv,
+            "same-language toolchains must resolve by exact task identity, not ledger order",
+        )
 
     def test_empty_node_manifest_does_not_guess_npm_test_or_eslint(self):
         (self.project / "package.json").write_text(json.dumps({"name": "empty-scripts", "scripts": {}}), encoding="utf-8")

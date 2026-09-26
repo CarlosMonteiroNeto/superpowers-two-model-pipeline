@@ -1,13 +1,4 @@
-"""Per-task toolchain wiring (rec #3).
-
-A mono-repo with two ecosystems (say Flutter + Firebase functions) used to be
-unresolvable by resolve-toolchain: two markers meant "ambiguous, ask once" and
-the single branch-level gate entry then ruled every task. Now a branch may
-preinstall one gate entry per detected marker (resolve-toolchain --all) and the
-per-task scripts pick the entry for the WHAT the task actually touches
-(scripts/task-lang) or a named language (scripts/gate-entry-for) instead of
-whatever happened to be appended last.
-"""
+"""Exact, task-selected toolchain wiring for multi-toolchain projects."""
 
 import json
 import os
@@ -38,9 +29,10 @@ def run_script(script, args, cwd, env_extra):
     )
 
 
-def gate_entry(lang, test_cmd, analyze_cmd):
+def gate_entry(lang, test_cmd, analyze_cmd, toolchain_id=None):
     return {"ts": "x", "type": "gate", "task": "-",
             "summary": "preinstalled: " + lang,
+            "toolchain_id": toolchain_id or lang,
             "lang": lang, "test_cmd": test_cmd, "analyze_cmd": analyze_cmd}
 
 
@@ -72,15 +64,16 @@ class ToolchainWiringBase(unittest.TestCase):
 
 
 class TestResolveToolchainAll(ToolchainWiringBase):
-    def test_all_preinstalls_one_gate_entry_per_marker(self):
+    def test_all_keeps_supported_gate_and_rejects_unconfigured_node(self):
         (self.repo / "go.mod").write_text("module test\n", encoding="utf-8")
         (self.repo / "package.json").write_text("{}\n", encoding="utf-8")
         r = run_script("resolve-toolchain", ["--all", str(self.ws), str(self.repo)],
                        cwd=self._tmp, env_extra={})
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
         langs = ledger_langs(self.ledger_path())
-        self.assertEqual(sorted(langs), ["go", "node"])
-        self.assertEqual(langs, sorted(langs), r.stdout + r.stderr)
+        self.assertEqual(langs, ["go"])
+        self.assertNotIn("npm test", r.stdout + r.stderr)
+        self.assertNotIn("npx eslint", r.stdout + r.stderr)
 
     def test_all_without_any_marker_still_exits_2(self):
         r = run_script("resolve-toolchain", ["--all", str(self.ws), str(self.repo)],
@@ -102,9 +95,11 @@ class TestTaskLang(ToolchainWiringBase):
         self.plan = {
             "feature": "f",
             "tasks": [
-                {"id": 1, "title": "math", "touches": ["lib/go/math.go"],
+                {"id": 1, "title": "math", "toolchain_id": "go-unit-v1",
+                 "touches": ["lib/go/math.go"],
                  "depends_on": []},
-                {"id": 2, "title": "calc", "touches": ["src/calc.js"],
+                {"id": 2, "title": "calc", "toolchain_id": "node-test-v1",
+                 "touches": ["src/calc.js"],
                  "depends_on": []},
                 {"id": 3, "title": "docs", "touches": ["README.md"],
                  "depends_on": []},
@@ -112,73 +107,74 @@ class TestTaskLang(ToolchainWiringBase):
             ],
         }
         (self.ws / "plan.json").write_text(json.dumps(self.plan), encoding="utf-8")
-        self.write_ledger([gate_entry("go", "go test ./...", "go vet ./...")])
+        self.write_ledger([gate_entry("go", "go test ./...", "go vet ./...", "go-unit-v1")])
 
     def run_lang(self, task, root):
         return run_script("task-lang", [str(self.ws), task, root],
                           cwd=self._tmp, env_extra={})
 
-    def test_resolves_lang_from_ancestor_marker(self):
-        # go.mod at the root governs lib/go/math.go.
+    def test_resolves_the_task_declared_toolchain_identity(self):
         (self.repo / "go.mod").write_text("module test\n", encoding="utf-8")
         r = self.run_lang("1", str(self.repo))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(r.stdout.strip(), "go")
+        self.assertEqual(r.stdout.strip(), "go-unit-v1")
 
-    def test_closest_ancestor_marker_wins(self):
-        # package.json sits closer to calc.js than the root go.mod.
+    def test_task_identity_wins_over_nearer_marker(self):
         (self.repo / "go.mod").write_text("module test\n", encoding="utf-8")
         (self.repo / "src").mkdir()
         (self.repo / "src" / "package.json").write_text("{}\n", encoding="utf-8")
         r = self.run_lang("2", str(self.repo))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(r.stdout.strip(), "node")
+        self.assertEqual(r.stdout.strip(), "node-test-v1")
 
-    def test_falls_back_to_branch_gate_when_no_marker(self):
+    def test_missing_task_identity_is_not_guessed_from_branch_gate(self):
         r = self.run_lang("3", str(self.repo))
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(r.stdout.strip(), "go")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_falls_back_to_branch_gate_when_no_touches(self):
+    def test_task_without_touches_must_still_name_its_toolchain(self):
         r = self.run_lang("4", str(self.repo))
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(r.stdout.strip(), "go")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_missing_plan_falls_back_to_branch_gate(self):
+    def test_missing_plan_fails_closed(self):
         (self.ws / "plan.json").unlink()
         r = self.run_lang("1", str(self.repo))
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(r.stdout.strip(), "go")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 class TestGateEntryFor(ToolchainWiringBase):
     def setUp(self):
         super().setUp()
         self.write_ledger([
-            gate_entry("go", "go test ./...", "go vet ./..."),
-            gate_entry("node", "npm test", "npx eslint ."),
+            gate_entry("python", "python -m unittest", "ruff check .", "python-unit-v1"),
+            gate_entry("python", "python -m unittest tests.integration", "mypy .", "python-integration-v1"),
+            gate_entry("python", "python -m unittest tests.lint", "ruff check tests/lint", "python-lint-v1"),
         ])
 
     def run_entry(self, *args):
         return run_script("gate-entry-for", [str(self.ws)] + list(args),
                           cwd=self._tmp, env_extra={})
 
-    def test_returns_first_entry_matching_lang(self):
-        r = self.run_entry("go")
+    def test_returns_exact_task_toolchain_identity(self):
+        r = self.run_entry("python-unit-v1")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         entry = json.loads(r.stdout.strip())
-        self.assertEqual(entry["lang"], "go")
-        self.assertEqual(entry["test_cmd"], "go test ./...")
+        self.assertEqual(entry["toolchain_id"], "python-unit-v1")
+        self.assertEqual(entry["test_cmd"], "python -m unittest")
 
-    def test_returns_last_entry_by_default(self):
+    def test_two_toolchains_with_same_language_are_not_conflated(self):
+        r = self.run_entry("python-integration-v1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        entry = json.loads(r.stdout.strip())
+        self.assertEqual(entry["toolchain_id"], "python-integration-v1")
+        self.assertEqual(entry["test_cmd"], "python -m unittest tests.integration")
+
+    def test_missing_identity_does_not_default_to_last_record(self):
         r = self.run_entry()
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(json.loads(r.stdout.strip())["lang"], "node")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_unknown_lang_falls_back_to_last_entry(self):
-        r = self.run_entry("rust")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(json.loads(r.stdout.strip())["lang"], "node")
+    def test_unknown_identity_does_not_fall_back_to_last_record(self):
+        r = self.run_entry("python-missing-v1")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":
