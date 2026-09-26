@@ -241,8 +241,20 @@ exit 0
         """Serial path + the real coder-gate: a green suite with nothing to
         commit must block the task instead of reaching closing."""
         self.write_gate()
-        (self.ws() / "task-1-red.txt").write_text(GO_TEST_FAILURE,
-                                                  encoding="utf-8")
+        identity = {
+            "task_id": 1,
+            "attempt_id": "fixture-attempt-1",
+            "toolchain_id": "legacy-go-v1",
+            "runner": "scoped-run-v1",
+            "command": ["go", "test", "-json"],
+            "source_snapshot": "tree:fixture-go-red",
+            "adapter": "go_test_json",
+        }
+        (self.ws() / "task-1-attempt.json").write_text(
+            json.dumps(identity), encoding="utf-8")
+        evidence = dict(identity, raw_output=GO_TEST_FAILURE)
+        (self.ws() / "task-1-red.txt").write_text(
+            json.dumps(evidence), encoding="utf-8")
         real_coder_gate = SCRIPTS / "coder-gate"
         red_gate = write_stub(
             self.stub_dir, "red-gate-real-gate",
