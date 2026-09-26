@@ -74,6 +74,14 @@ class IntegrateDirtyGuardTest(unittest.TestCase):
     # --- helpers ---------------------------------------------------------
 
     def alloc(self, n):
+        plan_path = self.ws / "plan.json"
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        tasks = plan.setdefault("tasks", [])
+        if not any(isinstance(task, dict) and str(task.get("id")) == str(n) for task in tasks):
+            # Pre-R2 plans carry task IDs but do not name a toolchain. The
+            # compatibility path may use a single unstructured gate for them.
+            tasks.append({"id": n})
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
         r = subprocess.run(
             [BASH, str(SCRIPTS / "worktree-alloc"), str(self.ws), str(n)],
             capture_output=True, text=True, cwd=str(self.repo))
