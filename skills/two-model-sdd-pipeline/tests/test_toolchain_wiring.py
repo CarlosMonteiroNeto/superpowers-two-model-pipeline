@@ -65,6 +65,25 @@ class ToolchainWiringBase(unittest.TestCase):
 
 
 class TestResolveToolchainAll(ToolchainWiringBase):
+    def test_malformed_task_toolchain_identity_does_not_use_legacy_gate(self):
+        (self.ws / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": 42, "touches": ["src.py"]}],
+        }), encoding="utf-8")
+        self.write_ledger([gate_entry(
+            "python",
+            'python -c "open(\'legacy-gate-ran.txt\', \'w\').write(\'ran\')"',
+            'python -c "pass"',
+            "python-legacy-v1",
+        )])
+
+        result = run_script(
+            "run-gates", [str(self.ws), "--tasks", "1"],
+            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.ws / "legacy-gate-ran.txt").exists())
+
     def test_mixed_task_selection_does_not_fall_back_to_single_legacy_gate(self):
         (self.ws / "plan.json").write_text(json.dumps({
             "tasks": [
