@@ -109,7 +109,8 @@ def classify_unittest(text):
         outcome = str(test.get("outcome", "")).lower()
         if outcome in ("failure", "failed", "error"):
             failed_ids.add(str(test_id))
-        if outcome in ("passed", "success", "failure", "failed", "error"):
+        if (outcome in ("passed", "success", "failure", "failed", "error")
+                and "_FailedTest" not in str(test_id)):
             executed_ids.add(str(test_id))
     if not executed_ids:
         return False
@@ -170,13 +171,16 @@ def main(argv):
         envelope = json.loads(text)
     except ValueError:
         envelope = None
-    if isinstance(envelope, dict) and all(
-        key in envelope for key in ("runner", "attempt_id", "toolchain_id", "source_snapshot")
-    ):
-        attempt_path = os.path.join(workspace.rstrip("/\\"), "task-%s-attempt.json" % task)
+    attempt_path = os.path.join(workspace.rstrip("/\\"), "task-%s-attempt.json" % task)
+    identity_fields = ("task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot")
+    has_identity = isinstance(envelope, dict) and any(key in envelope for key in identity_fields)
+    if os.path.isfile(attempt_path) or has_identity:
         if not os.path.isfile(attempt_path):
             print("RED-FORM-CHECK: missing current attempt identity: %s" % attempt_path,
                   file=sys.stderr)
+            return 1
+        if not isinstance(envelope, dict) or not all(key in envelope for key in identity_fields):
+            print("RED-FORM-CHECK: evidence is not bound to the current attempt", file=sys.stderr)
             return 1
         try:
             with open(attempt_path, encoding="utf-8") as handle:

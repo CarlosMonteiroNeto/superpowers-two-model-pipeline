@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# Resolve the exact toolchain identity declared by a task. Marker-based
-# language guessing and branch-level ledger fallbacks are intentionally not
-# used: tasks in a multi-toolchain plan must name their approved descriptor.
-#
-# Usage: task-lang WORKSPACE TASK [ROOT]
-# Prints the task's toolchain_id. ROOT remains accepted for caller
-# compatibility but does not affect identity selection.
+# Resolve the language declared by the exact task-selected toolchain gate.
+# task-toolchain exposes the distinct toolchain_id when a caller needs it.
 set -euo pipefail
 
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then
@@ -13,31 +8,5 @@ if [ $# -lt 2 ] || [ $# -gt 3 ]; then
   exit 2
 fi
 
-python3 - "$1" "$2" <<'PY'
-import json
-import os
-import sys
-
-workspace, task_id = sys.argv[1:]
-plan_path = os.path.join(workspace, "plan.json")
-try:
-    with open(plan_path, encoding="utf-8") as stream:
-        plan = json.load(stream)
-except (OSError, ValueError) as exc:
-    print("TASK-LANG: cannot read plan: %s" % exc, file=sys.stderr)
-    sys.exit(1)
-
-matches = [entry for entry in plan.get("tasks", [])
-           if isinstance(entry, dict) and str(entry.get("id")) == task_id]
-if len(matches) != 1:
-    print("TASK-LANG: task %s is missing or ambiguous in the plan" % task_id,
-          file=sys.stderr)
-    sys.exit(1)
-
-toolchain_id = matches[0].get("toolchain_id")
-if not isinstance(toolchain_id, str) or not toolchain_id.strip():
-    print("TASK-LANG: task %s has no explicit toolchain_id" % task_id,
-          file=sys.stderr)
-    sys.exit(1)
-print(toolchain_id)
-PY
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+exec python3 "$SCRIPT_DIR/toolchain_gate.py" task-lang "$1" "$2"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -155,7 +156,7 @@ def _default_descriptor(marker: str) -> tuple[str, dict[str, Any]]:
         toolchain_id, exe, adapter = "flutter-default", "flutter", "flutter_machine"
         commands = {
             "red": {"argv": [exe, "test", "--machine", "{test_paths}"], "cwd": ".", "env": {}},
-            "test": {"argv": [exe, "test", "{test_paths}"], "cwd": ".", "env": {}},
+            "test": {"argv": [exe, "test"], "cwd": ".", "env": {}},
             "analyze": {"argv": [exe, "analyze"], "cwd": ".", "env": {}},
             "format": {"argv": ["dart", "format", "--set-exit-if-changed", "."], "cwd": ".", "env": {}},
         }
@@ -163,7 +164,7 @@ def _default_descriptor(marker: str) -> tuple[str, dict[str, Any]]:
         toolchain_id, exe, adapter = "python-pytest", "pytest", "pytest_json_report"
         commands = {
             "red": {"argv": [exe, "-q", "--json-report", "--json-report-file={evidence_path}", "{test_paths}"], "cwd": ".", "env": {}},
-            "test": {"argv": [exe, "-q", "{test_paths}"], "cwd": ".", "env": {}},
+            "test": {"argv": [exe, "-q"], "cwd": ".", "env": {}},
             "analyze": {"argv": ["ruff", "check", "."], "cwd": ".", "env": {}},
         }
     elif language == "go":
@@ -296,15 +297,20 @@ def resolve_cli(workspace: str, root_value: str, all_markers: bool, runtime_path
         payload = json.dumps(descriptor, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         # Legacy gates retain printable command summaries. New scoped workers
         # consume the structured descriptor and never shell-split these fields.
-        test_summary = json.dumps(commands["test"]["argv"], ensure_ascii=False)
-        analyze_summary = json.dumps(commands["analyze"]["argv"], ensure_ascii=False)
-        cmd = [
-            "bash", str(append_script), str(ledger), "gate", "-",
-            "resolved %s (%s)" % (descriptor["toolchain_id"], marker),
+        test_summary = shlex.join(commands["test"]["argv"])
+        analyze_command = commands.get("analyze")
+        analyze_summary = (
+            shlex.join(analyze_command["argv"])
+            if analyze_command is not None else ""
+        )
+        analyze_available = "true" if analyze_command is not None else "false"
+        fields = [
+            "gate", "-", "resolved %s (%s)" % (descriptor["toolchain_id"], marker),
             "toolchain_id=" + descriptor["toolchain_id"],
             "toolchain_descriptor=" + payload,
             "test_cmd=" + test_summary,
             "analyze_cmd=" + analyze_summary,
+            "analyze_available=" + analyze_available,
             "red_adapter=" + descriptor["red_adapter"],
             "lang=" + language,
             "detected=auto",
@@ -312,14 +318,20 @@ def resolve_cli(workspace: str, root_value: str, all_markers: bool, runtime_path
         # On Windows the launcher has Git Bash; callers already use this
         # script through Bash, so inherit that executable explicitly.
         bash = os.environ.get("BASH_BIN") or shutil.which("bash") or "bash"
-        cmd[0] = bash
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+        result = subprocess.run(
+            [bash, str(append_script), "--stdin-tsv", str(ledger)],
+            input="\t".join(fields) + "\n",
+            capture_output=True, text=True, encoding="utf-8",
+        )
         if result.returncode:
             print(result.stdout, end="")
             print(result.stderr, end="", file=sys.stderr)
             return result.returncode
         print("TOOLCHAIN_ID=%s" % descriptor["toolchain_id"])
         print("LANG=%s" % language)
+        print("TEST_CMD=%s" % shlex.join(commands["test"]["argv"]))
+        if analyze_command is None:
+            print("ANALYZE_UNAVAILABLE=%s (no analyzer configured)" % descriptor["toolchain_id"])
         print("ledgered: %s" % descriptor["toolchain_id"])
     for error in errors:
         print("RESOLVE-TOOLCHAIN: " + error, file=sys.stderr)

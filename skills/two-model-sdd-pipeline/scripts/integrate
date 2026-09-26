@@ -19,9 +19,9 @@
 # Exit codes: 0 = every task integrated, 1 = at least one integration_failed,
 #             2 = usage.
 #
-# Reads `lang`/`test_cmd`/`analyze_cmd` from the first `gate` ledger entry
-# (same shape as final-gate). lang=flutter runs the Flutter gate; anything else
-# runs `run-gates WS TEST_CMD ANALYZE_CMD`. The batch gate deliberately runs
+# Resolves each task's toolchain ID from the plan and runs every selected
+# descriptor. A single Flutter toolchain uses its Flutter gate; multiple IDs
+# run through the generic descriptor runner. The batch gate deliberately runs
 # WITHOUT the scope gate: each task's coder-gate already proved its own scope in
 # its worktree, and a single keep-discard pass could only judge one task's
 # `touches`.
@@ -61,12 +61,7 @@ shift
 RUN_GATES_BIN="${RUN_GATES_BIN:-$script_dir/run-gates}"
 GREEN_GATE_BIN="${GREEN_GATE_BIN:-$script_dir/../../flutter-app-pipeline/scripts/green-gate}"
 
-gate_line=$(grep -E '"type": *"gate"' "$ledger" | head -1 || true)
-test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
-[ -n "$test_cmd" ] || test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test": *"\([^"]*\)".*/\1/p')
-analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)".*/\1/p')
-[ -n "$analyze_cmd" ] || analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
-lang=$(printf '%s' "$gate_line" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
+LEGACY_LANG=$(python3 "$script_dir/toolchain_gate.py" legacy-lang "$ws" 2>/dev/null || true)
 
 slug="${WS_SLUG:-$(basename "$ws")}"
 
@@ -111,15 +106,36 @@ alloc_base() {
 # run_gate [TASK] - a TASK id enables the Flutter scope gate (single-task path);
 # no id means the batch gate, which this script's contract explains.
 run_gate() {
-  local t="${1:-}" rc=0
-  if [ "$lang" = "flutter" ]; then
-    if [ -n "$t" ]; then
-      "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "$t" || rc=$?
+  local rc=0 all_flutter=1 lang task_id identity selected_identity="" multiple_toolchains=0
+  local -a selected=("$@")
+  if [ "${#selected[@]}" -eq 0 ]; then
+    if [ "$LEGACY_LANG" = "flutter" ]; then
+      "$GREEN_GATE_BIN" --no-commit || rc=$?
+    else
+      "$RUN_GATES_BIN" "$ws" --legacy || rc=$?
+    fi
+    return "$rc"
+  fi
+  for task_id in "${selected[@]}"; do
+    lang=$(python3 "$script_dir/toolchain_gate.py" task-lang "$ws" "$task_id" 2>/dev/null || printf '%s' "$LEGACY_LANG")
+    if [ "$lang" != "flutter" ]; then all_flutter=0; fi
+    identity=$(python3 "$script_dir/toolchain_gate.py" task-toolchain "$ws" "$task_id" 2>/dev/null || printf 'legacy:%s' "$lang")
+    if [ -z "$selected_identity" ]; then selected_identity=$identity
+    elif [ "$identity" != "$selected_identity" ]; then multiple_toolchains=1
+    fi
+  done
+  if [ "$multiple_toolchains" -eq 1 ]; then
+    "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
+  elif [ "$all_flutter" -eq 1 ]; then
+    if [ "${#selected[@]}" -eq 1 ]; then
+      "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "${selected[0]}" || rc=$?
     else
       "$GREEN_GATE_BIN" --no-commit || rc=$?
     fi
+  elif [ -f "$ws/plan.json" ]; then
+    "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
   else
-    "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd" || rc=$?
+    "$RUN_GATES_BIN" "$ws" --legacy || rc=$?
   fi
   return "$rc"
 }
@@ -255,7 +271,8 @@ else
     batch_shas+=("$(git rev-parse --short HEAD)")
   done
 
-  if [ "$batch_ok" = "1" ] && run_gate; then
+  read -ra batch_tasks <<< "$todo"
+  if [ "$batch_ok" = "1" ] && run_gate "${batch_tasks[@]}"; then
     i=0
     for n in $todo; do
       ledger_and_release "$n" "${batch_shas[$i]}" || failed=1

@@ -17,8 +17,8 @@
 #      still in flight.
 #   7. No leftover `task/<N>` branch: integration never closed the task out.
 #
-# Reads `test_cmd`/`analyze_cmd` (resolve-toolchain shape), falling back to
-# legacy `test`/`analyze` keys.
+# Re-runs every exact toolchain ID referenced by tasks 1..TOTAL from the plan.
+# Workspaces without task identities retain the unique legacy gate record.
 #
 # Usage: final-gate WORKSPACE TOTAL_TASKS
 # Exit codes: 0 = mechanically ready, 1 = blocker(s) listed, 2 = usage /
@@ -42,10 +42,8 @@ if [ -z "$gate_line" ]; then
   exit 2
 fi
 
-test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
-[ -n "$test_cmd" ] || test_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"test": *"\([^"]*\)".*/\1/p')
-analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)".*/\1/p')
-[ -n "$analyze_cmd" ] || analyze_cmd=$(printf '%s' "$gate_line" | sed -n 's/.*"analyze": *"\([^"]*\)".*/\1/p')
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
 
 blockers=0
 emit() {
@@ -127,21 +125,15 @@ if tree_unchanged_since_green; then
   skip_rerun=1
 fi
 
-if [ -n "$test_cmd" ]; then
-  if [ "$skip_rerun" -eq 0 ]; then
-    read -ra cmd <<< "$test_cmd"
-    if ! "${cmd[@]}" >/dev/null 2>&1; then
-      emit "test command failed: $test_cmd"
+if [ "$skip_rerun" -eq 0 ]; then
+  task_ids=()
+  for t in $(seq 1 "$total"); do task_ids+=("$t"); done
+  if [ -f "$ws/plan.json" ]; then
+    if ! "$RUN_GATES_BIN" "$ws" --tasks "${task_ids[@]}"; then
+      emit "one or more configured test/analyze commands failed"
     fi
-  fi
-fi
-
-if [ -n "$analyze_cmd" ]; then
-  if [ "$skip_rerun" -eq 0 ]; then
-    read -ra cmd <<< "$analyze_cmd"
-    if ! "${cmd[@]}" >/dev/null 2>&1; then
-      emit "analyze command failed: $analyze_cmd"
-    fi
+  elif ! "$RUN_GATES_BIN" "$ws" --legacy; then
+    emit "legacy test/analyze command failed"
   fi
 fi
 

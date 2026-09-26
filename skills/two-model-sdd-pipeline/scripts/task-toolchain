@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Print the exact toolchain_id declared by a task in plan.json.
+set -euo pipefail
+
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "usage: task-toolchain WORKSPACE TASK [ROOT]" >&2
+  exit 2
+fi
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+exec python3 "$SCRIPT_DIR/toolchain_gate.py" task-toolchain "$1" "$2"

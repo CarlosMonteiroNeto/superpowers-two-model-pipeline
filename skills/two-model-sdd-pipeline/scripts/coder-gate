@@ -60,15 +60,14 @@ brief="$ws/task-$task-brief.md"
 [ -f "$ledger" ] || { echo "CODER-GATE: no ledger: $ledger" >&2; exit 3; }
 [ -f "$brief" ] || { echo "CODER-GATE: no brief: $brief" >&2; exit 3; }
 
-# The gate entry a task must use is per-language: resolve-toolchain --all can
-# preinstall one entry per ecosystem marker, so read the entry for the task's
-# own language (script/task-lang walks the plan's `touches`), not tail -1.
-task_lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
-gate_entry=$("$SCRIPT_DIR/gate-entry-for" "$ws" "$task_lang")
-[ -n "$gate_entry" ] || { echo "CODER-GATE: no gate entry - run resolve-toolchain first" >&2; exit 3; }
-lang=$(printf '%s' "$gate_entry" | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
-test_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
-analyze_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"analyze_cmd": *"\([^"]*\)".*/\1/p')
+# A task selects its gate by exact toolchain identity. Language remains a
+# separate value used only to select the matching operator prompt.
+task_toolchain=$("$SCRIPT_DIR/task-toolchain" "$ws" "$task" 2>/dev/null || true)
+if [ -n "$task_toolchain" ]; then
+  gate_entry=$("$SCRIPT_DIR/gate-entry-for" "$ws" "$task_toolchain")
+  [ -n "$gate_entry" ] || { echo "CODER-GATE: no exact gate entry - run resolve-toolchain first" >&2; exit 3; }
+fi
+lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
 # C3: the operador must be able to execute this ecosystem's test/analyze/
 # format commands, so dispatch the per-ecosystem variant (the base definition
 # only allowlists flutter/dart). The session record is per-agent, so the
@@ -224,7 +223,14 @@ PY
     fi
   else
     RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
-    if "$RUN_GATES_BIN" "$ws" "$test_cmd" "$analyze_cmd"; then
+    if [ -n "$task_toolchain" ]; then
+      gate_status=0
+      "$RUN_GATES_BIN" "$ws" --toolchains "$task_toolchain" || gate_status=$?
+    else
+      gate_status=0
+      "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
+    fi
+    if [ "$gate_status" -eq 0 ]; then
       passed=1
     fi
   fi

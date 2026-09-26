@@ -86,15 +86,14 @@ case "$action" in
     # scaffolded brief, then chains into coder-gate which owns the retry
     # loop. Then re-route and report.
     #
-    # Which red-gate runs is itself a script decision, not an LLM one: read
-    # the task's resolved language (task-lang - walk the plan's `touches`)
-    # and pick the Flutter binary only for lang=flutter; every other
-    # detected/manual lang uses this skill's own generic red-gate, which
-    # reads TEST_CMD from the same ledger entry (gate-entry-for).
+    # Which red-gate runs is itself a script decision, not an LLM one: resolve
+    # the task's exact toolchain ID, read its declared language, and pick the
+    # Flutter shim only for lang=flutter. The generic gate uses the same task
+    # identity when it looks up the structured command descriptor.
     if [ -z "${RED_GATE_BIN:-}" ]; then
       gate_lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
       if [ "$gate_lang" = "flutter" ]; then
-        RED_GATE_BIN="$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate"
+        RED_GATE_BIN="${FLUTTER_RED_GATE_BIN:-$SCRIPT_DIR/../../flutter-app-pipeline/scripts/red-gate}"
       else
         RED_GATE_BIN="$SCRIPT_DIR/red-gate"
       fi

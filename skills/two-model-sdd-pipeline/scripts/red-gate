@@ -32,12 +32,16 @@ ledger="$ws/ledger.jsonl"
 [ -f "$brief" ] || { echo "RED-GATE: no brief: $brief" >&2; exit 2; }
 
 test_cmd=${3:-}
-if [ -z "$test_cmd" ]; then
-  [ -f "$ledger" ] || { echo "RED-GATE: no TEST_CMD given and no ledger to read it from" >&2; exit 2; }
-  lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
-  gate_entry=$("$SCRIPT_DIR/gate-entry-for" "$ws" "$lang")
-  test_cmd=$(printf '%s' "$gate_entry" | sed -n 's/.*"test_cmd": *"\([^"]*\)".*/\1/p')
-  [ -n "$test_cmd" ] || { echo "RED-GATE: no test_cmd in ledger - run resolve-toolchain first" >&2; exit 2; }
+[ -f "$ledger" ] || { echo "RED-GATE: no ledger: $ledger" >&2; exit 2; }
+toolchain_id=$("$SCRIPT_DIR/task-toolchain" "$ws" "$task" 2>/dev/null || true)
+if [ -n "$toolchain_id" ]; then
+  "$SCRIPT_DIR/gate-entry-for" "$ws" "$toolchain_id" >/dev/null \
+    || { echo "RED-GATE: no exact gate entry for $toolchain_id - run resolve-toolchain first" >&2; exit 2; }
+else
+  # A unique unstructured gate is retained for legacy workspaces; ambiguous
+  # ledgers still fail in task-lang below instead of selecting first/last.
+  "$SCRIPT_DIR/task-lang" "$ws" "$task" >/dev/null \
+    || { echo "RED-GATE: task has no exact or unique legacy toolchain" >&2; exit 2; }
 fi
 
 # C3: dispatch the operador variant whose bash allowlist covers this
@@ -45,8 +49,6 @@ fi
 # The language is per-task (task-lang), not the branch-level tail -1: with
 # several toolchains preinstalled the task's own touches decide its tests.
 lang=$("$SCRIPT_DIR/task-lang" "$ws" "$task")
-[ -n "$lang" ] || lang=$(grep -E '"type": *"gate"' "$ledger" 2>/dev/null | tail -1 \
-  | sed -n 's/.*"lang": *"\([^"]*\)".*/\1/p')
 coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$lang")
 
 # F3: a resolved arbitration starts a new execution attempt. Archive the prior
