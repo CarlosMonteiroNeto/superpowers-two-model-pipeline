@@ -177,6 +177,50 @@ class Task1PipelineCompatibilityTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(invoked.exists(), result.stdout + result.stderr)
 
+    def test_final_gate_runs_every_exact_toolchain_used_by_the_plan(self):
+        markers = [self.temp / "python gate one.txt", self.temp / "python gate two.txt"]
+        tasks = []
+        entries = []
+        for task_id, marker in enumerate(markers, start=1):
+            toolchain_id = "python-unit-%d" % task_id
+            argv = [
+                sys.executable, "-c",
+                "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text('ran', encoding='utf-8')",
+                str(marker),
+            ]
+            tasks.append({"id": task_id, "toolchain_id": toolchain_id, "touches": ["tests/test_%d.py" % task_id]})
+            entries.append({
+                "type": "gate", "task": "-", "toolchain_id": toolchain_id, "lang": "python",
+                "test_cmd": "python test placeholder", "analyze_cmd": "python analyze placeholder",
+                "toolchain_descriptor": json.dumps({
+                    "available": True,
+                    "toolchain_id": toolchain_id,
+                    "language": "python",
+                    "project_root": str(self.temp),
+                    "commands": {
+                        "test": {"argv": argv, "cwd": str(self.temp), "env": {}},
+                        "analyze": {"argv": [sys.executable, "-c", "pass"], "cwd": str(self.temp), "env": {}},
+                    },
+                }),
+            })
+        (self.workspace / "plan.json").write_text(json.dumps({"tasks": tasks}), encoding="utf-8")
+        entries.extend([
+            {"type": "review_outcome", "task": "1", "summary": "APPROVED"},
+            {"type": "task_complete", "task": "1", "summary": "ok"},
+            {"type": "review_outcome", "task": "2", "summary": "APPROVED"},
+            {"type": "task_complete", "task": "2", "summary": "ok"},
+        ])
+        (self.workspace / "ledger.jsonl").write_text(
+            "\n".join(json.dumps(entry) for entry in entries) + "\n", encoding="utf-8",
+        )
+
+        result = run_script(
+            "final-gate", [self.workspace, "2"], self.temp, {"RTK_ENABLED": "0"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([marker.read_text(encoding="utf-8") for marker in markers], ["ran", "ran"])
+
 
 if __name__ == "__main__":
     unittest.main()
