@@ -1,30 +1,44 @@
 #!/usr/bin/env bash
-# Resolved `gate` ledger entry lookup (rec #3): with several toolchains
-# preinstalled by `resolve-toolchain --all`, the entry a task's gates must read
-# is the one for that task's language - not whatever was appended last. This
-# prints the FIRST `gate` entry whose lang matches LANG, so the <<--all>> append
-# order (deterministic) does not matter and a later manual entry for the same
-# lang still loses to the preinstall (the pipeline never re-asks).
+# Read a gate ledger entry by exact toolchain identity.
 #
-# Without LANG, returns the last `gate` entry (the branch default) - the exact
-# behavior every pre--all caller already had.
-#
-# Usage: gate-entry-for WORKSPACE [LANG]
-#   WORKSPACE  pipeline workspace (holds ledger.jsonl)
-#   LANG       optional; entry whose `lang` matches (first match wins)
-#
-# Prints: the matching gate entry JSON line, or nothing when no entry exists.
+# Usage: gate-entry-for WORKSPACE TOOLCHAIN_ID
+# A missing, unknown, malformed, or duplicate identity is an infrastructure
+# error. Never select the first/last language record as a fallback.
 set -euo pipefail
 
-ws=$1
-lang=${2:-}
-
-entry=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null | tail -1)
-if [ -n "$lang" ]; then
-  hit=$(grep -E '"type": *"gate"' "$ws/ledger.jsonl" 2>/dev/null \
-    | grep -F '"lang": "'"$lang"'"' | head -1 || true)
-  [ -n "$hit" ] || hit=$entry
-  entry=$hit
+if [ $# -ne 2 ] || [ -z "$2" ]; then
+  echo "usage: gate-entry-for WORKSPACE TOOLCHAIN_ID" >&2
+  exit 2
 fi
 
-printf '%s\n' "$entry"
+python3 - "$1" "$2" <<'PY'
+import json
+import os
+import sys
+
+workspace, requested = sys.argv[1:]
+ledger = os.path.join(workspace, "ledger.jsonl")
+try:
+    with open(ledger, encoding="utf-8") as stream:
+        entries = [line.strip() for line in stream if line.strip()]
+except OSError as exc:
+    print("GATE-ENTRY-FOR: cannot read ledger: %s" % exc, file=sys.stderr)
+    sys.exit(1)
+
+matches = []
+for line in entries:
+    try:
+        entry = json.loads(line)
+    except ValueError:
+        continue
+    if (isinstance(entry, dict) and entry.get("type") == "gate"
+            and entry.get("toolchain_id") == requested):
+        matches.append(line)
+
+if len(matches) != 1:
+    reason = "no" if not matches else "multiple"
+    print("GATE-ENTRY-FOR: %s gate entries for toolchain_id %s" %
+          (reason, requested), file=sys.stderr)
+    sys.exit(1)
+print(matches[0])
+PY

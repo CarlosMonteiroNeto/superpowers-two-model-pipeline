@@ -16,19 +16,14 @@ Exit codes: 0 = scaffold written; 1 = plan unreadable;
 """
 import json
 import os
+import shlex
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pathclass import is_test_path  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# The scoped runner the operador must use for its own test runs: it compresses
-# the runner output (RTK) and writes the RED evidence where red-form-check
-# reads it. Emitted as an absolute path so the operador's bash allowlist can
-# permit this one path instead of the generic `cmd`.
-RTK_RUN = os.path.normpath(
-    os.path.join(HERE, "..", "..", "flutter-app-pipeline", "scripts", "rtk-run")
-).replace("\\", "/")
+SCOPED_RUN = os.path.join(HERE, "scoped-run").replace("\\", "/")
 
 
 def main(argv):
@@ -36,8 +31,12 @@ def main(argv):
         print("usage: brief-scaffold WORKSPACE TASK", file=sys.stderr)
         return 2
     ws, task = argv
-    # Forward slashes: the brief is pasted into a git-bash command line.
-    ws_sh = ws.rstrip("/\\").replace("\\", "/")
+    # Forward slashes and shell quoting keep absolute Windows paths with
+    # spaces or Unicode intact when pasted into Git Bash.
+    ws_raw = ws.rstrip("/\\")
+    ws_sh = (ws_raw if os.path.isabs(ws_raw) else os.path.abspath(ws_raw)).replace("\\", "/")
+    ws_arg = shlex.quote(ws_sh)
+    runner_arg = shlex.quote(SCOPED_RUN)
     plan_path = ws.rstrip("/\\") + "/plan.json"
     try:
         with open(plan_path, encoding="utf-8", errors="replace") as fh:
@@ -68,6 +67,14 @@ def main(argv):
     touches = match.get("touches", []) or []
     depends = match.get("depends_on", []) or []
     spec_refs = match.get("spec_refs", []) or []
+    test_paths = (match.get("verification", {}) or {}).get("new_test_files", []) or []
+    if not isinstance(test_paths, list) or not all(isinstance(path, str) for path in test_paths):
+        print("BRIEF-SCAFFOLD: task %s verification.new_test_files must be a list of paths" % wanted,
+              file=sys.stderr)
+        return 2
+    test_args = " ".join(shlex.quote(path.replace("\\", "/")) for path in test_paths)
+    if not test_args:
+        test_args = "<test-file...>"
     # B4 guard: RED-proof defines test files as `changed - touches`, so a
     # test path inside `touches` empties the set and fails every round.
     # Fail loudly here instead of looping downstream.
@@ -111,25 +118,23 @@ def main(argv):
         "",
         "1. Write BLACK-BOX tests encoding Acceptance "
         "(skills/test-driven-development/writing-good-tests.md).",
-        "2. RUN those tests yourself and save the RED evidence - the runner's "
-        "machine-readable output - to `%s/task-%s-red.txt`; red-form-check "
-        "reads it: the suite must load, at least one test must execute, and it "
-        "must fail as an assertion or runtime error." % (ws_sh, wanted),
+        "2. RUN those tests yourself with the shared scoped command and save "
+        "its machine-readable RED evidence to `%s/task-%s-red.txt`." % (ws_sh, wanted),
+        "   red-form-check accepts only a loaded suite with an executed test "
+        "that fails as an assertion or runtime error.",
         "",
-        "   OPTIONAL: the scoped runner does both for you (it compresses the "
-        "output and writes that file):",
+        "   OPTIONAL command shape: `red <test-file...>` captures full output, "
+        "writes that evidence file, and renders a compact view.",
+        "   Invoke the `scoped-run` entrypoint:",
         "",
-        "     %s --ws %s --task %s red <test-file...>" % (RTK_RUN, ws_sh, wanted),
+        "     %s %s %s red %s" % (runner_arg, ws_arg, wanted, test_args),
         "",
-        "   Or run the project's runner directly and redirect its "
-        "machine-readable output to that path - your choice; neither is "
-        "required over the other.",
-        "3. Implement until YOUR tests pass. Running "
-        "them through the scoped runner keeps their output compressed:",
+        "3. Implement until YOUR tests pass. Run them through the same "
+        "scoped command:",
         "",
-        "     %s --ws %s --task %s test <test-file...>" % (RTK_RUN, ws_sh, wanted),
+        "     %s %s %s test %s" % (runner_arg, ws_arg, wanted, test_args),
         "",
-        "   Analysis, if you need it: `%s analyze`." % RTK_RUN,
+        "   Analysis, if you need it: `%s %s %s analyze`." % (runner_arg, ws_arg, wanted),
         "4. coder-gate runs the authoritative full suite + analyze immediately "
         "after you report DONE, so you do not need to run the full suite "
         "yourself; run it only if you believe your change has cross-cutting "

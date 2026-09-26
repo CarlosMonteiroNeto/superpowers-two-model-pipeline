@@ -28,8 +28,9 @@ No LLM call: only file reads and pure JSON/string classification.
 import json
 import os
 import sys
+from red_evidence import validate_evidence
 
-SUPPORTED_LANGS = ("flutter", "dart", "python", "go")
+SUPPORTED_LANGS = ("flutter", "dart", "python", "unittest", "go")
 
 
 def iter_json_lines(text):
@@ -79,6 +80,44 @@ def classify_python(text):
     )
 
 
+def classify_unittest(text):
+    """Accept a real unittest run only when an executed case failed/errored."""
+    try:
+        evidence = json.loads(text)
+    except ValueError:
+        return False
+    if not isinstance(evidence, dict):
+        return False
+    tests = evidence.get("tests")
+    if not isinstance(tests, list):
+        return False
+    tests_run = evidence.get("tests_run", len(tests))
+    if not isinstance(tests_run, int) or tests_run < 1 or not tests:
+        return False
+    failures = evidence.get("failures") or []
+    errors = evidence.get("errors") or []
+    if not isinstance(failures, list) or not isinstance(errors, list):
+        return False
+    failed_ids = {str(item) for item in failures + errors}
+    executed_ids = set()
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        test_id = test.get("id") or test.get("test")
+        if not test_id:
+            continue
+        outcome = str(test.get("outcome", "")).lower()
+        if outcome in ("failure", "failed", "error"):
+            failed_ids.add(str(test_id))
+        if outcome in ("passed", "success", "failure", "failed", "error"):
+            executed_ids.add(str(test_id))
+    if not executed_ids:
+        return False
+    if failed_ids.intersection(executed_ids):
+        return True
+    return False
+
+
 def classify_go(text):
     """Valid red when a named test ran and that test's action failed. Build
     failures carry no Test field and are ignored here."""
@@ -99,6 +138,7 @@ CLASSIFIERS = {
     "flutter": classify_flutter,
     "dart": classify_flutter,
     "python": classify_python,
+    "unittest": classify_unittest,
     "go": classify_go,
 }
 
@@ -126,6 +166,31 @@ def main(argv):
     except OSError as exc:
         print("RED-FORM-CHECK: cannot read evidence: %s" % exc, file=sys.stderr)
         return 1
+    try:
+        envelope = json.loads(text)
+    except ValueError:
+        envelope = None
+    if isinstance(envelope, dict) and all(
+        key in envelope for key in ("runner", "attempt_id", "toolchain_id", "source_snapshot")
+    ):
+        attempt_path = os.path.join(workspace.rstrip("/\\"), "task-%s-attempt.json" % task)
+        if not os.path.isfile(attempt_path):
+            print("RED-FORM-CHECK: missing current attempt identity: %s" % attempt_path,
+                  file=sys.stderr)
+            return 1
+        try:
+            with open(attempt_path, encoding="utf-8") as handle:
+                expected = json.load(handle)
+        except (OSError, ValueError) as exc:
+            print("RED-FORM-CHECK: invalid current attempt identity: %s" % exc, file=sys.stderr)
+            return 1
+        result = validate_evidence(evidence, expected)
+        if not result.get("valid_red"):
+            print("RED-FORM-CHECK: invalid or stale RED evidence: %s" % result.get("error", "unknown"),
+                  file=sys.stderr)
+            return 1
+        print("RED-FORM-CHECK: valid red - executed test failed (%s)" % lang)
+        return 0
     if classify(text):
         print("RED-FORM-CHECK: valid red - executed test failed (%s)" % lang)
         return 0
