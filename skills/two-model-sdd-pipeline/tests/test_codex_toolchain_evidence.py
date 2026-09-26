@@ -223,6 +223,15 @@ class ToolchainEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(unittest_red.returncode, 0, unittest_red.stdout + unittest_red.stderr)
 
+        # Toolchain descriptors keep the language semantic (`python`) while
+        # selecting unittest as the tested RED adapter.
+        python_unittest_red = subprocess.run(
+            [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "python"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(python_unittest_red.returncode, 0,
+                         python_unittest_red.stdout + python_unittest_red.stderr)
+
         collection = dict(unittest_evidence, tests_run=0, executed_tests=[], failures=[],
                           errors=["collection error"], tests=[])
         write_bound(1, "unittest", collection)
