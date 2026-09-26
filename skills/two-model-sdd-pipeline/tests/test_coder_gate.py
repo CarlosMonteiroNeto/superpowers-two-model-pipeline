@@ -111,6 +111,21 @@ class CoderGateTestBase(unittest.TestCase):
         p.write_text(body, encoding="utf-8")
         return p
 
+    def write_red_evidence(self, raw_output=GO_TEST_FAILURE, target=None):
+        identity = {
+            "task_id": 1,
+            "attempt_id": "fixture-attempt-1",
+            "toolchain_id": "legacy-go-v1",
+            "runner": "scoped-run-v1",
+            "command": ["go", "test", "-json"],
+            "source_snapshot": "tree:fixture-go-red",
+        }
+        (self.ws / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
+        evidence = dict(identity, adapter="go_test_json", raw_output=raw_output)
+        path = pathlib.Path(target) if target is not None else self.ws / "task-1-red.txt"
+        path.write_text(json.dumps(evidence), encoding="utf-8")
+        return path
+
 
 class TestResolveToolchain(CoderGateTestBase):
     def test_resolves_go_marker_and_ledgers_gate(self):
@@ -189,7 +204,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
             f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
                                 "summary": "attempt failed", "status": "FAIL"}) + "\n")
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -210,7 +225,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
 
     def test_missing_baseline_package_stops_reviewer_dispatch(self):
         self.brief()
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -226,7 +241,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
 
     def test_stale_baseline_package_stops_reviewer_dispatch(self):
         self.brief()
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -250,7 +265,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         with open(self.ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -304,7 +319,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             f.write(json.dumps({"ts": "x", "type": "red_check", "task": "1", "summary": "RED"}) + "\n")
             f.write(json.dumps({"ts": "x", "type": "coder_round", "task": "1",
                                 "summary": "attempt failed", "status": "FAIL"}) + "\n")
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         # latest coder log: fix-prompt-style text + final Status: DONE
         # (dispatch overwrites the fixed log path every retry, so this file
         # is always the latest round)
@@ -401,8 +416,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
                     "acceptance": ["thing works"]})
-        (self.ws / "task-1-red.txt").write_text(
-            GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log)
@@ -426,17 +440,12 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
                     "expected_red": "missing feature"})
-        (self.ws / "task-1-red.txt").write_text(
-            GO_TEST_FAILURE, encoding="utf-8")
-        # Legacy retry evidence: lets the pre-change implementation (substring
-        # grep) terminate so this test fails fast instead of looping.
-        legacy = self._tmp / "legacy-red.txt"
-        legacy.write_text("FAIL: missing feature\n", encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
-        self._stubs(gate_log, dispatch_log, dispatch_writes_valid_red=True)
+        self._stubs(gate_log, dispatch_log)
         (self.repo / "file.txt").write_text("y\n", encoding="utf-8")
-        r = self._run(STUB_GATE_EXIT="0", STUB_RED_SRC=legacy.as_posix())
+        r = self._run(STUB_GATE_EXIT="0")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertFalse(
             (self.ws / "task-1-fix.md").exists(),
@@ -451,10 +460,9 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self.brief()
         self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
                     "acceptance": ["thing works"]})
-        (self.ws / "task-1-red.txt").write_text(
-            GO_BUILD_FAILURE, encoding="utf-8")
+        self.write_red_evidence(GO_BUILD_FAILURE)
         valid = self._tmp / "valid-red.txt"
-        valid.write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence(target=valid)
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log, dispatch_writes_valid_red=True)
@@ -478,7 +486,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
         self._plan({"id": 1, "title": "t", "touches": ["lib/app.go"],
                     "acceptance": ["thing works"]})
         valid = self._tmp / "valid-red.txt"
-        valid.write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence(target=valid)
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         self._stubs(gate_log, dispatch_log, dispatch_writes_valid_red=True)
@@ -518,7 +526,7 @@ class TestCoderAgentSelection(CoderGateTestBase):
         # The go variant's own session record (per-agent), not a generic one.
         (self.ws / "task-1-two-model-coder-go-session.txt").write_text(
             "ses_go_variant\n", encoding="utf-8")
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         gate_log = self._tmp / "gate.log"
         dispatch_log = self._tmp / "dispatch.log"
         gate = write_stub(
@@ -579,7 +587,7 @@ class TestScopeGate(CoderGateTestBase):
     def test_out_of_scope_file_blocks_commit_and_escalates(self):
         self.brief()
         self._plan()
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         dlog = self._tmp / "dispatch.log"
         (self.repo / "stray.txt").write_text("junk\n", encoding="utf-8")
         r = run_script("coder-gate", [str(self.ws), "1"], cwd=str(self.repo),
@@ -594,7 +602,7 @@ class TestScopeGate(CoderGateTestBase):
     def test_in_scope_work_plus_new_test_commits(self):
         self.brief()
         self._plan()
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         dlog = self._tmp / "dispatch.log"
         (self.repo / "lib").mkdir()
         (self.repo / "lib" / "app.go").write_text("package lib\n", encoding="utf-8")
@@ -622,7 +630,7 @@ class TestInterfaceWiring(CoderGateTestBase):
                  "touches": ["lib/app.go"], "acceptance": ["b"]},
             ],
         }), encoding="utf-8")
-        (self.ws / "task-1-red.txt").write_text(GO_TEST_FAILURE, encoding="utf-8")
+        self.write_red_evidence()
         dlog = self._tmp / "dispatch.log"
         gate = write_stub(self.stub_dir, "run-gates", "exit 0\n")
         dispatch = write_stub(
