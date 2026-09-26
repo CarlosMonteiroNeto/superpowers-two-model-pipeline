@@ -168,3 +168,31 @@ class SkillSourceDiscoveryTests(unittest.TestCase):
         self.assertEqual(saved["queries"][0]["query"], query)
         self.assertIn("collected_at", saved["queries"][0])
 
+    def test_skill_recommendations_expose_relevance_compatibility_source_and_license_checks(self):
+        query = {"topics": ["python"], "compatibility": ["codex"]}
+        candidate = repo("Acme/python-skills", 99, ["python"])
+        candidate["skills"] = [{
+            "name": "OpenCode-only helper",
+            "path": "skills/opencode-helper/SKILL.md",
+            "topics": ["python"],
+            "compatibility": ["opencode"],
+            "license": None,
+            "review_status": "unreviewed",
+        }]
+        value = empty_registry()
+        value["queries"] = [cached_query(query, [candidate])]
+        self.write_registry(value)
+
+        result = self.module.discover(query, [], str(self.registry))
+
+        self.assertEqual(len(result["candidates"]), 1)
+        skill = result["candidates"][0]["skills"][0]
+        self.assertEqual(skill["checks"], {
+            "relevance": True,
+            "compatibility": False,
+            "source": True,
+            "license": False,
+        })
+        self.assertEqual(skill["recommendation_status"], "review_required")
+        self.assertTrue(result["external_installation_requires_approval"])
+        self.assertFalse(result["installation_performed"])
