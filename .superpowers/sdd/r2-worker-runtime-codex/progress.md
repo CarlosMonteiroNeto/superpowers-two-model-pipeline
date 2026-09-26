@@ -150,3 +150,10 @@ Task 2 — closure
 - Full required suite against candidate `1d738e5`: `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v` — 758 tests passed, 2 skipped, in 1183.163 seconds. Raw evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-2-full-suite-round4.txt`.
 - `bash skills/subagent-driven-development/scripts/test-integrity 247b23c 1d738e5 skills/two-model-sdd-pipeline/tests/test_r2_skill_source_refresh.py` passed; the controller-owned test file remained unchanged during implementation.
 - Task 2 is approved. Task 3 begins on the same R1-based branch.
+
+Task 3 — source pin and controller-owned RED
+- Verified the original upstream release tag `obra/superpowers` `v6.3.0` at commit `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`; the locally cached 6.3.0 copy is a modified fork and is not the source pin. Confirmed MIT `LICENSE` SHA-256 `0da33ed814ee87e72db078f489c4447af72f13d9f25d9e17476f32efd77705fc` and relevant source file hashes directly from that commit.
+- Controller-authored tests `test_r2_skill_manifest.py` and `test_r2_prompt_headers.py` are RED before implementation. The required R2 family command ran 44 tests: the 29 existing R2.1/R2.2 tests passed and all 15 new tests failed as expected because the R2.3 modules, source lock and adaptation map do not exist. Raw output: `.superpowers/sdd/r2-worker-runtime-codex/task-3-red.txt`.
+- Rulings were added to the task brief for immutable installed revisions, selected headings and roles, required versus optional omissions, discovery-only external suggestions, mandatory prompt inputs/order, full-prompt hashing, and fail-closed budget/conflict handling.
+- Controller-owned files must remain unchanged during implementation: `skills/two-model-sdd-pipeline/tests/test_r2_skill_manifest.py` and `skills/two-model-sdd-pipeline/tests/test_r2_prompt_headers.py`.
+- Implementation BASE is the RED-test commit. Do not close Task 3 until focused tests, review, test-integrity, and required suite are green.
