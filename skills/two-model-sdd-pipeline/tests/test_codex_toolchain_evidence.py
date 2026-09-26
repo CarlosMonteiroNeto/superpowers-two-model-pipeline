@@ -144,6 +144,7 @@ class ToolchainEvidenceTests(unittest.TestCase):
             "runner": "scoped-run-v1",
             "command": [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
             "source_snapshot": "commit:0123456789abcdef",
+            "adapter": "unittest",
         }
         evidence = dict(expected)
         evidence.update({
@@ -198,6 +199,7 @@ class ToolchainEvidenceTests(unittest.TestCase):
                 "runner": "scoped-run-v1",
                 "command": ["fixture-runner", adapter],
                 "source_snapshot": "tree:fixture-%s" % task,
+                "adapter": adapter,
             }
             (workspace / ("task-%s-attempt.json" % task)).write_text(
                 json.dumps(identity), encoding="utf-8",
@@ -257,6 +259,34 @@ class ToolchainEvidenceTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertEqual(go_red.returncode, 0, go_red.stdout + go_red.stderr)
+
+    def test_red_form_check_rejects_adapter_that_differs_from_attempt_manifest(self):
+        workspace = self.temp / "adapter-mismatch-workspace"
+        workspace.mkdir()
+        identity = {
+            "task_id": 1,
+            "attempt_id": "attempt-adapter-mismatch",
+            "toolchain_id": "python-unittest",
+            "runner": "scoped-run-v1",
+            "command": [sys.executable, "-m", "unittest", "tests.test_acceptance"],
+            "source_snapshot": "commit:0123456789abcdef",
+            "adapter": "unittest",
+        }
+        (workspace / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
+        mismatched = dict(identity)
+        mismatched.update({
+            "adapter": "pytest_json_report",
+            "raw_output": json.dumps({"tests": [{"nodeid": "test_acceptance", "outcome": "failed"}]}),
+        })
+        (workspace / "task-1-red.txt").write_text(json.dumps(mismatched), encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "red-form-check"), str(workspace), "1", "python"],
+            capture_output=True, text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("adapter", result.stderr.lower())
 
     def test_red_form_check_rejects_valid_but_unbound_legacy_red_evidence(self):
         workspace = self.temp / "unbound-legacy-red-workspace"
@@ -352,6 +382,7 @@ class ToolchainEvidenceTests(unittest.TestCase):
             "runner": "scoped-run-v1",
             "command": [sys.executable, "-m", "unittest", "tests.test_acceptance"],
             "source_snapshot": "commit:fedcba9876543210",
+            "adapter": "unittest",
         }
         (workspace / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
         legacy_evidence = dict(identity, **{

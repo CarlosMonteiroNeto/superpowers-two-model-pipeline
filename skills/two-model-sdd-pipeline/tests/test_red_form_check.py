@@ -151,6 +151,7 @@ class RedFormCheckBase(unittest.TestCase):
             "runner": "scoped-run-v1",
             "command": ["fixture-runner", lang],
             "source_snapshot": "tree:fixture-%s" % task,
+            "adapter": adapters[lang],
         }
         (self.ws / ("task-%s-attempt.json" % task)).write_text(
             json.dumps(identity), encoding="utf-8",

@@ -120,6 +120,7 @@ class CoderGateTestBase(unittest.TestCase):
             "runner": "scoped-run-v1",
             "command": ["go", "test", "-json"],
             "source_snapshot": "tree:fixture-go-red",
+            "adapter": "go_test_json",
         }
         (self.ws / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
         evidence = dict(identity, adapter="go_test_json", raw_output=raw_output)
@@ -235,6 +236,7 @@ exit "${STUB_DISPATCH_EXIT:-0}"
             "runner": "scoped-run-v1",
             "command": ["flutter", "test", "--machine"],
             "source_snapshot": "tree:fixture-flutter-red",
+            "adapter": "flutter_machine",
         }
         (self.ws / "task-1-attempt.json").write_text(json.dumps(identity), encoding="utf-8")
         red = (
