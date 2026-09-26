@@ -29,8 +29,8 @@ Exact task touch sets were checked against the canonical plans: no intra-R2 path
 
 ## Task status
 - Task 1: approved (independent re-review accepted at `7f82848`)
-- Task 2: active
-- Task 3: pending
+- Task 2: approved (`1d738e5`, independent review approved; complete suite passed)
+- Task 3: active
 - Task 4: pending
 - Task 5: pending
 - Task 6: pending
@@ -143,5 +143,10 @@ Task 2 — fourth independent-review correction cycle
 - Re-review approved the prior four fixes but found one remaining catalog-link edge case: when a link points at an already registered skill without supplying license metadata, merge could replace the existing skill license with `null`.
 - Added `test_catalog_link_without_license_preserves_registered_skill_license` and observed the intended RED (`None` returned instead of the registered MIT license). Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-2-review-round4-red.txt`.
 - Catalog-link skill merges now preserve an existing license when the link provides no license data, while ordinary tree refresh can still update inherited repository licenses. The new test passes.
-- GREEN: `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_*.py' -v` — 29 tests passed. Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-2-review-round4-green.txt`. Python compilation and `git diff --check` passed. `test-integrity` passed. Independent re-review of the five findings approved candidate `1d738e5`; the complete `test_*.py` suite is the remaining Task 2 gate.
+- GREEN: `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_*.py' -v` — 29 tests passed. Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-2-review-round4-green.txt`. Python compilation and `git diff --check` passed. `test-integrity` passed. Independent re-review of the five findings approved candidate `1d738e5`.
 - Latest independent re-review approved: catalog links retain existing skill licenses when no license is supplied; no actionable regressions found.
+
+Task 2 — closure
+- Full required suite against candidate `1d738e5`: `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_*.py' -v` — 758 tests passed, 2 skipped, in 1183.163 seconds. Raw evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-2-full-suite-round4.txt`.
+- `bash skills/subagent-driven-development/scripts/test-integrity 247b23c 1d738e5 skills/two-model-sdd-pipeline/tests/test_r2_skill_source_refresh.py` passed; the controller-owned test file remained unchanged during implementation.
+- Task 2 is approved. Task 3 begins on the same R1-based branch.
