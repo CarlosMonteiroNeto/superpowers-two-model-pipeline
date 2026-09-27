@@ -1,5 +1,7 @@
 """Controller-owned R3.2 review retry and candidate binding tests."""
 import importlib.util
+import hashlib
+import json
 import pathlib
 import unittest
 from unittest import mock
@@ -24,7 +26,10 @@ def request():
         "repository_id": "repo", "worktree": "C:/repo", "plan_revision": "plan-hash",
         "base_commit": "b" * 40, "candidate_commit": "a" * 40,
         "requested_model": "gpt-6-luna", "requested_effort": "medium", "config_hash": "c" * 64,
-        "attempt_base": "b" * 40, "context_hash": "d" * 64}
+        "prompt_hash": "d" * 64,
+        "evidence_paths": {key: "C:/repo/{}.json".format(key) for key in
+            ("request_path", "prompt_path", "events_path", "stderr_path", "final_path", "result_path")},
+        "attempt_base": "b" * 40, "context_hash": "e" * 64}
 
 
 def runtime():
@@ -39,6 +44,18 @@ def finding():
         "affected_paths": ["src/example.py"], "affected_contracts": ["safe input"]}
 
 
+def normalized_result(req, semantic, candidate=None):
+    value = {key: req[key] for key in ("version", "backend", "run_id", "dispatch_id", "task_id",
+        "task_family", "episode_id", "role", "repository_id", "worktree", "plan_revision", "base_commit",
+        "requested_model", "requested_effort", "config_hash")}
+    value.update(candidate_commit=candidate or req["candidate_commit"], runtime_version="test", session_id="review-session",
+        resumed_from=None, process_exit=0, terminal_status="completed", output_schema="reviewer-result-v1",
+        final_output=semantic, usage={"input_tokens":1,"cached_tokens":0,"output_tokens":1}, error=None)
+    payload = json.dumps(semantic, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    value["output_hash"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return value
+
+
 class ReviewRecoveryTests(unittest.TestCase):
     def test_failed_review_dispatch_stays_pending_and_retry_reuses_same_candidate(self):
         module = load(self)
@@ -46,9 +63,7 @@ class ReviewRecoveryTests(unittest.TestCase):
         env = runtime()
         with mock.patch.object(module.codex_dispatch, "run_dispatch", side_effect=[
                 OSError("review transport unavailable"),
-                {"role": "reviewer", "run_id": "run-a", "task_id": 2,
-                 "task_family": 2, "base_commit": "b" * 40, "candidate_commit": "a" * 40,
-                 "final_output": {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"}}]) as dispatch:
+                normalized_result(req, {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"})]) as dispatch:
             pending = module.ensure_review(req, env)
             self.assertEqual(pending["status"], "review_pending")
             approved = module.ensure_review(req, env)
@@ -60,14 +75,10 @@ class ReviewRecoveryTests(unittest.TestCase):
     def test_completed_verdict_for_old_candidate_is_not_reused(self):
         module = load(self)
         req = request()
-        old = {"role": "reviewer", "run_id": "run-a", "task_id": 2,
-            "task_family": 2, "base_commit": "b" * 40, "candidate_commit": "e" * 40,
-            "final_output": {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"}}
+        old = normalized_result(req, {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"}, candidate="e" * 40)
         with mock.patch.object(module, "load_review_result", return_value=old), \
-             mock.patch.object(module.codex_dispatch, "run_dispatch", return_value={
-                "role": "reviewer", "run_id": "run-a", "task_id": 2, "task_family": 2,
-                "base_commit": "b" * 40, "candidate_commit": "a" * 40,
-                "final_output": {"verdict": "SEND_BACK", "findings": [finding()], "minors": [], "summary": "revise"}}) as dispatch:
+             mock.patch.object(module.codex_dispatch, "run_dispatch", return_value=normalized_result(req,
+                {"verdict": "SEND_BACK", "findings": [finding()], "minors": [], "summary": "revise"})) as dispatch:
             result = module.ensure_review(req, runtime())
         dispatch.assert_called_once()
         self.assertEqual(result["verdict"], "SEND_BACK")
