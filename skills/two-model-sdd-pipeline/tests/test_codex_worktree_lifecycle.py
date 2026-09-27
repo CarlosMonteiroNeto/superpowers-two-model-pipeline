@@ -59,6 +59,49 @@ class WorktreeLifecycleTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse(wt.exists())
 
+    def test_release_rejects_persisted_worktree_from_another_run_namespace(self):
+        with tempfile.TemporaryDirectory() as temp:
+            repo = pathlib.Path(temp) / "repo"
+            repo.mkdir()
+            git(repo, "init", "-q")
+            git(repo, "config", "user.email", "test@example.invalid")
+            git(repo, "config", "user.name", "test")
+            (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+            git(repo, "add", "tracked.txt")
+            git(repo, "commit", "-qm", "base")
+            base = git(repo, "rev-parse", "HEAD").stdout.strip()
+            ws = repo / ".superpowers" / "two-model" / "plan-a"
+            (ws / "ownership").mkdir(parents=True)
+            (ws / "plan.json").write_text("{}", encoding="utf-8")
+            identity_module = load(self, "run_identity.py", "create_identity")
+            plan_path = repo / "plans" / "plan-a.json"
+            plan_path.parent.mkdir()
+            plan_path.write_text("{}", encoding="utf-8")
+            identity = identity_module.create_identity(str(repo), str(plan_path), "run-1")
+            (ws / ".pipeline-identity.json").write_text(json.dumps(identity), encoding="utf-8")
+            run1 = identity["run_id"]
+            path1 = repo / ".superpowers" / "two-model" / "worktrees" / identity["workspace_key"] / run1 / "task-1"
+            path1.parent.mkdir(parents=True)
+            branch1 = "codex/pipeline/{}/{}/task-1".format(identity["workspace_key"], run1)
+            git(repo, "worktree", "add", "-q", str(path1), "-b", branch1, base)
+            identity2 = identity_module.create_identity(str(repo), str(plan_path), "run-2")
+            path2 = repo / ".superpowers" / "two-model" / "worktrees" / identity2["workspace_key"] / "run-2" / "task-2"
+            path2.parent.mkdir(parents=True)
+            branch2 = "codex/pipeline/{}/run-2/task-2".format(identity2["workspace_key"])
+            git(repo, "worktree", "add", "-q", str(path2), "-b", branch2, base)
+            owner = {"repository_root": str(repo), "workspace": str(ws), "worktree": str(path2),
+                "branch": branch2, "run_id": "run-2", "base": base, "task_id": 1}
+            (ws / "ownership" / "task-1.json").write_text(json.dumps(owner), encoding="utf-8")
+            (ws / "ledger.jsonl").write_text(json.dumps({"type":"worktree_alloc", "task":"1",
+                "base":base, "branch":branch1, "run_id":run1}) + "\n", encoding="utf-8")
+            shard = path2 / ".superpowers" / "two-model" / "plan-a"
+            shard.mkdir(parents=True)
+            (shard / "ledger.jsonl").write_text(json.dumps({"type":"task_complete", "task":"1"}) + "\n", encoding="utf-8")
+            result = subprocess.run([BASH, str(SCRIPTS / "worktree-release"), str(ws), "1"],
+                cwd=repo, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(path2.exists(), "release must not remove another run's worktree")
+
     def test_state_lock_records_owner_and_blocks_conflicting_owner(self):
         locks = load(self, "state_lock.py", "acquire_lock")
         with tempfile.TemporaryDirectory() as temp:
