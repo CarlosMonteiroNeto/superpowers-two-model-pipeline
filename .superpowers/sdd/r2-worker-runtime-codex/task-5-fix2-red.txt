@@ -1,0 +1,31 @@
+test_backend_registry_requires_explicit_known_backend (test_codex_dispatch.CodexDispatchTests.test_backend_registry_requires_explicit_known_backend) ... ok
+test_codex_adapter_injects_runtime_without_polluting_strict_request (test_codex_dispatch.CodexDispatchTests.test_codex_adapter_injects_runtime_without_polluting_strict_request) ... ERROR
+test_dispatch_entrypoint_and_codex_adapter_exist (test_codex_dispatch.CodexDispatchTests.test_dispatch_entrypoint_and_codex_adapter_exist) ... ok
+test_dispatch_module_exposes_public_entrypoint (test_codex_dispatch.CodexDispatchTests.test_dispatch_module_exposes_public_entrypoint) ... ok
+test_opencode_cancel_does_not_route_to_codex_process_killer (test_codex_dispatch.CodexDispatchTests.test_opencode_cancel_does_not_route_to_codex_process_killer) ... FAIL
+test_process_module_exposes_owned_capture_and_cancellation (test_codex_dispatch.CodexDispatchTests.test_process_module_exposes_owned_capture_and_cancellation) ... ok
+
+======================================================================
+ERROR: test_codex_adapter_injects_runtime_without_polluting_strict_request (test_codex_dispatch.CodexDispatchTests.test_codex_adapter_injects_runtime_without_polluting_strict_request)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_dispatch.py", line 45, in test_codex_adapter_injects_runtime_without_polluting_strict_request
+    adapter = registry.resolve("codex", runtime=runtime)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: resolve() got an unexpected keyword argument 'runtime'
+
+======================================================================
+FAIL: test_opencode_cancel_does_not_route_to_codex_process_killer (test_codex_dispatch.CodexDispatchTests.test_opencode_cancel_does_not_route_to_codex_process_killer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_dispatch.py", line 55, in test_opencode_cancel_does_not_route_to_codex_process_killer
+    modules["codex_process"].stop_owned_processes.assert_not_called()
+  File "C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 910, in assert_not_called
+    raise AssertionError(msg)
+AssertionError: Expected 'stop_owned_processes' to not have been called. Called 1 times.
+Calls: [call([], 1)].
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.042s
+
+FAILED (failures=1, errors=1)

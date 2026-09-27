@@ -4,6 +4,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
@@ -34,7 +35,25 @@ class CodexDispatchTests(unittest.TestCase):
         with self.assertRaises((ValueError, KeyError)):
             registry.resolve("typo")
 
+    def test_codex_adapter_injects_runtime_without_polluting_strict_request(self):
+        registry = load(self, "backend_registry.py", "resolve")
+        request = {"backend": "codex", "version": 1}
+        runtime = {"manifest": {"backend": "codex"}}
+        with mock.patch.dict("sys.modules") as modules:
+            fake = mock.Mock()
+            modules["codex_dispatch"] = fake
+            adapter = registry.resolve("codex", runtime=runtime)
+            adapter.invoke(request)
+            fake.run_dispatch.assert_called_once_with(request, runtime)
+
+    def test_opencode_cancel_does_not_route_to_codex_process_killer(self):
+        registry = load(self, "backend_registry.py", "resolve")
+        adapter = registry.resolve("opencode")
+        with mock.patch.dict("sys.modules") as modules:
+            modules["codex_process"] = mock.Mock()
+            adapter.cancel({"processes": []})
+            modules["codex_process"].stop_owned_processes.assert_not_called()
+
     def test_dispatch_entrypoint_and_codex_adapter_exist(self):
         self.assertTrue((SCRIPTS / "dispatch-codex").is_file())
         self.assertTrue((SCRIPTS / "dispatch-opencode").is_file())
-
