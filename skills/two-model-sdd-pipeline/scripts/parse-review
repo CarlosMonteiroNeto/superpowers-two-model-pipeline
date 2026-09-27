@@ -16,8 +16,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if [ $# -ne 2 ]; then
-  echo "usage: parse-review LOGFILE OUTFILE" >&2
+if [ $# -ne 2 ] && { [ $# -ne 5 ] || [ "${1:-}" != "--backend" ] || [ "${2:-}" != "codex" ]; }; then
+  echo "usage: parse-review LOGFILE OUTFILE | parse-review --backend codex RESULT.json REQUEST.json OUTFILE" >&2
   exit 2
 fi
 

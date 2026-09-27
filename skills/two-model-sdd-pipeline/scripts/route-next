@@ -82,8 +82,45 @@ fi
 if [ "$ledger_source" = "$task_ledger" ]; then
   task_entries=$(cat "$task_ledger" || true)
 else
-  task_entries=$(grep -E '"task": *"'$task'"' "$ledger_source" || true)
+task_entries=$(grep -E '"task": *"'$task'"' "$ledger_source" || true)
 fi
+
+# Codex workers publish a supervisor-validated semantic final object. Never
+# infer their status from OpenCode text/event logs. A malformed object blocks
+# routing; TEST_DEFECT is an arbitration handoff and BLOCKED remains actionable.
+codex_operator=$(printf '%s\n' "$task_entries" | python3 -c '
+import json,sys
+sys.path.insert(0,sys.argv[1])
+import dispatch_contract
+items=[]
+for raw in sys.stdin:
+ try: e=json.loads(raw)
+ except Exception: continue
+ if e.get("type")=="operator_result": items.append(e)
+if items:
+ e=items[-1]; status=e.get("status"); final=e.get("final_output")
+ try: clean=dispatch_contract._validate_operator(final)
+ except Exception: clean=None
+ if not isinstance(clean,dict) or clean.get("status") != status:
+  print("INVALID")
+ else: print(status)
+' "$SCRIPT_DIR" 2>/dev/null || true)
+case "$codex_operator" in
+  INVALID)
+    echo "ROUTE-NEXT: invalid normalized Codex operator result for task $task" >&2
+    exit 1 ;;
+  TEST_DEFECT)
+    echo "ARBITRATE $task"
+    exit 0 ;;
+  BLOCKED|NEEDS_CONTEXT)
+    echo "ROUTE-NEXT: operator status $codex_operator for task $task; actionable operator block" >&2
+    exit 1 ;;
+  DONE|DONE_WITH_CONCERNS) ;;
+  "") ;;
+  *)
+    echo "ROUTE-NEXT: unsupported normalized operator status: $codex_operator" >&2
+    exit 1 ;;
+esac
 
 has_brief=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"brief_ready"' || true)
 has_red=$(printf '%s\n' "$task_entries" | grep -cE '"type": *"red_check"' || true)

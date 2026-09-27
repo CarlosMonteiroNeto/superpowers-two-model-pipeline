@@ -76,6 +76,34 @@ coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$lang")
 
 base=$("$GIT_BIN" rev-parse HEAD)
 
+# A post-commit reviewer failure is recovered in the reviewer seat only. The
+# attempt base and candidate are written before dispatch; never turn HEAD into
+# a new baseline after the candidate has already been committed.
+review_state="$ws/task-$task-review-state.json"
+review_pkg="$ws/task-$task-review-package.diff"
+if [ -f "$review_state" ]; then
+  read -r saved_base saved_candidate < <(python3 - "$review_state" <<'PY'
+import json,sys
+try:
+ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""), d.get("candidate_commit", ""))
+except Exception: print("", "")
+PY
+)
+  current=$("$GIT_BIN" rev-parse HEAD)
+  if [ -n "$saved_base" ] && [ "$saved_candidate" = "$current" ] && [ -s "$review_pkg" ]; then
+    DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
+    if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
+      --prompt-file "$review_pkg" --log "$ws/task-$task-reviewer.log"; then
+      "$SCRIPT_DIR/ledger-append" "$ledger" review_dispatched "$task" "review resumed for candidate $saved_candidate" candidate="$saved_candidate"
+      rm -f "$review_state"
+      exit 0
+    else
+      echo "CODER-GATE: reviewer dispatch remains pending for candidate $saved_candidate" >&2
+      exit 5
+    fi
+  fi
+fi
+
 # Fixed workspace paths, overwritten every iteration: no round counting, no
 # failure tally. The loop just runs until the gate passes - each retry
 # reuses the same files, and dispatch overwrites the coder log, so the
@@ -86,6 +114,13 @@ diff_file="$ws/task-$task-diff.txt"
 fix_prompt="$ws/task-$task-fix.md"
 red_evidence="$ws/task-$task-red.txt"
 
+verify_only=0
+if [ -f "$ws/plan.json" ] && python3 -c 'import json,sys
+d=json.load(open(sys.argv[1],encoding="utf-8")); t=sys.argv[2]
+raise SystemExit(0 if any(str(x.get("id"))==t and x.get("verify_only") is True for x in d.get("tasks",[])) else 1)' "$ws/plan.json" "$task"; then
+  verify_only=1
+fi
+
 # Coder-owned RED, form-checked by scripts/red-form-check (spec §4): the
 # checker reads task-N-red.txt and classifies the runner's machine-readable
 # output — 0 valid red, 1 invalid/missing, 2 unsupported language. Exit 2 falls
@@ -95,6 +130,10 @@ red_evidence="$ws/task-$task-red.txt"
 # Sets red_form_output to the checker's own message for the fix report.
 red_form_output=""
 red_form_ok() {
+  # Explicitly declared verification-only tasks have no implementation RED
+  # to fabricate. Their authoritative gates and independent reviewer still
+  # run; ordinary implementation tasks retain the mandatory RED proof.
+  [ "$verify_only" -eq 1 ] && return 0
   local rc=0
   red_form_output=$(python3 "$SCRIPT_DIR/red-form-check" "$ws" "$task" "$lang" 2>&1) || rc=$?
   case "$rc" in
@@ -140,9 +179,21 @@ while true; do
     # instruction) - the same whole-log-grep class dispatch guards against.
     # The operador's report contract ends with `Status: DONE | ... | TEST_DEFECT`,
     # so parse the JSONL text events and check the LAST one's tail.
-    coder_status=$(python3 - "$log" <<'PY'
+    coder_status=$(python3 - "$log" "$ledger" "$task" "$SCRIPT_DIR" <<'PY'
 import json, re, sys
+sys.path.insert(0,sys.argv[4])
+import dispatch_contract
 statuses = ("DONE", "DONE_WITH_CONCERNS", "BLOCKED", "TEST_DEFECT")
+try:
+ with open(sys.argv[2],encoding="utf-8") as f:
+  normalized=[json.loads(line) for line in f if line.strip()]
+ normalized=[e for e in normalized if e.get("type")=="operator_result" and str(e.get("task"))==sys.argv[3]]
+ if normalized:
+  event=normalized[-1]; clean=dispatch_contract._validate_operator(event.get("final_output"))
+  if clean.get("status") != event.get("status"): raise ValueError("status binding mismatch")
+  print(clean["status"]); raise SystemExit(0)
+except Exception:
+ print("INVALID"); raise SystemExit(0)
 last = None
 try:
     with open(sys.argv[1], "r", encoding="utf-8", errors="replace") as fh:
@@ -174,6 +225,16 @@ PY
       echo "CODER-GATE: TEST_DEFECT - escalated, no further retries; Agente diretor arbitrates" >&2
       exit 2
     fi
+    case "$coder_status" in
+      BLOCKED|NEEDS_CONTEXT)
+        "$SCRIPT_DIR/ledger-append" "$ledger" operator_blocked "$task" \
+          "normalized operator status $coder_status requires resolution" || true
+        echo "CODER-GATE: operator status $coder_status - preserving actionable block" >&2
+        exit 5 ;;
+      INVALID)
+        echo "CODER-GATE: normalized operator result is invalid; refusing gate progression" >&2
+        exit 4 ;;
+    esac
   fi
 
   passed=0
@@ -275,15 +336,6 @@ PY
       # diff - that empty commit is intentional, so `--allow-empty` records it
       # instead of halting. Absence of the flag (or of plan.json) keeps the
       # hard barrier.
-      verify_only=0
-      if [ -f "$ws/plan.json" ]; then
-        if python3 -c 'import json,sys
-d=json.load(open(sys.argv[1],encoding="utf-8"))
-t=sys.argv[2]
-print(1 if any(str(x.get("id"))==t and x.get("verify_only") for x in d.get("tasks",[])) else 0)' "$ws/plan.json" "$task" | grep -qx 1; then
-          verify_only=1
-        fi
-      fi
       arc=0
       "$GIT_BIN" add -A || arc=$?
       if [ "$arc" -ne 0 ]; then
@@ -345,9 +397,30 @@ print(1 if any(str(x.get("id"))==t and x.get("verify_only") for x in d.get("task
         echo "CODER-GATE: review package missing after construction - refusing reviewer dispatch" >&2
         exit 1
       }
+      candidate=$("$GIT_BIN" rev-parse HEAD)
+      python3 - "$review_state" "$base" "$candidate" "$ws/plan.json" "$brief" "$pkg" <<'PY'
+import hashlib,json,os,sys,tempfile
+p,base,candidate,plan,brief,package=sys.argv[1:]
+def digest(path):
+ try: return hashlib.sha256(open(path,"rb").read()).hexdigest()
+ except OSError: return None
+os.makedirs(os.path.dirname(p),exist_ok=True)
+fd,tmp=tempfile.mkstemp(dir=os.path.dirname(p),prefix="review-state-")
+with os.fdopen(fd,"w",encoding="utf-8") as f:
+ json.dump({"base_commit":base,"candidate_commit":candidate,"plan_hash":digest(plan),"context_hash":hashlib.sha256("".join(digest(x) or "" for x in (plan,brief,package)).encode()).hexdigest(),"status":"review_pending"},f)
+ f.write("\n")
+os.replace(tmp,p)
+PY
       DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
-      "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
-        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
+      if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
+        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
+        "$SCRIPT_DIR/ledger-append" "$ledger" review_dispatched "$task" "review dispatched for candidate $candidate" candidate="$candidate"
+        rm -f "$review_state"
+      else
+        "$SCRIPT_DIR/ledger-append" "$ledger" review_pending "$task" "reviewer dispatch failed; candidate $candidate remains pending" candidate="$candidate"
+        echo "CODER-GATE: reviewer dispatch failed; candidate remains review_pending" >&2
+        exit 5
+      fi
     fi
     exit 0
   fi

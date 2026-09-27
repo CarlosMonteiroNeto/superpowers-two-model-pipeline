@@ -51,6 +51,48 @@ brief="$ws/task-$task-brief.md"
       cat "$brief"
       echo
     fi
+    python3 - "$ws/plan.json" "$task" <<'PY'
+import json,pathlib,sys
+plan_path=pathlib.Path(sys.argv[1])
+if not plan_path.is_file(): raise SystemExit(0)
+root=pathlib.Path.cwd()
+try: plan=json.loads(plan_path.read_text(encoding="utf-8"))
+except Exception as exc: raise SystemExit("review-package: invalid plan: %s" % exc)
+task=next((t for t in plan.get("tasks",[]) if str(t.get("id"))==sys.argv[2]),None)
+if task is None: raise SystemExit("review-package: task not found in plan")
+print("## Global Constraints\n")
+for item in plan.get("global_constraints",[]):
+ if isinstance(item,str): print("- "+item)
+ elif isinstance(item,dict): print("- "+str(item.get("id",""))+": "+str(item.get("text",item.get("description",""))))
+print("\n## Referenced Specifications\n")
+for ref in task.get("spec_refs",[]):
+ doc,_,anchor=ref.partition("#")
+ path=root/doc
+ if path.is_file():
+  print("### "+ref+"\n")
+  text=path.read_text(encoding="utf-8")
+  if anchor:
+   import re
+   heading=re.compile(r"^#{1,6}\s+.*",re.M)
+   headings=list(heading.finditer(text)); start=None; end=len(text)
+   target=anchor.replace("-"," ").casefold()
+   for i,h in enumerate(headings):
+    slug=re.sub(r"[^a-z0-9 -]","",h.group(0).lstrip("# ").casefold()).replace(" ","-")
+    if slug==anchor.casefold(): start=h.start(); end=headings[i+1].start() if i+1<len(headings) else len(text); break
+   if start is not None: text=text[start:end]
+  print(text.rstrip()+"\n")
+print("## Verification and Evidence Metadata\n")
+print("Resolved toolchains: "+json.dumps(plan.get("verification",{}).get("toolchains",[]),ensure_ascii=False))
+print("Task verification: "+json.dumps(task.get("verification",{}),ensure_ascii=False))
+ledger=plan_path.parent/"ledger.jsonl"
+if ledger.is_file():
+ print("\nRelevant gate and evidence ledger entries:\n")
+ for raw in ledger.read_text(encoding="utf-8",errors="replace").splitlines():
+  try: event=json.loads(raw)
+  except Exception: continue
+  if str(event.get("task"))==sys.argv[2] and event.get("type") in {"gate","toolchain","red_check","coder_round","commit","review_pending"}:
+   print(json.dumps(event,ensure_ascii=False,sort_keys=True))
+PY
   fi
   echo "## Commits"
   git log --oneline "${base}..${head}"

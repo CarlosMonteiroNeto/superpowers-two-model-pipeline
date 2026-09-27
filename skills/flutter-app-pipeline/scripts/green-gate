@@ -142,10 +142,34 @@ if [ -n "$ws" ] && [ -n "$task" ]; then
     echo "GREEN-GATE: review package missing after construction - refusing reviewer dispatch" >&2
     exit 1
   }
+  review_state="$ws/task-$task-review-state.json"
+  candidate=$("$GIT_BIN" rev-parse HEAD)
+  python3 - "$review_state" "${base:-HEAD~1}" "$candidate" "$ws/plan.json" "$ws/task-$task-brief.md" "$pkg" <<'PY'
+import hashlib,json,os,sys,tempfile
+p,base,candidate,plan,brief,package=sys.argv[1:]
+def digest(path):
+ try: return hashlib.sha256(open(path,"rb").read()).hexdigest()
+ except OSError: return None
+os.makedirs(os.path.dirname(p),exist_ok=True)
+fd,tmp=tempfile.mkstemp(dir=os.path.dirname(p),prefix="review-state-")
+with os.fdopen(fd,"w",encoding="utf-8") as f:
+ json.dump({"base_commit":base,"candidate_commit":candidate,"plan_hash":digest(plan),"context_hash":hashlib.sha256("".join(digest(x) or "" for x in (plan,brief,package)).encode()).hexdigest(),"status":"review_pending"},f)
+ f.write("\n")
+os.replace(tmp,p)
+PY
 
   DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/dispatch}"
-  "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
-    --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log" || true
+  if ! "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
+    --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
+    if [ -n "$ledger" ]; then
+      LEDGER_APPEND="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append"
+      "$LEDGER_APPEND" "$ledger" review_pending "$task" \
+        "reviewer dispatch failed; candidate $($GIT_BIN rev-parse HEAD) remains pending"
+    fi
+    echo "GREEN-GATE: reviewer dispatch failed; committed candidate remains review_pending" >&2
+    exit 5
+  fi
+  rm -f "$review_state"
 fi
 
 exit 0

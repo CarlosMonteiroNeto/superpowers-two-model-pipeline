@@ -10,6 +10,9 @@ And a CLI entry-point when run as __main__.
 import json
 import re
 import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 
 def _extract_brace_block(text, start):
@@ -221,8 +224,38 @@ def extract_from_log(log_text):
     return None
 
 
+def extract_codex_result(result, request):
+    """Validate the normalized Codex reviewer result against this request."""
+    import dispatch_contract
+    candidate = request.get("candidate_commit", request.get("expected_candidate_commit"))
+    attempt_base = request.get("attempt_base")
+    contract_request = {k: v for k, v in request.items()
+                        if k in dispatch_contract.REQUEST_FIELDS}
+    clean = dispatch_contract.validate_result(result, contract_request)
+    if clean["backend"] != "codex" or clean["role"] != "reviewer":
+        raise ValueError("expected a Codex reviewer result")
+    if candidate is not None and clean["candidate_commit"] != candidate:
+        raise ValueError("review result belongs to a stale candidate")
+    if attempt_base is not None and clean["base_commit"] != attempt_base:
+        raise ValueError("review result belongs to a stale attempt base")
+    return clean["final_output"]
+
+
 def _cli():
-    """CLI entry-point: parse-review LOGFILE OUTFILE."""
+    """CLI entry-point. Legacy: parse-review LOGFILE OUTFILE.
+    Codex: parse-review --backend codex RESULT.json REQUEST.json OUTFILE.
+    """
+    if len(sys.argv) == 6 and sys.argv[1:3] == ["--backend", "codex"]:
+        _, _, result_path, request_path, outfile = sys.argv
+        try:
+            result = json.loads(pathlib.Path(result_path).read_text(encoding="utf-8"))
+            request = json.loads(pathlib.Path(request_path).read_text(encoding="utf-8"))
+            verdict = extract_codex_result(result, request)
+            pathlib.Path(outfile).write_text(json.dumps(verdict, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (OSError, ValueError, KeyError) as exc:
+            print("parse-review: invalid normalized Codex result: {}".format(exc), file=sys.stderr)
+            sys.exit(1)
+        return
     if len(sys.argv) != 3:
         print("usage: parse-review LOGFILE OUTFILE", file=sys.stderr)
         sys.exit(2)

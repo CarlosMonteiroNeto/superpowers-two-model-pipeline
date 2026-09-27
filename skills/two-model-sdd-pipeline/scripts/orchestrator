@@ -143,6 +143,44 @@ case "$action" in
     # the outcome - re-dispatching a second reviewer on the same diff would
     # duplicate the review seat, exactly what task_reviewer's "no
     # worker-spawned reviewer" rule exists to prevent.
+    state="$ws/task-$task-review-state.json"
+    if [ -f "$state" ]; then
+      candidate=$(git rev-parse HEAD)
+      read -r saved_base saved_candidate < <(python3 - "$state" <<'PY'
+import json,sys
+try:
+ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""),d.get("candidate_commit", ""))
+except Exception: print("", "")
+PY
+)
+      [ "$candidate" = "$saved_candidate" ] || { echo "ORCHESTRATOR: pending review candidate changed; refusing retry" >&2; exit 1; }
+      pkg="$ws/task-$task-review-package.diff"
+      [ -n "$saved_base" ] || { echo "ORCHESTRATOR: pending review base missing" >&2; exit 1; }
+      "$SCRIPT_DIR/review-package" "$ws" "$saved_base" "$candidate" "$pkg" "$task"
+      [ -s "$pkg" ] || { echo "ORCHESTRATOR: pending review package could not be refreshed" >&2; exit 1; }
+      python3 - "$state" "$ws/plan.json" "$ws/task-$task-brief.md" "$pkg" <<'PY'
+import hashlib,json,os,sys,tempfile
+state,plan,brief,package=sys.argv[1:]
+def digest(path):
+ try: return hashlib.sha256(open(path,"rb").read()).hexdigest()
+ except OSError: return None
+d=json.load(open(state,encoding="utf-8"))
+d["plan_hash"]=digest(plan)
+d["context_hash"]=hashlib.sha256("".join(digest(p) or "" for p in (plan,brief,package)).encode()).hexdigest()
+fd,tmp=tempfile.mkstemp(dir=os.path.dirname(state),prefix="review-state-")
+with os.fdopen(fd,"w",encoding="utf-8") as f: json.dump(d,f); f.write("\n")
+os.replace(tmp,state)
+PY
+      DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
+      if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
+        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
+        "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" "review resumed for candidate $candidate" candidate="$candidate"
+        rm -f "$state"
+      else
+        echo "ORCHESTRATOR: reviewer dispatch remains pending for candidate $candidate" >&2
+        exit 5
+      fi
+    fi
     echo "OUTCOME: $action"
     exit 0
     ;;
