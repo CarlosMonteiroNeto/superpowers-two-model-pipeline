@@ -196,3 +196,7 @@ Task 4 — controller-owned RED baseline
 - Fix re-review of `c9378dd` found interpreter/package launcher aliases still permitted reviewer tests, including `python -m pytest`, `node ...jest`, and `npx jest`. Added controller tests before further implementation. RED at `c9378dd`: 68 tests, 7 failures; evidence `task-4-review-red-3.txt`. This is the next fix-round BASE; tests remain controller-owned.
 - Fix-round GREEN at `387478f`: reviewer policies now reject interpreter/runtime and package execution launchers in both backends. Controller reran `test_codex_*.py` — 68 passed in 9.620s and `test_r2_*.py` — 46 passed in 13.302s. Evidence: `task-4-review-green-2.txt` and `task-4-review-r2-core-2.txt`. Independent re-review of this candidate remains pending.
 - Task 4 final candidate: `630ffcb74fef3c6b108f5d00a5fbec352ee43939`. Controller `test-integrity 387478f 630ffcb` passed for both RED files. Scoped re-review confirmed all three findings addressed; no new Critical/Important issues or out-of-scope changes. Task 4 is approved; Task 5 may begin.
+
+Task 5 — controller-owned RED baseline
+- Authored Task 5 brief and three controller-owned acceptance suites. Canonical 	est_codex_*.py run: 79 tests, 10 expected failures, 69 passed; failures assert missing Task 5 adapters/entrypoints and rejected incomplete resume request. Raw output: 	ask-5-red.txt.
+- Runtime envelope is documented separately from strict normalized R1 request. Implementer must preserve tests. Model preference: GPT-6 Luna, medium effort for all agents.

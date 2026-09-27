@@ -1,0 +1,7 @@
+# R2.5 — Backend dispatch and session lifecycle
+
+Implement the Task 5 plan in `.superpowers/sdd/plans/r2-worker-runtime-codex.md` (the Task 5 section and cited runtime spec are authoritative). Preserve the normalized R1 `dispatch_contract` request/result shapes. Keep OpenCode behavior behind explicit backend selection.
+
+The controller owns `test_codex_dispatch.py`, `test_codex_resume_and_retry.py`, and `test_codex_process_ownership.py`; do not modify them. Implement only the named production paths in Task 5. Do not edit plan/spec or broaden into R3. For integration, `runtime` is an internal envelope: validated runtime manifest under `manifest`, capability report under `capabilities`, resolved executable argv under `executable`, role policy capabilities under `policy_capabilities`, role instructions under `developer_instructions`, and optional explicit resume/recovery controls. Keep this envelope separate from the strict normalized request.
+
+Acceptance includes native Codex CLI argv/stdin/cwd, fresh and explicit-ID resume, semantic terminal validation, immutable per-attempt evidence, session identity binding, classified bounded retry, owned process cancellation, retention cleanup, and legacy OpenCode compatibility. Follow the spec's fail-closed rules; no silent backend fallback. Verify the exact RED command and all affected legacy dispatch/process cleanup tests. Capture raw output, run `test-integrity`, and provide a concise changed-files/verification report. The controller will commit and arrange independent review.
