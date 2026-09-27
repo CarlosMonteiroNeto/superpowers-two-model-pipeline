@@ -1,0 +1,127 @@
+test_build_context_carries_full_task_and_pinned_provenance_for_both_backends (test_codex_context_package.ContextPackageTests.test_build_context_carries_full_task_and_pinned_provenance_for_both_backends) ... ok
+test_context_is_deterministic_and_missing_spec_is_an_explicit_error (test_codex_context_package.ContextPackageTests.test_context_is_deterministic_and_missing_spec_is_an_explicit_error) ... ok
+test_non_flutter_brief_uses_scoped_runner_and_quotes_unicode_paths (test_codex_context_package.ContextPackageTests.test_non_flutter_brief_uses_scoped_runner_and_quotes_unicode_paths) ... ok
+test_oversized_mandatory_context_is_rejected_instead_of_truncated (test_codex_context_package.ContextPackageTests.test_oversized_mandatory_context_is_rejected_instead_of_truncated) ... ok
+test_backend_registry_requires_explicit_known_backend (test_codex_dispatch.CodexDispatchTests.test_backend_registry_requires_explicit_known_backend) ... ok
+test_dispatch_entrypoint_and_codex_adapter_exist (test_codex_dispatch.CodexDispatchTests.test_dispatch_entrypoint_and_codex_adapter_exist) ... ok
+test_dispatch_module_exposes_public_entrypoint (test_codex_dispatch.CodexDispatchTests.test_dispatch_module_exposes_public_entrypoint) ... ok
+test_process_module_exposes_owned_capture_and_cancellation (test_codex_dispatch.CodexDispatchTests.test_process_module_exposes_owned_capture_and_cancellation) ... ok
+test_cancel_requires_recorded_ownership_and_bounded_grace (test_codex_process_ownership.ProcessOwnershipTests.test_cancel_requires_recorded_ownership_and_bounded_grace) ... ok
+test_cleanup_is_adapter_scoped (test_codex_process_ownership.ProcessOwnershipTests.test_cleanup_is_adapter_scoped) ... ok
+test_run_owned_returns_process_identity_and_separate_streams (test_codex_process_ownership.ProcessOwnershipTests.test_run_owned_returns_process_identity_and_separate_streams) ... ok
+test_timeout_cancellation_uses_verified_start_identity (test_codex_process_ownership.ProcessOwnershipTests.test_timeout_cancellation_uses_verified_start_identity) ... FAIL
+test_dispatch_never_resumes_without_explicit_session_id (test_codex_resume_and_retry.ResumeRetryTests.test_dispatch_never_resumes_without_explicit_session_id) ... ok
+test_request_model_cannot_override_manifest_role_model_or_effort (test_codex_resume_and_retry.ResumeRetryTests.test_request_model_cannot_override_manifest_role_model_or_effort) ... FAIL
+test_resume_id_always_requires_explicit_identity_bound_resume (test_codex_resume_and_retry.ResumeRetryTests.test_resume_id_always_requires_explicit_identity_bound_resume) ... FAIL
+test_retry_policy_is_a_separate_classified_entrypoint (test_codex_resume_and_retry.ResumeRetryTests.test_retry_policy_is_a_separate_classified_entrypoint) ... ok
+test_retry_policy_retries_only_preexec_code_five_twice (test_codex_resume_and_retry.ResumeRetryTests.test_retry_policy_retries_only_preexec_code_five_twice) ... ok
+test_session_cleanup_entrypoint_exists (test_codex_resume_and_retry.ResumeRetryTests.test_session_cleanup_entrypoint_exists) ... ok
+test_session_store_exposes_load_and_store (test_codex_resume_and_retry.ResumeRetryTests.test_session_store_exposes_load_and_store) ... ok
+test_codex_apply_patch_allows_task_scoped_files_and_denies_protected_files (test_codex_role_policy.CodexRolePolicyTests.test_codex_apply_patch_allows_task_scoped_files_and_denies_protected_files) ... ok
+test_codex_apply_patch_rejects_unauthorized_new_paths_and_traversal (test_codex_role_policy.CodexRolePolicyTests.test_codex_apply_patch_rejects_unauthorized_new_paths_and_traversal) ... ok
+test_codex_apply_patch_unknown_directive_fails_closed (test_codex_role_policy.CodexRolePolicyTests.test_codex_apply_patch_unknown_directive_fails_closed) ... ok
+test_codex_build_overrides_does_not_write_global_config_or_add_bypass_flags (test_codex_role_policy.CodexRolePolicyTests.test_codex_build_overrides_does_not_write_global_config_or_add_bypass_flags) ... ok
+test_codex_builder_refuses_unhooked_mutators_and_policy_conflicts (test_codex_role_policy.CodexRolePolicyTests.test_codex_builder_refuses_unhooked_mutators_and_policy_conflicts) ... ok
+test_codex_builder_refuses_untrusted_or_uncovered_hooks (test_codex_role_policy.CodexRolePolicyTests.test_codex_builder_refuses_untrusted_or_uncovered_hooks) ... ok
+test_codex_director_approval_can_grant_one_existing_path (test_codex_role_policy.CodexRolePolicyTests.test_codex_director_approval_can_grant_one_existing_path) ... ok
+test_codex_director_cannot_run_shell_or_edit (test_codex_role_policy.CodexRolePolicyTests.test_codex_director_cannot_run_shell_or_edit) ... ok
+test_codex_director_disables_both_shell_paths (test_codex_role_policy.CodexRolePolicyTests.test_codex_director_disables_both_shell_paths) ... ok
+test_codex_hook_cli_denies_missing_policy_or_invalid_event (test_codex_role_policy.CodexRolePolicyTests.test_codex_hook_cli_denies_missing_policy_or_invalid_event) ... ok
+test_codex_hook_cli_requires_attempt_policy_and_emits_documented_decision (test_codex_role_policy.CodexRolePolicyTests.test_codex_hook_cli_requires_attempt_policy_and_emits_documented_decision) ... ok
+test_codex_hook_config_covers_bash_and_apply_patch_and_references_packaged_wrapper (test_codex_role_policy.CodexRolePolicyTests.test_codex_hook_config_covers_bash_and_apply_patch_and_references_packaged_wrapper) ... ok
+test_codex_instruction_is_one_unicode_toml_value_not_shell_text (test_codex_role_policy.CodexRolePolicyTests.test_codex_instruction_is_one_unicode_toml_value_not_shell_text) ... ok
+test_codex_operator_allows_declared_read_only_exploration (test_codex_role_policy.CodexRolePolicyTests.test_codex_operator_allows_declared_read_only_exploration) ... ok
+test_codex_operator_allows_only_an_exact_declared_scoped_runner (test_codex_role_policy.CodexRolePolicyTests.test_codex_operator_allows_only_an_exact_declared_scoped_runner) ... ok
+test_codex_operator_rejects_arbitrary_python_powershell_and_cmd_wrappers (test_codex_role_policy.CodexRolePolicyTests.test_codex_operator_rejects_arbitrary_python_powershell_and_cmd_wrappers) ... ok
+test_codex_operator_rejects_direct_git_and_publication_commands (test_codex_role_policy.CodexRolePolicyTests.test_codex_operator_rejects_direct_git_and_publication_commands) ... ok
+test_codex_operator_rejects_pipes_redirection_substitution_and_newline_chains (test_codex_role_policy.CodexRolePolicyTests.test_codex_operator_rejects_pipes_redirection_substitution_and_newline_chains) ... ok
+test_codex_operator_rejects_safe_runner_followed_by_shell_chain (test_codex_role_policy.CodexRolePolicyTests.test_codex_operator_rejects_safe_runner_followed_by_shell_chain) ... ok
+test_codex_protected_path_deny_overrides_a_matching_grant (test_codex_role_policy.CodexRolePolicyTests.test_codex_protected_path_deny_overrides_a_matching_grant) ... ok
+test_codex_reviewer_can_inspect_but_cannot_edit_or_run_tests (test_codex_role_policy.CodexRolePolicyTests.test_codex_reviewer_can_inspect_but_cannot_edit_or_run_tests) ... ok
+test_codex_reviewer_rejects_task_runner_relisted_as_read_only (test_codex_role_policy.CodexRolePolicyTests.test_codex_reviewer_rejects_task_runner_relisted_as_read_only) ... ok
+test_codex_reviewer_rejects_test_analyze_and_format_entries_even_in_read_only_list (test_codex_role_policy.CodexRolePolicyTests.test_codex_reviewer_rejects_test_analyze_and_format_entries_even_in_read_only_list) ... ok
+test_codex_reviewer_rejects_test_launchers_in_read_only_list (test_codex_role_policy.CodexRolePolicyTests.test_codex_reviewer_rejects_test_launchers_in_read_only_list) ... ok
+test_codex_role_overrides_bind_explicit_model_effort_and_role_sandbox (test_codex_role_policy.CodexRolePolicyTests.test_codex_role_overrides_bind_explicit_model_effort_and_role_sandbox) ... ok
+test_codex_supervisor_grant_is_bound_to_path_task_and_attempt (test_codex_role_policy.CodexRolePolicyTests.test_codex_supervisor_grant_is_bound_to_path_task_and_attempt) ... ok
+test_codex_unified_exec_uses_the_documented_bash_hook_event_shape (test_codex_role_policy.CodexRolePolicyTests.test_codex_unified_exec_uses_the_documented_bash_hook_event_shape) ... ok
+test_codex_unknown_tool_and_malformed_mutating_shapes_fail_closed (test_codex_role_policy.CodexRolePolicyTests.test_codex_unknown_tool_and_malformed_mutating_shapes_fail_closed) ... ok
+test_codex_worker_asserted_grant_does_not_authorize_a_path (test_codex_role_policy.CodexRolePolicyTests.test_codex_worker_asserted_grant_does_not_authorize_a_path) ... ok
+test_opencode_director_has_no_shell_edit_or_delegation (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_director_has_no_shell_edit_or_delegation) ... ok
+test_opencode_does_not_allow_declared_task_runner_as_reviewer_read_only (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_does_not_allow_declared_task_runner_as_reviewer_read_only) ... ok
+test_opencode_operator_uses_native_scoped_permission_patterns (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_operator_uses_native_scoped_permission_patterns) ... ok
+test_opencode_policy_does_not_leak_codex_cli_or_toml_settings (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_policy_does_not_leak_codex_cli_or_toml_settings) ... ok
+test_opencode_rejects_shell_syntax_in_declared_command_argv (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_rejects_shell_syntax_in_declared_command_argv) ... ok
+test_opencode_reports_ambiguous_argv_permissions_unsupported (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_reports_ambiguous_argv_permissions_unsupported) ... ok
+test_opencode_reports_unsupported_capabilities_separately_and_unavailable (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_reports_unsupported_capabilities_separately_and_unavailable) ... ok
+test_opencode_reviewer_is_read_only_and_cannot_run_declared_test_runner (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_reviewer_is_read_only_and_cannot_run_declared_test_runner) ... ok
+test_opencode_reviewer_rejects_interpreters_and_test_launchers (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_reviewer_rejects_interpreters_and_test_launchers) ... ok
+test_opencode_reviewer_rejects_test_analyze_and_format_read_only_entries (test_codex_role_policy.OpenCodeRolePolicyTests.test_opencode_reviewer_rejects_test_analyze_and_format_read_only_entries) ... ok
+test_explicitly_unavailable_descriptor_never_executes_scoped_command (test_codex_scoped_runner.ScopedRunnerTests.test_explicitly_unavailable_descriptor_never_executes_scoped_command) ... ok
+test_rejects_extra_command_after_a_declared_mode (test_codex_scoped_runner.ScopedRunnerTests.test_rejects_extra_command_after_a_declared_mode) ... ok
+test_rejects_out_of_root_test_paths (test_codex_scoped_runner.ScopedRunnerTests.test_rejects_out_of_root_test_paths) ... ok
+test_rejects_undeclared_mode_and_never_runs_supplied_command (test_codex_scoped_runner.ScopedRunnerTests.test_rejects_undeclared_mode_and_never_runs_supplied_command) ... ok
+test_runner_entrypoint_is_present (test_codex_scoped_runner.ScopedRunnerTests.test_runner_entrypoint_is_present) ... ok
+test_unittest_runner_uses_declared_cwd_and_environment_and_writes_bound_evidence (test_codex_scoped_runner.ScopedRunnerTests.test_unittest_runner_uses_declared_cwd_and_environment_and_writes_bound_evidence) ... ok
+test_empty_node_manifest_does_not_guess_npm_test_or_eslint (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_empty_node_manifest_does_not_guess_npm_test_or_eslint) ... ok
+test_explicitly_unavailable_toolchain_stays_unavailable_when_runtime_appears (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_explicitly_unavailable_toolchain_stays_unavailable_when_runtime_appears) ... ok
+test_node_or_rust_without_a_tested_red_adapter_fails_preflight (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_node_or_rust_without_a_tested_red_adapter_fails_preflight) ... ok
+test_red_form_check_accepts_bound_unittest_evidence_and_keeps_existing_adapters (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_red_form_check_accepts_bound_unittest_evidence_and_keeps_existing_adapters) ... ok
+test_red_form_check_does_not_accept_bound_unittest_failedtest_collection_error (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_red_form_check_does_not_accept_bound_unittest_failedtest_collection_error) ... ok
+test_red_form_check_rejects_adapter_that_differs_from_attempt_manifest (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_red_form_check_rejects_adapter_that_differs_from_attempt_manifest) ... ok
+test_red_form_check_rejects_unittest_collection_error_even_when_named_as_executed (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_red_form_check_rejects_unittest_collection_error_even_when_named_as_executed) ... ok
+test_red_form_check_rejects_valid_but_unbound_legacy_red_evidence (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_red_form_check_rejects_valid_but_unbound_legacy_red_evidence) ... ok
+test_red_form_check_requires_attempt_identity_when_runner_manifest_exists (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_red_form_check_requires_attempt_identity_when_runner_manifest_exists) ... ok
+test_toolchain_descriptor_uses_argv_cwd_and_environment (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_toolchain_descriptor_uses_argv_cwd_and_environment) ... ok
+test_unittest_import_collection_error_is_not_an_executed_test (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_unittest_import_collection_error_is_not_an_executed_test) ... ok
+test_unittest_red_requires_an_executed_failing_test_and_matching_attempt (test_codex_toolchain_evidence.ToolchainEvidenceTests.test_unittest_red_requires_an_executed_failing_test_and_matching_attempt) ... ok
+test_codex_builder_refuses_a_different_backend_without_fallback (test_codex_worker_instructions.CodexWorkerInstructionTests.test_codex_builder_refuses_a_different_backend_without_fallback) ... ok
+test_codex_builder_rejects_unknown_role_missing_model_or_effort (test_codex_worker_instructions.CodexWorkerInstructionTests.test_codex_builder_rejects_unknown_role_missing_model_or_effort) ... ok
+test_codex_role_instruction_transport_preserves_quotes_unicode_and_newlines (test_codex_worker_instructions.CodexWorkerInstructionTests.test_codex_role_instruction_transport_preserves_quotes_unicode_and_newlines) ... ok
+test_each_codex_role_instruction_is_delivered_as_developer_context (test_codex_worker_instructions.CodexWorkerInstructionTests.test_each_codex_role_instruction_is_delivered_as_developer_context) ... ok
+test_protected_state_fingerprint_binds_workspace_task_and_attempt (test_codex_worker_instructions.CodexWorkerInstructionTests.test_protected_state_fingerprint_binds_workspace_task_and_attempt) ... ok
+test_protected_state_fingerprint_changes_when_a_guarded_file_changes (test_codex_worker_instructions.CodexWorkerInstructionTests.test_protected_state_fingerprint_changes_when_a_guarded_file_changes) ... ok
+test_protected_state_hashes_files_without_returning_their_contents (test_codex_worker_instructions.CodexWorkerInstructionTests.test_protected_state_hashes_files_without_returning_their_contents) ... ok
+
+======================================================================
+FAIL: test_timeout_cancellation_uses_verified_start_identity (test_codex_process_ownership.ProcessOwnershipTests.test_timeout_cancellation_uses_verified_start_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_process_ownership.py", line 46, in test_timeout_cancellation_uses_verified_start_identity
+    self.assertEqual(stop.call_args.args[0], [{"pid": 123, "start_identity": "start-123"}])
+AssertionError: Lists differ: [{'pid': 123, 'started': 1790474010.7536175}] != [{'pid': 123, 'start_identity': 'start-123'}]
+
+First differing element 0:
+{'pid': 123, 'started': 1790474010.7536175}
+{'pid': 123, 'start_identity': 'start-123'}
+
+- [{'pid': 123, 'started': 1790474010.7536175}]
++ [{'pid': 123, 'start_identity': 'start-123'}]
+
+======================================================================
+FAIL: test_request_model_cannot_override_manifest_role_model_or_effort (test_codex_resume_and_retry.ResumeRetryTests.test_request_model_cannot_override_manifest_role_model_or_effort)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_resume_and_retry.py", line 80, in test_request_model_cannot_override_manifest_role_model_or_effort
+    run.assert_not_called()
+  File "C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 910, in assert_not_called
+    raise AssertionError(msg)
+AssertionError: Expected 'run_owned' to not have been called. Called 1 times.
+Calls: [call(['fake-codex', '--model', 'manifest-model', '--sandbox', 'workspace-write', '--ask-for-approval', 'never', '--config', 'developer_instructions="instructions"', '--config', 'model_reasoning_effort="medium"', '--config', 'agents.enabled=false', '--config', 'features.apps=false', '--config', 'web_search="disabled"', 'exec', '--model', 'request-model', '--json', '--output-schema', 'C:\\Users\\Carlos_Neto\\superpowers-two-model-pipeline\\.worktrees\\r2-r3-sdd\\skills\\two-model-sdd-pipeline\\schemas\\operator-result.schema.json', '--output-last-message', 'C:\\Users\\CARLOS~1\\AppData\\Local\\Temp\\tmpdgsozimf\\attempts\\attempt-d-8696de02410948ae8dbf9c32c5888375\\final.json', '-'], 'C:\\Users\\Carlos_Neto\\AppData\\Local\\Temp\\tmpdgsozimf', 'Role prompt', None, None),
+ call().__getitem__('stdout')].
+
+======================================================================
+FAIL: test_resume_id_always_requires_explicit_identity_bound_resume (test_codex_resume_and_retry.ResumeRetryTests.test_resume_id_always_requires_explicit_identity_bound_resume)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_resume_and_retry.py", line 90, in test_resume_id_always_requires_explicit_identity_bound_resume
+    run.assert_not_called()
+  File "C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 910, in assert_not_called
+    raise AssertionError(msg)
+AssertionError: Expected 'run_owned' to not have been called. Called 1 times.
+Calls: [call(['fake-codex', '--model', 'manifest-model', '--sandbox', 'workspace-write', '--ask-for-approval', 'never', '--config', 'developer_instructions="instructions"', '--config', 'model_reasoning_effort="medium"', '--config', 'agents.enabled=false', '--config', 'features.apps=false', '--config', 'web_search="disabled"', 'exec', 'resume', 'unrelated-session', '--model', 'request-model', '--json', '--output-schema', 'C:\\Users\\Carlos_Neto\\superpowers-two-model-pipeline\\.worktrees\\r2-r3-sdd\\skills\\two-model-sdd-pipeline\\schemas\\operator-result.schema.json', '--output-last-message', 'C:\\Users\\CARLOS~1\\AppData\\Local\\Temp\\tmp_vw1xz2v\\attempts\\attempt-d-80e49ee818e54a5f883d0cdcbbb77bb8\\final.json', '-'], 'C:\\Users\\Carlos_Neto\\AppData\\Local\\Temp\\tmp_vw1xz2v', 'Role prompt', None, None),
+ call().__getitem__('stdout')].
+
+----------------------------------------------------------------------
+Ran 83 tests in 8.188s
+
+FAILED (failures=3)

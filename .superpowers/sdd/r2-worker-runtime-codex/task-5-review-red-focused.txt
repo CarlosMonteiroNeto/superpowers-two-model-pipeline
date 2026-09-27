@@ -1,0 +1,42 @@
+test_dispatch_never_resumes_without_explicit_session_id (test_codex_resume_and_retry.ResumeRetryTests.test_dispatch_never_resumes_without_explicit_session_id) ... ok
+test_request_model_cannot_override_manifest_role_model_or_effort (test_codex_resume_and_retry.ResumeRetryTests.test_request_model_cannot_override_manifest_role_model_or_effort) ... ERROR
+test_resume_id_always_requires_explicit_identity_bound_resume (test_codex_resume_and_retry.ResumeRetryTests.test_resume_id_always_requires_explicit_identity_bound_resume) ... ERROR
+test_retry_policy_is_a_separate_classified_entrypoint (test_codex_resume_and_retry.ResumeRetryTests.test_retry_policy_is_a_separate_classified_entrypoint) ... ok
+test_retry_policy_retries_only_preexec_code_five_twice (test_codex_resume_and_retry.ResumeRetryTests.test_retry_policy_retries_only_preexec_code_five_twice) ... ok
+test_session_cleanup_entrypoint_exists (test_codex_resume_and_retry.ResumeRetryTests.test_session_cleanup_entrypoint_exists) ... ok
+test_session_store_exposes_load_and_store (test_codex_resume_and_retry.ResumeRetryTests.test_session_store_exposes_load_and_store) ... ok
+
+======================================================================
+ERROR: test_request_model_cannot_override_manifest_role_model_or_effort (test_codex_resume_and_retry.ResumeRetryTests.test_request_model_cannot_override_manifest_role_model_or_effort)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_resume_and_retry.py", line 79, in test_request_model_cannot_override_manifest_role_model_or_effort
+    dispatch.run_dispatch(request, runtime)
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\scripts\codex_dispatch.py", line 100, in run_dispatch
+    _atomic(ep["events_path"], captured["stdout"])
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\scripts\codex_dispatch.py", line 22, in _atomic
+    else: t.write_text(content, encoding="utf-8")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1044, in write_text
+    raise TypeError('data must be str, not %s' %
+TypeError: data must be str, not MagicMock
+
+======================================================================
+ERROR: test_resume_id_always_requires_explicit_identity_bound_resume (test_codex_resume_and_retry.ResumeRetryTests.test_resume_id_always_requires_explicit_identity_bound_resume)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_codex_resume_and_retry.py", line 89, in test_resume_id_always_requires_explicit_identity_bound_resume
+    dispatch.run_dispatch(request, runtime)
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\scripts\codex_dispatch.py", line 100, in run_dispatch
+    _atomic(ep["events_path"], captured["stdout"])
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\scripts\codex_dispatch.py", line 22, in _atomic
+    else: t.write_text(content, encoding="utf-8")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1044, in write_text
+    raise TypeError('data must be str, not %s' %
+TypeError: data must be str, not MagicMock
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.075s
+
+FAILED (errors=2)
