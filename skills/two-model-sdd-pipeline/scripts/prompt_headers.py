@@ -107,7 +107,7 @@ def _skill_content(skills: dict, role: str) -> tuple[str, list[dict]]:
     rendered = "\n\n".join(
         "### %s (revision: %s)\n%s"
         % (entry["id"], entry["revision"], entry["content"])
-        for entry in ordered if entry["content"].strip())
+        for entry in ordered)
     provenance = [
         {"id": entry["id"], "revision": entry["revision"],
          "source_sha256": entry["source_sha256"]}
