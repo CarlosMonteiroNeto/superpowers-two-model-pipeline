@@ -289,6 +289,14 @@ class CodexRolePolicyTests(unittest.TestCase):
                 command = shlex.join(argv)
                 self.assertEqual(self.decision(module.check_tool_call(self.event("Bash", command), policy)), "deny")
 
+    def test_codex_reviewer_rejects_task_runner_relisted_as_read_only(self):
+        module = load_module(self, "codex_policy.py", "codex_policy", "check_tool_call")
+        policy = self.policy("reviewer")
+        runner = ["make", "test"]
+        policy["runner_commands"]["test"]["argv"] = runner
+        policy["read_only_commands"].append(runner)
+        self.assertEqual(self.decision(module.check_tool_call(self.event("Bash", shlex.join(runner)), policy)), "deny")
+
     def test_codex_director_cannot_run_shell_or_edit(self):
         module = load_module(self, "codex_policy.py", "codex_policy", "check_tool_call")
         policy = self.policy("director")
@@ -493,6 +501,28 @@ class OpenCodeRolePolicyTests(unittest.TestCase):
         self.assertFalse(result["capabilities"]["available"])
         self.assertTrue(result["capabilities"]["unsupported"])
         self.assertNotIn("rg query with spaces README.md", agent["bash"])
+
+    def test_opencode_does_not_allow_declared_task_runner_as_reviewer_read_only(self):
+        module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
+        request = self.request()
+        runner = ["make", "test"]
+        request["runner_commands"]["test"]["argv"] = runner
+        request["read_only_commands"].append(runner)
+        result = module.build_settings("reviewer", opencode_runtime(), request)
+        permission = result["config"]["agent"]["review"]["permission"]
+        self.assertNotIn("make test", permission["bash"])
+        self.assertFalse(result["capabilities"]["available"])
+
+    def test_opencode_rejects_shell_syntax_in_declared_command_argv(self):
+        module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
+        request = self.request()
+        request["runner_commands"]["unsafe"] = {
+            "argv": ["printf", "safe;touch"], "cwd": str(self.workspace),
+        }
+        result = module.build_settings("operator", opencode_runtime(), request)
+        permission = result["config"]["agent"]["build"]["permission"]
+        self.assertNotIn("printf safe;touch", permission["bash"])
+        self.assertFalse(result["capabilities"]["available"])
 
     def test_opencode_director_has_no_shell_edit_or_delegation(self):
         module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
