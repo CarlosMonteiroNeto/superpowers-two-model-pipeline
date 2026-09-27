@@ -33,6 +33,12 @@ def runtime():
             "policy": "read-only"}}}, "capabilities": {}}
 
 
+def finding():
+    return {"severity": "Important", "file": "src/example.py", "line": 4,
+        "issue": "missing guard", "fix": "add guard", "correction_scope": "in_scope",
+        "affected_paths": ["src/example.py"], "affected_contracts": ["safe input"]}
+
+
 class ReviewRecoveryTests(unittest.TestCase):
     def test_failed_review_dispatch_stays_pending_and_retry_reuses_same_candidate(self):
         module = load(self)
@@ -61,7 +67,7 @@ class ReviewRecoveryTests(unittest.TestCase):
              mock.patch.object(module.codex_dispatch, "run_dispatch", return_value={
                 "role": "reviewer", "run_id": "run-a", "task_id": 2, "task_family": 2,
                 "base_commit": "b" * 40, "candidate_commit": "a" * 40,
-                "final_output": {"verdict": "SEND_BACK", "findings": [], "minors": [], "summary": "revise"}}) as dispatch:
+                "final_output": {"verdict": "SEND_BACK", "findings": [finding()], "minors": [], "summary": "revise"}}) as dispatch:
             result = module.ensure_review(req, runtime())
         dispatch.assert_called_once()
         self.assertEqual(result["verdict"], "SEND_BACK")
