@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Candidate preflight for final holistic review.
+set -euo pipefail
+if [ "$#" -ne 5 ]; then
+  echo "usage: closing-gate WORKSPACE TOTAL BASE_COMMIT TARGET_BRANCH CANDIDATE_COMMIT" >&2
+  exit 2
+fi
+# base_commit, target and candidate are pinned by the run manifest.
+ws=$1 total=$2 base_commit=$3 target=$4 candidate_commit=$5
+git rev-parse --show-toplevel >/dev/null || exit 2
+[ "$(git rev-parse HEAD)" = "$candidate_commit" ] || { echo "CLOSING-GATE: candidate changed" >&2; exit 1; }
+git rev-parse --verify "$base_commit^{commit}" >/dev/null 2>&1 || { echo "CLOSING-GATE: invalid recorded base" >&2; exit 1; }
+git rev-parse --verify "$target^{commit}" >/dev/null 2>&1 || { echo "CLOSING-GATE: invalid target branch/ref" >&2; exit 1; }
+git merge-base --is-ancestor "$base_commit" "$candidate_commit" || { echo "CLOSING-GATE: candidate is outside recorded base range" >&2; exit 1; }
+git diff --check "$base_commit..$candidate_commit" || { echo "CLOSING-GATE: whitespace errors in run range" >&2; exit 1; }
+"$(dirname "$0")/final-gate" "$ws" "$total"

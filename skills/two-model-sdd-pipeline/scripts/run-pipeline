@@ -103,6 +103,15 @@ if command -v cygpath >/dev/null 2>&1; then
   WS=$(cygpath -w "$WS")
 fi
 LEDGER="$WS/ledger.jsonl"
+if [ ! -f "$WS/base-commit.txt" ]; then
+  if [ -s "$LEDGER" ]; then echo "RUN-PIPELINE: run has existing ledger but no recorded base commit" >&2; exit 1; fi
+  git rev-parse HEAD > "$WS/base-commit.txt" || { echo "RUN-PIPELINE: cannot record initial base commit" >&2; exit 1; }
+fi
+if [ ! -f "$WS/target-branch.txt" ]; then
+  if [ -s "$LEDGER" ]; then echo "RUN-PIPELINE: run has existing ledger but no recorded target branch" >&2; exit 1; fi
+  target_branch=${PIPELINE_TARGET_BRANCH:-$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf main)}
+  printf '%s\n' "$target_branch" > "$WS/target-branch.txt" || { echo "RUN-PIPELINE: cannot record target branch" >&2; exit 1; }
+fi
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 # CODER_GATE is a legacy alias; the orchestrator and this script now share the
 # single CODER_GATE_BIN name.
@@ -431,23 +440,50 @@ fi
 refresh_plan_snapshot || block "plan refresh failed before closing"
 check_total_fresh
 total=$(total_now)
-"$FINAL_GATE_BIN" "$WS" "$total" || block "final-gate lists blockers above"
 cd "$ROOT" || block "cannot cd to $ROOT"
-base=$(git merge-base HEAD origin/main 2>/dev/null || git rev-list --max-parents=0 HEAD)
-"$SCRIPT_DIR/review-package" "$WS" "$base" HEAD "$WS/closing-review.diff" \
+base=$(cat "$WS/base-commit.txt")
+target_branch=$(cat "$WS/target-branch.txt")
+target_commit=$(git rev-parse --verify "$target_branch^{commit}" 2>/dev/null) \
+  || block "recorded target branch is unavailable: $target_branch"
+candidate=$(git rev-parse HEAD) || block "cannot resolve closing candidate"
+if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+  "$SCRIPT_DIR/closing-gate" "$WS" "$total" "$base" "$target_commit" "$candidate" \
+    || block "closing-gate lists blockers above"
+else
+  "$FINAL_GATE_BIN" "$WS" "$total" || block "final-gate lists blockers above"
+fi
+"$SCRIPT_DIR/review-package" "$WS" "$base" "$candidate" "$WS/closing-review.diff" \
   || block "review-package failed"
 spec_doc=$(plan_json | python3 -c "import json,sys; print(json.load(sys.stdin).get('spec_doc',''))")
+"$SCRIPT_DIR/doc-check" "$ROOT" "$base" "$candidate" || block "update README.md, then re-run"
 {
   echo "Mode: CLOSING. Diff: $WS/closing-review.diff. Ledger: $LEDGER."
   echo "Plan: $PLAN."
   echo "Spec: ${spec_doc:-none (skip coverage, note it)}."
   echo "Assess: open risks, parked minors triage, follow-ups. Reply with the assessment."
 } > "$WS/diretor-closing.md"
-dispatch_task_generator "$WS/diretor-closing.md" "$WS/task-generator-closing.log" \
-  || block "diretor dispatch failed"
-ledger final_review "-" "diretor closing complete"
-"$SCRIPT_DIR/doc-check" "$ROOT" || block "update README.md, then re-run"
-
+if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+  spec_abs=""
+  [ -z "$spec_doc" ] || spec_abs="$ROOT/$spec_doc"
+  snapshot=$(python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import codex_closing; print(__import__("json").dumps(codex_closing.capture_snapshot(sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5]),sort_keys=True))' \
+    "$SCRIPT_DIR" "$ROOT" "$PLAN" "$spec_abs" "$LEDGER") || block "cannot capture candidate closing snapshot"
+  request="$WS/director-closing-request.json"
+  python3 -c 'import sys,json; sys.path.insert(0,sys.argv[1]); import codex_closing; codex_closing.build_request(sys.argv[2],sys.argv[3],json.loads(sys.argv[4]),sys.argv[5])' \
+    "$SCRIPT_DIR" "$WS" "$WS/diretor-closing.md" "$snapshot" "$request" || block "cannot construct closing request"
+  "$SCRIPT_DIR/dispatch-codex" --request "$request" || block "director closing dispatch failed"
+  result=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["evidence_paths"]["result_path"])' "$request") || block "cannot resolve closing result"
+  verdict=$(python3 -c 'import sys,json,pathlib; sys.path.insert(0,sys.argv[1]); import codex_closing; snapshot=json.loads(sys.argv[2]); req=json.load(open(sys.argv[3],encoding="utf-8")); result=json.load(open(sys.argv[4],encoding="utf-8")); clean=codex_closing.validate_closing_result(result,snapshot,req); codex_closing.assert_snapshot_current(sys.argv[5],sys.argv[6],sys.argv[7],sys.argv[8],snapshot); print(clean["verdict"])' \
+    "$SCRIPT_DIR" "$snapshot" "$request" "$result" "$ROOT" "$PLAN" "$spec_abs" "$LEDGER") || block "closing result failed validation or candidate changed"
+  [ "$verdict" = APPROVED ] || block "director closing verdict is $verdict; no publication allowed"
+  snapshot_hash=$(printf '%s' "$snapshot" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')
+  "$SCRIPT_DIR/ledger-append" "$LEDGER" final_review - "Codex director approved candidate" \
+    candidate_commit="$candidate" snapshot_hash="$snapshot_hash" base_commit="$base" target_branch="$target_branch" \
+    || block "could not record validated final_review"
+else
+  dispatch_task_generator "$WS/diretor-closing.md" "$WS/task-generator-closing.log" \
+    || block "diretor dispatch failed"
+  ledger final_review "-" "diretor closing complete"
+fi
 if [ "$NO_PUSH" -eq 1 ]; then
   say "closing complete (--no-push): package $WS/closing-review.diff, assessment $WS/task-generator-closing.log"
   exit 0

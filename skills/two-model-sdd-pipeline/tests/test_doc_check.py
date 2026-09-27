@@ -47,6 +47,22 @@ class DocCheckBase(unittest.TestCase):
 
 
 class TestDocCheck(DocCheckBase):
+    def test_recorded_run_range_sees_earlier_readme_update(self):
+        base=subprocess.check_output(["git","-C",str(self.repo),"rev-parse","HEAD"],text=True).strip()
+        make_commit(self.repo,"skills/tool/scripts/run","x","runtime change")
+        make_commit(self.repo,"README.md","pipeline guidance","docs change")
+        make_commit(self.repo,"lib/after.txt","x","later commit")
+        head=subprocess.check_output(["git","-C",str(self.repo),"rev-parse","HEAD"],text=True).strip()
+        result=subprocess.run([BASH,str(SCRIPTS/"doc-check"),str(self.repo),base,head],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_docs_only_run_range_does_not_require_readme(self):
+        base=subprocess.check_output(["git","-C",str(self.repo),"rev-parse","HEAD"],text=True).strip()
+        make_commit(self.repo,"docs/notes.md","x","docs only")
+        head=subprocess.check_output(["git","-C",str(self.repo),"rev-parse","HEAD"],text=True).strip()
+        result=subprocess.run([BASH,str(SCRIPTS/"doc-check"),str(self.repo),base,head],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
     def test_pipeline_change_with_readme_passes(self):
         make_commit(self.repo, "skills/foo/SKILL.md", "skill", "feat: skill")
         make_commit(self.repo, "README.txt", "readme", "docs: readme")

@@ -18,6 +18,11 @@ def load(filename):
 
 
 class ReviewFixTests(unittest.TestCase):
+    def test_closing_episode_selects_strict_closing_schema(self):
+        dispatch=load("codex_dispatch.py")
+        self.assertEqual(dispatch._output_schema({"role":"director","episode_id":"r-closing-abcd"},{"output_schema":"director-result-v1"}),"closing-result-v1")
+        self.assertEqual(dispatch._output_schema({"role":"director","episode_id":"r-task-1"},{}),"director-result-v1")
+
     def test_registry_requires_separate_codex_runtime_and_reports_opencode_cancel(self):
         registry=load("backend_registry.py")
         with self.assertRaisesRegex(ValueError,"runtime envelope"):

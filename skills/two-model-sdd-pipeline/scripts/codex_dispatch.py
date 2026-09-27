@@ -41,6 +41,8 @@ def _event_stream(raw):
 
 
 def _output_schema(request, runtime):
+    if request["role"] == "director" and "-closing-" in request.get("episode_id", ""):
+        return "closing-result-v1"
     return runtime.get("output_schema") or {"operator":"operator-result-v1", "reviewer":"reviewer-result-v1", "director":"director-result-v1"}[request["role"]]
 
 
@@ -103,7 +105,7 @@ def run_dispatch(request, runtime):
     if resume_id: args += ["resume", resume_id]
     schema_path = runtime.get("schema_path")
     if not schema_path:
-        schema_name = {"operator-result-v1":"operator-result.schema.json", "reviewer-result-v1":"reviewer-result.schema.json", "director-result-v1":"director-result.schema.json", "closing-result-v1":"worker-result.schema.json"}[ _output_schema(req, runtime) ]
+        schema_name = {"operator-result-v1":"operator-result.schema.json", "reviewer-result-v1":"reviewer-result.schema.json", "director-result-v1":"director-result.schema.json", "closing-result-v1":"closing-result.schema.json"}[ _output_schema(req, runtime) ]
         schema_path = str(pathlib.Path(__file__).resolve().parent.parent / "schemas" / schema_name)
     args += ["--json", "--output-schema", str(schema_path), "--output-last-message", str(out_path), "-"]
     args = [a for a in args if a != ""]
