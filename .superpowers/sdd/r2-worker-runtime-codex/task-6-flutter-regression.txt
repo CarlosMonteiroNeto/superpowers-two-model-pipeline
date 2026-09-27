@@ -1,0 +1,211 @@
+test_frontmatter_description (test_apple_design_skill.TestAppleDesignSkillVendored.test_frontmatter_description) ... ok
+test_frontmatter_name (test_apple_design_skill.TestAppleDesignSkillVendored.test_frontmatter_name) ... ok
+test_has_real_interface_design_content (test_apple_design_skill.TestAppleDesignSkillVendored.test_has_real_interface_design_content)
+Guard against a stub: the vendored skill must carry the actual ... ok
+test_skill_exists (test_apple_design_skill.TestAppleDesignSkillVendored.test_skill_exists) ... ok
+test_cli_exit_contract_and_unknown_outcome (test_catalog_migration_and_evidence.TestCatalogMigrationAndEvidence.test_cli_exit_contract_and_unknown_outcome) ... ok
+test_migration_preserves_legacy_rows_and_invalidates_derived_data_only_when_evidence_changes (test_catalog_migration_and_evidence.TestCatalogMigrationAndEvidence.test_migration_preserves_legacy_rows_and_invalidates_derived_data_only_when_evidence_changes) ... ok
+test_upsert_rolls_back_when_a_write_fails (test_catalog_migration_and_evidence.TestCatalogMigrationAndEvidence.test_upsert_rolls_back_when_a_write_fails) ... ok
+test_required_elicitation_step_documented (test_category_skeleton.TestCategorySkeletonInBrainstorming.test_required_elicitation_step_documented)
+Phase 1a must gain a REQUIRED elicitation step for the Category ... ok
+test_required_fields_persist_to_canonical_glossary (test_category_skeleton.TestCategorySkeletonInBrainstorming.test_required_fields_persist_to_canonical_glossary)
+The three fields are REQUIRED outputs of Phase 1a, persisted to ... ok
+test_skill_exists (test_category_skeleton.TestCategorySkeletonInBrainstorming.test_skill_exists) ... ok
+test_three_fields_in_exact_order (test_category_skeleton.TestCategorySkeletonInBrainstorming.test_three_fields_in_exact_order)
+The elicitation order is fixed: generic category -> specific ... ok
+test_category_skeleton_fields_documented (test_category_skeleton.TestCategorySkeletonInCanonicalReadme.test_category_skeleton_fields_documented)
+README.md must document the Category Skeleton fields (generic ... ok
+test_readme_exists (test_category_skeleton.TestCategorySkeletonInCanonicalReadme.test_readme_exists) ... ok
+test_analyze_failure_reports_and_does_not_commit (test_gates.TestGreenGate.test_analyze_failure_reports_and_does_not_commit) ... ok
+test_formatting_is_not_a_gate (test_gates.TestGreenGate.test_formatting_is_not_a_gate)
+M8: coder-gate auto-applies the formatter before the gate, so a ... ok
+test_green_commits_and_dispatches_reviewer (test_gates.TestGreenGate.test_green_commits_and_dispatches_reviewer)
+On all-green + commit with a workspace/task/base, green-gate must: ... ok
+test_green_runs_all_gates_and_commits (test_gates.TestGreenGate.test_green_runs_all_gates_and_commits) ... ok
+test_ledger_records_validated_tree (test_gates.TestGreenGate.test_ledger_records_validated_tree)
+green-gate records the tree hash it validated on the commit entry ... ok
+test_missing_baseline_package_stops_reviewer_dispatch (test_gates.TestGreenGate.test_missing_baseline_package_stops_reviewer_dispatch) ... ok
+test_no_commit_flag_never_commits (test_gates.TestGreenGate.test_no_commit_flag_never_commits) ... ok
+test_no_commit_skips_reviewer_dispatch (test_gates.TestGreenGate.test_no_commit_skips_reviewer_dispatch)
+--no-commit validation changes nothing, so it must not dispatch ... ok
+test_stale_baseline_package_stops_reviewer_dispatch (test_gates.TestGreenGate.test_stale_baseline_package_stops_reviewer_dispatch) ... ok
+test_test_failure_reports_and_does_not_commit (test_gates.TestGreenGate.test_test_failure_reports_and_does_not_commit) ... ok
+test_added_packages_resolve_without_graph (test_gates.TestPubSync.test_added_packages_resolve_without_graph)
+pub-sync resolves added packages with no knowledge-graph step: the ... ok
+test_conflict_writes_report_and_fails (test_gates.TestPubSync.test_conflict_writes_report_and_fails) ... ok
+test_resolution_ok_exits_zero (test_gates.TestPubSync.test_resolution_ok_exits_zero) ... ok
+test_defective_brief_does_not_dispatch (test_gates.TestRedGate.test_defective_brief_does_not_dispatch)
+Without a scaffolded brief there is nothing to dispatch — ... ok
+test_dispatches_coder_and_chains_coder_gate (test_gates.TestRedGate.test_dispatches_coder_and_chains_coder_gate)
+On a scaffolded brief, red-gate dispatches Agente operador ... ok
+test_ledgers_red_check (test_gates.TestRedGate.test_ledgers_red_check) ... ok
+test_missing_brief_is_an_error (test_gates.TestRedGate.test_missing_brief_is_an_error) ... ok
+test_propagates_coder_gate_exit (test_gates.TestRedGate.test_propagates_coder_gate_exit) ... ok
+test_red_without_ws_is_usage (test_gates.TestRtkRun.test_red_without_ws_is_usage) ... ok
+test_red_writes_evidence_and_returns_the_command_exit (test_gates.TestRtkRun.test_red_writes_evidence_and_returns_the_command_exit) ... ok
+test_test_mode_uses_the_task_test_file (test_gates.TestRtkRun.test_test_mode_uses_the_task_test_file) ... ok
+test_unknown_mode_is_usage (test_gates.TestRtkRun.test_unknown_mode_is_usage) ... ok
+test_active_catalog_missing_row_is_a_persistence_failure (test_jev_catalog_triage.CatalogTriageTests.test_active_catalog_missing_row_is_a_persistence_failure) ... ok
+test_active_catalog_persistence_failure_never_reports_jev_success (test_jev_catalog_triage.CatalogTriageTests.test_active_catalog_persistence_failure_never_reports_jev_success) ... ok
+test_active_decision_persists_triage_metadata_without_changing_score (test_jev_catalog_triage.CatalogTriageTests.test_active_decision_persists_triage_metadata_without_changing_score) ... ok
+test_active_high_confidence_adopt_is_shortlist_only (test_jev_catalog_triage.CatalogTriageTests.test_active_high_confidence_adopt_is_shortlist_only) ... ok
+test_advisory_store_write_error_is_optional_and_never_changes_triage_semantics (test_jev_catalog_triage.CatalogTriageTests.test_advisory_store_write_error_is_optional_and_never_changes_triage_semantics) ... ok
+test_changed_evidence_invalidates_previous_triage (test_jev_catalog_triage.CatalogTriageTests.test_changed_evidence_invalidates_previous_triage) ... ok
+test_cli_invalid_json_returns_two (test_jev_catalog_triage.CatalogTriageTests.test_cli_invalid_json_returns_two) ... template-triage: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+ok
+test_cli_valid_json_wrong_shape_returns_two (test_jev_catalog_triage.CatalogTriageTests.test_cli_valid_json_wrong_shape_returns_two) ... template-triage: evidence and context must be JSON objects
+ok
+test_evidence_change_clears_catalog_triage_metadata (test_jev_catalog_triage.CatalogTriageTests.test_evidence_change_clears_catalog_triage_metadata) ... ok
+test_missing_evidence_blocks_positive_triage (test_jev_catalog_triage.CatalogTriageTests.test_missing_evidence_blocks_positive_triage) ... ok
+test_nested_failed_constraint_blocks_positive_triage (test_jev_catalog_triage.CatalogTriageTests.test_nested_failed_constraint_blocks_positive_triage) ... ok
+test_off_and_shadow_preserve_existing_path_and_keep_evidence (test_jev_catalog_triage.CatalogTriageTests.test_off_and_shadow_preserve_existing_path_and_keep_evidence) ... ok
+test_protected_scoring_verdicts_do_not_call_jev (test_jev_catalog_triage.CatalogTriageTests.test_protected_scoring_verdicts_do_not_call_jev) ... ok
+test_provider_failure_is_unavailable_with_provenance (test_jev_catalog_triage.CatalogTriageTests.test_provider_failure_is_unavailable_with_provenance) ... ok
+test_shadow_keeps_proposal_and_observed_decision_separate (test_jev_catalog_triage.CatalogTriageTests.test_shadow_keeps_proposal_and_observed_decision_separate) ... ok
+test_site1_advisory_records_use_shared_store_and_isolate_episodes (test_jev_catalog_triage.CatalogTriageTests.test_site1_advisory_records_use_shared_store_and_isolate_episodes) ... ok
+test_workspace_catalog_is_updated_and_rejected_rows_are_not_default_shortlist (test_jev_catalog_triage.CatalogTriageTests.test_workspace_catalog_is_updated_and_rejected_rows_are_not_default_shortlist) ... ok
+test_flutter_gate_uses_shared_review_package_and_keeps_reviewer (test_jev_flutter_review_path.FlutterReviewPathTests.test_flutter_gate_uses_shared_review_package_and_keeps_reviewer) ... ok
+test_flutter_skill_documents_mandatory_site4_review (test_jev_flutter_review_path.FlutterReviewPathTests.test_flutter_skill_documents_mandatory_site4_review) ... ok
+test_active_filters_only_confident_suitable_candidates (test_jev_recall_suitability.RecallSuitabilityTests.test_active_filters_only_confident_suitable_candidates) ... ok
+test_active_model_mismatch_preserves_deterministic_recall_without_active_hit (test_jev_recall_suitability.RecallSuitabilityTests.test_active_model_mismatch_preserves_deterministic_recall_without_active_hit) ... ok
+test_active_schema_mismatch_preserves_deterministic_recall_without_active_hit (test_jev_recall_suitability.RecallSuitabilityTests.test_active_schema_mismatch_preserves_deterministic_recall_without_active_hit) ... ok
+test_all_unsuitable_is_miss_with_live_search_reason_and_no_deletion (test_jev_recall_suitability.RecallSuitabilityTests.test_all_unsuitable_is_miss_with_live_search_reason_and_no_deletion) ... ok
+test_classifier_invalid_input_exit_two_preserves_deterministic_recall_and_finishes (test_jev_recall_suitability.RecallSuitabilityTests.test_classifier_invalid_input_exit_two_preserves_deterministic_recall_and_finishes) ... ok
+test_cli_writes_report_and_uses_exit_contract (test_jev_recall_suitability.RecallSuitabilityTests.test_cli_writes_report_and_uses_exit_contract) ... ok
+test_open_provider_circuit_preserves_deterministic_recall_in_active_mode (test_jev_recall_suitability.RecallSuitabilityTests.test_open_provider_circuit_preserves_deterministic_recall_in_active_mode) ... ok
+test_oversized_state_and_question_count_are_unevaluated_without_provider_call (test_jev_recall_suitability.RecallSuitabilityTests.test_oversized_state_and_question_count_are_unevaluated_without_provider_call) ... ok
+test_provider_unavailability_preserves_rows_and_differs_from_answer_uncertainty (test_jev_recall_suitability.RecallSuitabilityTests.test_provider_unavailability_preserves_rows_and_differs_from_answer_uncertainty) ... ok
+test_shadow_and_off_preserve_deterministic_recall (test_jev_recall_suitability.RecallSuitabilityTests.test_shadow_and_off_preserve_deterministic_recall) ... ok
+test_template_recall_can_run_live_search_after_suitability_miss (test_jev_recall_suitability.RecallSuitabilityTests.test_template_recall_can_run_live_search_after_suitability_miss) ... ok
+test_template_recall_maps_deterministic_setup_error_to_exit_one (test_jev_recall_suitability.RecallSuitabilityTests.test_template_recall_maps_deterministic_setup_error_to_exit_one) ... ok
+test_zero_eligible_candidates_is_miss_without_provider_call (test_jev_recall_suitability.RecallSuitabilityTests.test_zero_eligible_candidates_is_miss_without_provider_call) ... ok
+test_apple_design_skill_documented (test_readme_content.TestReadmeReflectsTemplateStage.test_apple_design_skill_documented)
+README.md must document the vendored apple-design skill that ... ok
+test_category_skeleton_documented (test_readme_content.TestReadmeReflectsTemplateStage.test_category_skeleton_documented)
+README.md must mention the Category Skeleton elicitation. ... ok
+test_no_duplicated_manual (test_readme_content.TestReadmeReflectsTemplateStage.test_no_duplicated_manual)
+The retired agent manual must be gone: no README-LLM.md file ... ok
+test_quality_score_reweighted (test_readme_content.TestReadmeReflectsTemplateStage.test_quality_score_reweighted)
+The Quality Score table must show the re-weighted pkg-score ... ok
+test_readme_exists (test_readme_content.TestReadmeReflectsTemplateStage.test_readme_exists) ... ok
+test_template_stage_documented (test_readme_content.TestReadmeReflectsTemplateStage.test_template_stage_documented)
+README.md must reflect the new project-level template stage: ... ok
+test_apple_design_skill_listed (test_readme_content.TestReadmeTxtReflectsTemplateStage.test_apple_design_skill_listed)
+README.txt must list the vendored apple-design skill. ... ok
+test_readme_exists (test_readme_content.TestReadmeTxtReflectsTemplateStage.test_readme_exists) ... ok
+test_readme_txt_points_at_canonical (test_readme_content.TestReadmeTxtReflectsTemplateStage.test_readme_txt_points_at_canonical)
+README.txt must defer to the canonical README.md instead of ... ok
+test_template_scripts_listed (test_readme_content.TestReadmeTxtReflectsTemplateStage.test_template_scripts_listed)
+README.txt's deterministic scripts list must include the new ... ok
+test_buckets (test_score.TestDependentsBuckets.test_buckets) ... ok
+test_auto_approve_above_70 (test_score.TestGateVerdicts.test_auto_approve_above_70) ... ok
+test_auto_approve_at_70 (test_score.TestGateVerdicts.test_auto_approve_at_70)
+70.0 sits exactly on the AUTO_APPROVE threshold (0+0+20+20+15+15). ... ok
+test_auto_reject_below_50 (test_score.TestGateVerdicts.test_auto_reject_below_50) ... ok
+test_developer_decision_band (test_score.TestGateVerdicts.test_developer_decision_band) ... ok
+test_health_signals_sum_to_55 (test_score.TestHealthWeight.test_health_signals_sum_to_55)
+Recency (20) + SDK (20) + issue ratio (15) = 55 of 100. ... ok
+test_bands (test_score.TestIssueRatioBands.test_bands) ... ok
+test_popularity_scales_to_10 (test_score.TestPopularityScoring.test_popularity_scales_to_10) ... ok
+test_partial_points_normalize_by_160 (test_score.TestPubPointsNormalization.test_partial_points_normalize_by_160) ... ok
+test_perfect_package_scores_20 (test_score.TestPubPointsNormalization.test_perfect_package_scores_20)
+Re-weighted: pub points now weight 20 of 100 (was 30). ... ok
+test_perfect_package_total_is_exactly_100 (test_score.TestPubPointsNormalization.test_perfect_package_total_is_exactly_100) ... ok
+test_bands (test_score.TestRecencyBands.test_bands) ... ok
+test_sdk_scores (test_score.TestSdkCompatibility.test_sdk_scores) ... ok
+test_total_never_exceeds_100 (test_score.TestVerdictRounding.test_total_never_exceeds_100) ... ok
+test_apple_design_governs_interface_design (test_skill_content.TestFlutterAppPipelineSkill.test_apple_design_governs_interface_design)
+Every interface the pipeline designs is governed by the vendored ... ok
+test_apple_design_mandate_covers_all_three_phases (test_skill_content.TestFlutterAppPipelineSkill.test_apple_design_mandate_covers_all_three_phases)
+The mandate must bind Phase 1/2 design, Phase 3 UI implementation, ... ok
+test_deterministic_gate_scripts_referenced (test_skill_content.TestFlutterAppPipelineSkill.test_deterministic_gate_scripts_referenced) ... ok
+test_gate_thresholds_documented (test_skill_content.TestFlutterAppPipelineSkill.test_gate_thresholds_documented) ... ok
+test_green_gate_has_no_format_gate (test_skill_content.TestFlutterAppPipelineSkill.test_green_gate_has_no_format_gate)
+M8: formatting drift is auto-applied by coder-gate before the ... ok
+test_health_signals_55_documented (test_skill_content.TestFlutterAppPipelineSkill.test_health_signals_55_documented)
+The skill must state the health signals (recency + SDK + issue ... ok
+test_layers_on_two_model_pipeline (test_skill_content.TestFlutterAppPipelineSkill.test_layers_on_two_model_pipeline) ... ok
+test_no_code_downloaded_invariant_relaxed_for_template (test_skill_content.TestFlutterAppPipelineSkill.test_no_code_downloaded_invariant_relaxed_for_template)
+The 'no code downloaded' invariant is relaxed ONLY for the adopted ... ok
+test_no_graphify_in_process (test_skill_content.TestFlutterAppPipelineSkill.test_no_graphify_in_process)
+The knowledge graph is fully out of the pipeline: no stage ... ok
+test_phase_2c_uses_writing_plans (test_skill_content.TestFlutterAppPipelineSkill.test_phase_2c_uses_writing_plans) ... ok
+test_red_contract_is_form_checked_not_expected_red (test_skill_content.TestFlutterAppPipelineSkill.test_red_contract_is_form_checked_not_expected_red)
+ADR-0007: the brief carries acceptance + machine-readable RED ... ok
+test_rtk_compression_invariant (test_skill_content.TestFlutterAppPipelineSkill.test_rtk_compression_invariant) ... ok
+test_score_formula_normalizes_by_160_and_weight_20 (test_skill_content.TestFlutterAppPipelineSkill.test_score_formula_normalizes_by_160_and_weight_20)
+Re-weighted (spec Section 6): pub points now weight 20, not 30. ... ok
+test_skill_exists (test_skill_content.TestFlutterAppPipelineSkill.test_skill_exists) ... ok
+test_template_adoption_flow_documented (test_skill_content.TestFlutterAppPipelineSkill.test_template_adoption_flow_documented)
+Phase 2c change: the adopted template is cloned into a template ... ok
+test_template_scripts_referenced (test_skill_content.TestFlutterAppPipelineSkill.test_template_scripts_referenced)
+The new project-level template stage must be documented: both the ... ok
+test_template_search_order_and_stop_rule_documented (test_skill_content.TestFlutterAppPipelineSkill.test_template_search_order_and_stop_rule_documented)
+The skill must document the template search order (specific first, ... ok
+test_models_pre_defined_or_asked_when_not_installed (test_skill_content.TestTwoModelLayering.test_models_pre_defined_or_asked_when_not_installed) ... ok
+test_no_approval_gate_after_decisions (test_skill_content.TestTwoModelLayering.test_no_approval_gate_after_decisions) ... ok
+test_route_next_documented (test_skill_content.TestTwoModelLayering.test_route_next_documented) ... ok
+test_two_model_skill_cross_references_flutter_layer (test_skill_content.TestTwoModelLayering.test_two_model_skill_cross_references_flutter_layer) ... ok
+test_encoder_rejects_zero_and_nonfinite_vectors (test_template_embedding_identity.EmbeddingIdentityTests.test_encoder_rejects_zero_and_nonfinite_vectors) ... ok
+test_identity_changes_with_model_or_source_hash (test_template_embedding_identity.EmbeddingIdentityTests.test_identity_changes_with_model_or_source_hash) ... ok
+test_rejects_stale_mismatched_and_nonfinite_vectors (test_template_embedding_identity.EmbeddingIdentityTests.test_rejects_stale_mismatched_and_nonfinite_vectors) ... ok
+test_collect_evidence_keeps_missing_text_explicit_and_hashes_full_payload (test_template_evidence_contract.TestTemplateEvidenceContract.test_collect_evidence_keeps_missing_text_explicit_and_hashes_full_payload)
+A missing README must remain missing rather than become synthetic text. ... ok
+test_collection_failure_is_not_converted_to_a_default_score (test_template_recall_foundation.RecallFoundationTests.test_collection_failure_is_not_converted_to_a_default_score) ... ok
+test_filters_stale_before_top_n_and_ranks_overlap_then_repo (test_template_recall_foundation.RecallFoundationTests.test_filters_stale_before_top_n_and_ranks_overlap_then_repo) ... ok
+test_invalid_inputs_are_setup_failures (test_template_recall_foundation.RecallFoundationTests.test_invalid_inputs_are_setup_failures) ... ok
+test_invalid_stored_vectors_are_setup_errors_when_requested (test_template_recall_foundation.RecallFoundationTests.test_invalid_stored_vectors_are_setup_errors_when_requested) ... ok
+test_missing_or_malformed_evidence_dates_never_support_a_hit (test_template_recall_foundation.RecallFoundationTests.test_missing_or_malformed_evidence_dates_never_support_a_hit) ... ok
+test_refresh_preserves_existing_row_on_collection_or_validation_failure (test_template_recall_foundation.RecallFoundationTests.test_refresh_preserves_existing_row_on_collection_or_validation_failure) ... ok
+test_valid_vector_identity_and_dimensions_produce_a_hit (test_template_recall_foundation.RecallFoundationTests.test_valid_vector_identity_and_dimensions_produce_a_hit) ... ok
+test_vector_identity_is_recomputed_from_model_and_source_hash (test_template_recall_foundation.RecallFoundationTests.test_vector_identity_is_recomputed_from_model_and_source_hash) ... ok
+test_catalog_embed_recall_refresh_share_one_database (test_template_research_cli_integration.ResearchCliIntegrationTests.test_catalog_embed_recall_refresh_share_one_database) ... ok
+test_embed_and_refresh_cli_boundaries_are_injectable (test_template_research_cli_integration.ResearchCliIntegrationTests.test_embed_and_refresh_cli_boundaries_are_injectable) ... ok
+test_recall_cli_is_offline_and_reports_setup_errors (test_template_research_cli_integration.ResearchCliIntegrationTests.test_recall_cli_is_offline_and_reports_setup_errors) ... ok
+test_readiness_scores (test_template_score.TestFlutterReadiness.test_readiness_scores) ... ok
+test_auto_approve_above_70 (test_template_score.TestGateVerdicts.test_auto_approve_above_70) ... ok
+test_auto_approve_at_70 (test_template_score.TestGateVerdicts.test_auto_approve_at_70)
+70.0 sits exactly on the AUTO_APPROVE threshold (24+20+20+0+6+0+0). ... ok
+test_auto_reject_below_50 (test_template_score.TestGateVerdicts.test_auto_reject_below_50) ... ok
+test_developer_decision_band (test_template_score.TestGateVerdicts.test_developer_decision_band) ... ok
+test_bands (test_template_score.TestIssueRatioBands.test_bands) ... ok
+test_license_scores (test_template_score.TestLicense.test_license_scores) ... ok
+test_readme_scores (test_template_score.TestReadmeQuality.test_readme_scores) ... ok
+test_bands (test_template_score.TestRecencyBands.test_bands) ... ok
+test_buckets (test_template_score.TestStarsBuckets.test_buckets) ... ok
+test_stars_per_year_buckets (test_template_score.TestSustainedInterest.test_stars_per_year_buckets) ... ok
+test_heaviest_criterion_is_stars (test_template_score.TestTotals.test_heaviest_criterion_is_stars)
+Stars (30) must be the heaviest-weight criterion: the primary sort ... ok
+test_perfect_template_totals_100 (test_template_score.TestTotals.test_perfect_template_totals_100) ... ok
+test_total_never_exceeds_100 (test_template_score.TestTotals.test_total_never_exceeds_100) ... ok
+test_dated_pubspec_detected_and_totals_76 (test_template_search.TestFlutterReadyDetection.test_dated_pubspec_detected_and_totals_76)
+stars 24 + recency 12 + issues 10 + sustained 10 + license 5 + ... ok
+test_missing_pubspec_totals_66_developer_decision (test_template_search.TestFlutterReadyDetection.test_missing_pubspec_totals_66_developer_decision)
+Same fixture with pubspec=None totals 66 (flutter_ready=0) and ... C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\threading.py:1356: ResourceWarning: unclosed <socket.socket fd=924, family=2, type=1, proto=0, laddr=('127.0.0.1', 53349)>
+  def _make_invoke_excepthook():
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_all_below_50_is_from_scratch (test_template_search.TestNoTemplate.test_all_below_50_is_from_scratch)
+Neither category yields anything >= 50: no template is adopted, ... ok
+test_generic_only_presented_when_specific_group_empty (test_template_search.TestSpecificNoAutoGenericFallback.test_generic_only_presented_when_specific_group_empty)
+If only the generic group has candidates, present it alone. ... C:\Users\Carlos_Neto\AppData\Local\Programs\Python\Python312\Lib\socket.py:706: ResourceWarning: unclosed <socket.socket fd=912, family=2, type=1, proto=0, laddr=('127.0.0.1', 53369)>
+  def readinto(self, b):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_specific_50_69_and_generic_70_presented_together (test_template_search.TestSpecificNoAutoGenericFallback.test_specific_50_69_and_generic_70_presented_together)
+Specific yields no AUTO_APPROVE: collect specific 50-69 AND generic ... ok
+test_collection_truly_stops_at_three (test_template_search.TestStopRule.test_collection_truly_stops_at_three)
+The stop rule must halt the API work itself, not just the ... ok
+test_fewer_than_three_presents_what_was_found (test_template_search.TestStopRule.test_fewer_than_three_presents_what_was_found) ... ok
+test_specific_auto_approve_stops_at_three (test_template_search.TestStopRule.test_specific_auto_approve_stops_at_three)
+Specific category yields >=1 AUTO_APPROVE: keep collecting until 3 ... ok
+test_missing_arguments_is_usage (test_template_search.TestUsage.test_missing_arguments_is_usage) ... ok
+
+----------------------------------------------------------------------
+Ran 150 tests in 89.219s
+
+OK
+{"candidates": [], "judgments": [], "verdict": "MISS"}
+{"site": "site2", "schema_version": "site2-v1", "mode": "shadow", "deterministic_verdict": "MISS", "deterministic_candidates": [], "verdict": "MISS", "status": "MISS", "candidates": [], "judgments": [], "fallback_reason": "zero_eligible_candidates", "actual_action": "deterministic_recall", "inference_status": "not_run", "provider_error": null, "usage": null, "schema_hash": "53f3a3492d6918ee9f45e24a10d975fbed97934e941b3a4f8cb5071c8014136a", "duration_ms": 0, "request_hash": "40d64607acba32070ec95b640cadf78c3d90af3850506c63728e7474090f8090", "cache_hit": false, "live_search": {"exit_code": 1, "stdout": "", "stderr": ""}}
+{"status": "SETUP_ERROR", "results": [], "verdict": "SETUP_ERROR"}
+{"owner_repo": "a/repo", "score_report": {"verdict": "AUTO_APPROVE", "total": 81}, "readme_text": "README", "pubspec_text": "name: demo", "tree_text": "lib/main.dart", "constraints": {}, "evidence_hash": "e2", "fetched_at": "2026-09-20T12:00:00+00:00"}

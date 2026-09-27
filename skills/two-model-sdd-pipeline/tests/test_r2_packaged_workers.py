@@ -93,6 +93,22 @@ class PackagedWorkersTests(unittest.TestCase):
                              "skills/two-model-sdd-pipeline/references/worker-runtime.md",
                              "skills/two-model-sdd-pipeline/schemas/worker-request.schema.json"):
                 self.assertTrue((relocated / relative).is_file(), "missing relocated harness file: " + relative)
+            packaged_scripts = relocated / "skills" / "two-model-sdd-pipeline" / "scripts"
+            spec = importlib.util.spec_from_file_location("r26_harness_codex_dispatch", packaged_scripts / "codex_dispatch.py")
+            codex = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(codex)
+            schemas = relocated / "skills" / "two-model-sdd-pipeline" / "schemas"
+            for role, schema_name in (("operator", "operator-result.schema.json"),
+                                      ("reviewer", "reviewer-result.schema.json"),
+                                      ("director", "director-result.schema.json")):
+                self.assertEqual(codex._output_schema({"role": role}, {}), role + "-result-v1")
+                self.assertTrue((schemas / schema_name).is_file())
+                self.assertTrue((relocated / "skills" / "two-model-sdd-pipeline" / "codex" / (role + ".md")).is_file())
+                self.assertTrue((relocated / "skills" / "two-model-sdd-pipeline" / "opencode" / (role + ".md")).is_file())
+            opencode_spec = importlib.util.spec_from_file_location("r26_harness_opencode_dispatch", packaged_scripts / "opencode_dispatch.py")
+            opencode = importlib.util.module_from_spec(opencode_spec)
+            opencode_spec.loader.exec_module(opencode)
+            self.assertTrue(callable(opencode.invoke))
 
     def test_runtime_guide_states_verified_and_unknown_platform_support(self):
         guide = ROOT / "skills" / "two-model-sdd-pipeline" / "references" / "worker-runtime.md"

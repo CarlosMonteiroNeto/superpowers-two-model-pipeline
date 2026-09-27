@@ -196,13 +196,14 @@ class TestCanonicalContent(unittest.TestCase):
             self.assertIn(marker, text,
                           "README.md must document %r" % marker)
 
-    def test_readme_states_round_1_honesty(self):
-        text = read("README.md")
+    def test_readme_states_round_2_honesty(self):
+        text = " ".join(read("README.md").split())
         self.assertIn(
-            "Round 1 does not yet supply a working Codex pipeline", text)
+            "R2 adds", text)
         self.assertIn(
-            "smoke checks validate files and contract fixtures, "
-            "not live model behavior", text)
+            "does not wire the R3 plan-driven Codex launcher", text)
+        self.assertIn("Backend selection has no silent fallback", text)
+        self.assertIn("do not prove live model", text)
 
     def test_readme_states_enrollment_policy(self):
         text = read("README.md")
