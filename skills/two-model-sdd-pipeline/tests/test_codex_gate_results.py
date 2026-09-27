@@ -20,7 +20,9 @@ class GateResultRoutingTests(unittest.TestCase):
                 {"type": "brief_ready", "task": "1"},
                 {"type": "red_check", "task": "1"},
                 {"type": "operator_result", "task": "1", "status": status,
-                 "final_output": {"status": status, "summary": "fixture"}},
+                 "final_output": {"status": status, "summary": "fixture", "changed_files": [],
+                    "red_evidence": {"path": "red.json", "runner": "python", "exit_code": 1},
+                    "concerns": []}},
             ]
             (ws / "ledger.jsonl").write_text("".join(json.dumps(x) + "\n" for x in events), encoding="utf-8")
             return subprocess.run([BASH, str(SCRIPTS / "route-next"), str(ws), "1", "2"],
@@ -35,4 +37,3 @@ class GateResultRoutingTests(unittest.TestCase):
         result = self.route("BLOCKED")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BLOCKED", result.stderr)
-
