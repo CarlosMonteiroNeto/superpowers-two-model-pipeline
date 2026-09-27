@@ -15,8 +15,7 @@ class CorrectiveFamilyTests(unittest.TestCase):
         self.assertNotIn("--continue-director", source)
 
     def test_director_prompt_requests_proposals_not_direct_plan_or_ledger_edits(self):
-        prompt = (SCRIPTS / "director_prompt.py").read_text(encoding="utf-8").lower()
+        prompt = (ROOT / "skills" / "two-model-sdd-pipeline" / "task-generator-prompt.md").read_text(encoding="utf-8").lower()
         self.assertIn("proposal", prompt)
         self.assertTrue("read-only" in prompt or "read only" in prompt)
         self.assertTrue("plan" in prompt and "ledger" in prompt)
-
