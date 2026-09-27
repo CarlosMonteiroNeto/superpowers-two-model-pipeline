@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Validate a normalized director response and atomically apply its proposal.
+set -euo pipefail
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ "$#" -ne 10 ] || [ "$1" != "--workspace" ] || [ "$3" != "--task" ] \
+  || [ "$5" != "--mode" ] || [ "$7" != "--request" ] || [ "$9" != "--result" ]; then
+  echo "usage: director-apply --workspace WS --task TASK --mode MODE --request REQUEST.json --result RESULT.json" >&2
+  exit 2
+fi
+ws=$2; task=$4; mode=$6; request=$8; result=${10}
+python3 - "$SCRIPT_DIR" "$ws" "$task" "$mode" "$request" "$result" <<'PY'
+import hashlib,importlib.util,json,os,pathlib,subprocess,sys
+scripts,ws,task,mode,request_path,result_path=sys.argv[1:]
+sys.path.insert(0,scripts)
+import director_result,dispatch_contract,plan_transaction
+try:
+    request=json.load(open(request_path,encoding="utf-8"))
+    result=json.load(open(result_path,encoding="utf-8"))
+    normalized=dispatch_contract.validate_result(result,request)
+    value=normalized["final_output"]
+    identity=json.load(open(os.path.join(ws,".pipeline-identity.json"),encoding="utf-8"))
+    root=pathlib.Path(identity["repository_root"]).resolve()
+    plan_path=(root / identity["plan_path"]).resolve()
+    refresh=pathlib.Path(scripts)/"pipeline-workspace"
+    global_ws=subprocess.run(["bash",str(refresh),str(plan_path)],cwd=str(root),capture_output=True,text=True,check=True).stdout.strip()
+    if os.name=="nt":
+      global_ws=subprocess.check_output(["cygpath","-w",global_ws],text=True).strip()
+    expected={"mode":mode,"source_plan_hash":request["plan_revision"],"target_task":int(task)}
+    proposal=director_result.validate_proposal(value,expected)
+    manifest={"repository_root":str(root),"repository_id":identity["repository_id"],
+      "plan_path":str(plan_path),"run_id":identity["run_id"],"task_family":request["task_family"],
+      "workspace":global_ws,"ledger_path":str(pathlib.Path(global_ws)/"ledger.jsonl")}
+    if mode=="correction":
+      review=json.load(open(pathlib.Path(ws)/("task-"+str(task)+"-review.json"),encoding="utf-8"))
+      manifest["scope_paths"]=[p for finding in review.get("findings",[]) for p in finding.get("affected_paths",[])]
+    applied=plan_transaction.apply_director_proposal(proposal,manifest)
+    env=dict(os.environ,PIPELINE_RUN_ID=identity["run_id"])
+    subprocess.run(["bash",str(refresh),"--refresh",str(plan_path)],cwd=str(root),env=env,check=True,capture_output=True,text=True)
+    print(json.dumps(applied,ensure_ascii=False,sort_keys=True))
+except Exception as exc:
+    print("DIRECTOR-APPLY: "+str(exc),file=sys.stderr)
+    raise SystemExit(1)
+PY

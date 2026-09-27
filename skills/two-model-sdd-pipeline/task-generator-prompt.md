@@ -16,16 +16,18 @@ scratch.
 ## Corrective (findings on one task)
 
 The dispatch gives you script-controlled context: the findings + the FULL
-`plan.json` + the target task + its `spec_refs`. Append ONE task with the
-next integer id and `"corrects": <id>`, scoped to the findings only. Never
-replan the branch silently. Reply with ONLY: the new task id.
+`plan.json` + the target task + its `spec_refs`. Return a read-only proposal
+for one corrective task, scoped to the findings only. Do not edit the plan,
+ledger, or any other file; the pipeline validates the proposal and allocates
+the next task ID in a locked transaction. Never replan the branch silently.
 
 ## Arbitrate (a task the operador proved unsatisfiable)
 
 Same script-controlled context: the escalation + the FULL `plan.json` + the
-target task + its `spec_refs`. Rule on task viability: fix the task's
-acceptance in the tracked plan, or re-plan. Never blame the implementation.
-Reply with ONLY: what changed.
+target task + its `spec_refs`. Return a read-only arbitration proposal to
+amend the target task's supported fields. Do not edit the plan or ledger;
+the pipeline validates and commits your proposal under the canonical lock.
+Never blame the implementation.
 
 ## Site 3 advisory focus
 

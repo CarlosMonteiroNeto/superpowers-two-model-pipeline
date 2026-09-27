@@ -75,6 +75,17 @@ class PlanValidationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate_plan(plan, str(root))
 
+    def test_rejects_multi_task_dependency_cycle(self):
+        validator=load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            root=pathlib.Path(temp); (root/"docs").mkdir()
+            (root/"docs"/"spec.md").write_text("# Contract\n",encoding="utf-8")
+            plan=valid_plan(); first=plan["tasks"][0]; first["depends_on"]=[2]
+            second=copy.deepcopy(first); second.update(id=2,title="Second",depends_on=[1])
+            plan["tasks"].append(second)
+            with self.assertRaisesRegex(ValueError,"cycle"):
+                validator.validate_plan(plan,str(root))
+
     def test_rejects_traversal_case_aliases_unsupported_runtime_controls_and_bad_anchors(self):
         validator = load(self)
         with tempfile.TemporaryDirectory() as temp:

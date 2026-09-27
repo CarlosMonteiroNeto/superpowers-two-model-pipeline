@@ -1,7 +1,11 @@
 """Controller-owned R3.3 validation for semantic director proposals."""
 import importlib.util
 import pathlib
+import json
+import subprocess
+import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
@@ -41,3 +45,33 @@ class DirectorProposalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validator.validate_proposal(malicious, {**expected, "source_plan_hash": "a" * 64})
 
+    def test_rejects_unsupported_arbitration_fields(self):
+        validator=load(self)
+        value={"mode":"arbitration","decision":"amend","reason":"narrow acceptance",
+            "source_plan_hash":"a"*64,"target_task":1,"proposal":{"field_changes":{"run_command":"approve"}}}
+        with self.assertRaises(ValueError):
+            validator.validate_proposal(value,{"mode":"arbitration","source_plan_hash":"a"*64,"target_task":1})
+
+    def test_request_materializes_latest_full_plan_and_target_for_each_attempt(self):
+        validator=load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            root=pathlib.Path(temp)/"repo"; root.mkdir()
+            subprocess.run(["git","-C",str(root),"init","-q"],check=True)
+            subprocess.run(["git","-C",str(root),"config","user.email","test@example.invalid"],check=True)
+            subprocess.run(["git","-C",str(root),"config","user.name","test"],check=True)
+            (root/"tracked.txt").write_text("x",encoding="utf-8")
+            subprocess.run(["git","-C",str(root),"add","-A"],check=True)
+            subprocess.run(["git","-C",str(root),"commit","-qm","init"],check=True)
+            ws=root/".superpowers"/"workspace"; ws.mkdir(parents=True)
+            plan={"tasks":[{"id":1,"title":"Parent","summary":"Root task","spec_refs":[],"touches":[],"depends_on":[],"acceptance":["Done"],"interfaces":{},"verification":{} }]}
+            (ws/"plan.json").write_text(json.dumps(plan),encoding="utf-8")
+            (ws/".pipeline-identity.json").write_text(json.dumps({"repository_root":str(root),"repository_id":"repo-id","run_id":"run-id"}),encoding="utf-8")
+            prompt=root/"selected.md"; prompt.write_text("Plan path points to an earlier worker snapshot",encoding="utf-8")
+            runtime=root/"runtime.json"; runtime.write_text(json.dumps({"manifest":{"backend":"codex","config_hash":"a"*64,"roles":{"director":{"model":"gpt-6-luna","settings":{"model_reasoning_effort":"medium"}}}}}),encoding="utf-8")
+            request_path=ws/"request.json"
+            with mock.patch.dict("os.environ",{"CODEX_RUNTIME_JSON":str(runtime)}):
+                request=validator.build_request(str(ws),1,"correction",str(prompt),str(request_path))
+            materialized=pathlib.Path(request["evidence_paths"]["prompt_path"]).read_text(encoding="utf-8")
+            self.assertIn("supersedes any earlier plan path",materialized)
+            self.assertIn("Current canonical plan snapshot",materialized)
+            self.assertIn("Root task",materialized)

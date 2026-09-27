@@ -79,12 +79,45 @@ plan_sha() {
 }
 
 dispatch_task_generator() {
-  # dispatch_task_generator PROMPT_FILE LOG_FILE ; always fresh. The
+  # dispatch_task_generator MODE TASK PROMPT_FILE LOG_FILE ; always fresh. The
   # task-generator is punctual: one dispatch per corrective/arbitrate
   # episode and one for closing. No cross-task (or cross-branch) session is
   # ever resumed.
-  "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
-    --prompt-file "$1" --log "$2"
+  local mode=$1 task=$2 prompt=$3 log=$4
+  if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+    local attempt request result apply_output canonical
+    for attempt in 1 2 3; do
+      canonical=$(python3 -c 'import json,sys,pathlib; i=json.load(open(pathlib.Path(sys.argv[1])/".pipeline-identity.json",encoding="utf-8")); print(pathlib.Path(i["repository_root"])/i["plan_path"])' "$WS") || return
+      [ -f "$canonical" ] || { echo "canonical plan missing: $canonical" >&2; return 1; }
+      cp -f "$canonical" "$WS/plan.json" || return
+      request="$WS/director-request-$task-$attempt.json"
+      python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import director_result; director_result.build_request(sys.argv[2],int(sys.argv[3]),sys.argv[4],sys.argv[5],sys.argv[6])' \
+        "$SCRIPT_DIR" "$WS" "$task" "$mode" "$prompt" "$request" || return
+      "$SCRIPT_DIR/dispatch-codex" --request "$request" || return
+      result=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["evidence_paths"]["result_path"])' "$request") || return
+      if apply_output=$("$SCRIPT_DIR/director-apply" --workspace "$WS" --task "$task" \
+          --mode "$mode" --request "$request" --result "$result" 2>&1); then
+        printf '%s\n' "$apply_output"
+        return 0
+      fi
+      if ! printf '%s' "$apply_output" | grep -Eqi 'stale source plan hash|integration state is owned'; then
+        printf '%s\n' "$apply_output" >&2
+        return 1
+      fi
+      echo "TASK-RUN: stale director proposal; refreshing canonical plan and requesting again ($attempt/3)" >&2
+    done
+    echo "TASK-RUN: director proposal stayed stale after 3 attempts" >&2
+    return 1
+  else
+    "$DISPATCH_BIN" --agent two-model-task-generator --task 0 \
+      --prompt-file "$prompt" --log "$log"
+  fi
+}
+
+validate_corrective_family() {
+  # A corrective child may resume only the operator session owned by the
+  # recorded task_family root. Walk the canonical plan chain before dispatch.
+  python3 "$SCRIPT_DIR/family_identity.py" --is-descendant "$WS/plan.json" "$1" "$2"
 }
 
 # A refresh copies the tracked plan into the workspace snapshot. When PLAN
@@ -92,11 +125,23 @@ dispatch_task_generator() {
 # refresh). refresh_plan is best-effort; refresh_plan_strict propagates failure
 # so an arbitration ruling is only recorded once the snapshot is valid.
 refresh_plan() {
+  if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+    local canonical
+    canonical=$(python3 -c 'import json,sys,pathlib; i=json.load(open(pathlib.Path(sys.argv[1])/".pipeline-identity.json",encoding="utf-8")); print(pathlib.Path(i["repository_root"])/i["plan_path"])' "$WS") || return 1
+    [ -f "$canonical" ] || return 1
+    "$SCRIPT_DIR/pipeline-workspace" --refresh "$canonical" >/dev/null || return 1
+    cp -f "$canonical" "$WS/plan.json"
+    return $?
+  fi
   if [ "$PLAN" = "$WS/plan.json" ]; then return 0; fi
   "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null || true
 }
 
 refresh_plan_strict() {
+  if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+    refresh_plan
+    return $?
+  fi
   if [ "$PLAN" = "$WS/plan.json" ]; then return 0; fi
   "$SCRIPT_DIR/pipeline-workspace" "$PLAN" >/dev/null
 }
@@ -267,7 +312,7 @@ EOF
           say "director prompt preparation failed for CORRECTIVE task $n; using baseline prompt"
           cp "$baseline" "$selected" || block "cannot write baseline prompt fallback for corrective task $n"
         fi
-        dispatch_task_generator "$selected" \
+        dispatch_task_generator correction "$n" "$selected" \
           "$WS/task-generator-corrective-$n.log" \
           || block "diretor dispatch failed"
         refresh_plan
@@ -283,6 +328,8 @@ print(max(cands) if cands else '')
           || block "brief-scaffold failed for corrective task $m"
         ledger brief_ready "$m" "corrective brief scaffolded" "corrects=$n"
         ledger corrective "$m" "corrective task for $n"
+        validate_corrective_family "$m" "$n" \
+          || block "corrective task is outside recorded task_family"
         # Resume the OPERADOR's own per-agent session (never a generic record:
         # after the revisor dispatch the generic one points at the REVIEWER).
         # The agent variant is derived from the branch's toolchain lang (C3).
@@ -336,7 +383,7 @@ print(max(cands) if cands else '')
           say "director prompt preparation failed for ARBITRATE task $n; using baseline prompt"
           cp "$baseline" "$selected" || block "cannot write baseline prompt fallback for arbitration task $n"
         fi
-        dispatch_task_generator "$selected" \
+        dispatch_task_generator arbitration "$n" "$selected" \
           "$WS/task-generator-arbitrate-$n.log" \
           || block "diretor dispatch failed"
         # F3: a ruling is only an execution boundary once the refreshed plan is

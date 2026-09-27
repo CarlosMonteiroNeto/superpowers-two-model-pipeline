@@ -1,6 +1,9 @@
 """Controller-owned R3.3 corrective family/session safety tests."""
 import importlib.util
 import pathlib
+import json
+import subprocess
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -13,6 +16,16 @@ class CorrectiveFamilyTests(unittest.TestCase):
         self.assertIn("task_family", source)
         self.assertIn("family", source.lower())
         self.assertNotIn("--continue-director", source)
+
+    def test_family_resume_identity_accepts_only_actual_descendants(self):
+        helper=SCRIPTS/"family_identity.py"
+        plan={"tasks":[{"id":1,"corrects":None},{"id":2,"corrects":1},{"id":3,"corrects":2},{"id":4,"corrects":None}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            path=pathlib.Path(tmp)/"plan.json"; path.write_text(json.dumps(plan),encoding="utf-8")
+            good=subprocess.run(["python",str(helper),"--is-descendant",str(path),"3","1"],capture_output=True)
+            unrelated=subprocess.run(["python",str(helper),"--is-descendant",str(path),"4","1"],capture_output=True)
+            self.assertEqual(good.returncode,0)
+            self.assertEqual(unrelated.returncode,1)
 
     def test_director_prompt_requests_proposals_not_direct_plan_or_ledger_edits(self):
         prompt = (ROOT / "skills" / "two-model-sdd-pipeline" / "task-generator-prompt.md").read_text(encoding="utf-8").lower()
