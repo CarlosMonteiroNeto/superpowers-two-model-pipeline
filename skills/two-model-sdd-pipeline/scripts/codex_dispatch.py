@@ -62,19 +62,31 @@ def run_dispatch(request, runtime):
         raise ValueError("prompt hash mismatch")
     capabilities = runtime.get("capabilities")
     if not isinstance(capabilities, dict): raise ValueError("Codex capability report required")
+    role_config = manifest.get("roles", {}).get(req["role"], {})
+    role_settings = role_config.get("settings", {}) if isinstance(role_config, dict) else {}
+    if role_config.get("model") != req["requested_model"]:
+        raise ValueError("requested model does not match role manifest")
+    if role_settings.get("model_reasoning_effort") != req["requested_effort"]:
+        raise ValueError("requested effort does not match role manifest")
     policy_request = {"developer_instructions": runtime.get("developer_instructions", ""), "capabilities": capabilities}
     overrides = codex_policy.build_overrides(req["role"], manifest, policy_request)
     resume_id = runtime.get("resume_session_id")
     recovery = runtime.get("recovery")
     if runtime.get("resume") and (not isinstance(resume_id, str) or not resume_id.strip()):
         raise ValueError("explicit resume session id required")
-    identity = {k: req[k] for k in ("backend", "run_id", "task_family", "role", "worktree", "requested_model", "requested_effort", "config_hash")}
+    if resume_id and not runtime.get("resume"):
+        raise ValueError("session ID requires explicit identity-checked resume")
+    identity = {k: req[k] for k in ("backend", "run_id", "task_id", "task_family", "role", "worktree", "requested_model", "requested_effort", "config_hash")}
     identity["session_dir"] = runtime.get("session_dir", req["worktree"])
     old = codex_sessions.load_session(identity) if runtime.get("resume") else None
+    context_reset = False
     if runtime.get("resume"):
         if old is None and not recovery: raise ValueError("recorded session identity missing")
         if old and old.get("session_id") != resume_id: raise ValueError("session ID mismatch")
         if old is None and (not isinstance(recovery, dict) or recovery.get("fresh") is not True): raise ValueError("recovery must explicitly select fresh context")
+        if old is None and isinstance(recovery, dict) and recovery.get("fresh") is True:
+            context_reset = True
+            resume_id = None
     # Evidence for each execution attempt is immutable and disjoint. Preserve
     # the caller's prompt source while placing generated artifacts together.
     requested_root = pathlib.Path(runtime.get("attempt_root") or pathlib.Path(ep["request_path"]).parent)
@@ -93,10 +105,29 @@ def run_dispatch(request, runtime):
     if not schema_path:
         schema_name = {"operator-result-v1":"operator-result.schema.json", "reviewer-result-v1":"reviewer-result.schema.json", "director-result-v1":"director-result.schema.json", "closing-result-v1":"worker-result.schema.json"}[ _output_schema(req, runtime) ]
         schema_path = str(pathlib.Path(__file__).resolve().parent.parent / "schemas" / schema_name)
-    args += ["--model", req["requested_model"], "--json", "--output-schema", str(schema_path), "--output-last-message", str(out_path), "-"]
+    args += ["--json", "--output-schema", str(schema_path), "--output-last-message", str(out_path), "-"]
     args = [a for a in args if a != ""]
     cwd = str(pathlib.Path(req["worktree"]).resolve())
-    captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), runtime.get("env"))
+    active_process = []
+    def register_process(record):
+        active_process[:] = [record]
+        registry = runtime.get("process_registry")
+        if registry is not None:
+            if not isinstance(registry, list): raise ValueError("process_registry must be a list")
+            registry.append(dict(record))
+        callback = runtime.get("on_process_start")
+        if callback is not None:
+            if not callable(callback): raise ValueError("on_process_start must be callable")
+            callback(dict(record))
+    lifecycle = {"session_id":resume_id, "status":"active", "started_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                 "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown"))}
+    codex_sessions.store_session(identity, lifecycle)
+    try:
+        captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), runtime.get("env"), on_start=register_process)
+    except Exception:
+        lifecycle.update(status="unresolved", error="process start/capture did not complete")
+        codex_sessions.store_session(identity, lifecycle)
+        raise
     _atomic(ep["events_path"], captured["stdout"])
     _atomic(ep["stderr_path"], captured["stderr"])
     _json(ep["request_path"], req)
@@ -105,6 +136,9 @@ def run_dispatch(request, runtime):
     completions = [e for e in events if e["type"] == "turn.completed"]
     failures = [e for e in events if e["type"] in ("turn.failed", "error")]
     if captured["returncode"] != 0 or failures or not completions or not threads:
+        lifecycle.update(status="unresolved", process_exit=captured["returncode"])
+        if threads and isinstance(threads[0], str): lifecycle["session_id"] = threads[0]
+        codex_sessions.store_session(identity, lifecycle)
         raise ValueError("Codex transport did not complete successfully")
     session_id = threads[0]
     if not isinstance(session_id, str) or not session_id: raise ValueError("missing Codex thread identity")
@@ -122,5 +156,5 @@ def run_dispatch(request, runtime):
                   usage={"input_tokens":usage_event.get("input_tokens"), "cached_tokens":usage_event.get("cached_input_tokens"), "output_tokens":usage_event.get("output_tokens")}, error=None)
     validated = dispatch_contract.validate_result(result, req)
     _json(ep["result_path"], validated)
-    codex_sessions.store_session(identity, {"session_id":session_id, "status":"completed", "completed_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "evidence_dir":str(attempt_dir), "runtime_version":result["runtime_version"]})
+    codex_sessions.store_session(identity, {"session_id":session_id, "status":"completed", "completed_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":result["runtime_version"]})
     return validated

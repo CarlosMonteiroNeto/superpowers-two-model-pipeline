@@ -20,7 +20,7 @@ def _start_identity(pid):
         return result.stdout.strip() or None
 
 
-def run_owned(argv, cwd, stdin_text="", timeout=None, env=None):
+def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
     if not isinstance(argv, (list, tuple)) or not argv or not all(isinstance(x, str) for x in argv):
         raise ValueError("argv must be a nonempty string array")
     kwargs = {"cwd": cwd, "stdin": subprocess.PIPE, "stdout": subprocess.PIPE,
@@ -32,10 +32,20 @@ def run_owned(argv, cwd, stdin_text="", timeout=None, env=None):
     proc = subprocess.Popen(list(argv), **kwargs)
     started = time.time()
     start_identity = _start_identity(proc.pid)
+    ownership = {"pid": proc.pid, "start_identity": start_identity}
+    if not start_identity:
+        stop_owned_processes([ownership], 0)
+        raise RuntimeError("could not verify process start identity")
+    if on_start is not None:
+        if not callable(on_start): raise ValueError("on_start must be callable")
+        try: on_start(dict(ownership))
+        except Exception:
+            stop_owned_processes([ownership], 0)
+            raise
     try:
         out, err = proc.communicate(stdin_text.encode("utf-8"), timeout=timeout)
     except subprocess.TimeoutExpired:
-        stop_owned_processes([{"pid": proc.pid, "started": started}], 1.0)
+        stop_owned_processes([ownership], 1.0)
         out, err = proc.communicate()
     return {"pid": proc.pid, "started": started, "start_identity": start_identity, "returncode": proc.returncode,
             "stdout": out.decode("utf-8", errors="strict"),
