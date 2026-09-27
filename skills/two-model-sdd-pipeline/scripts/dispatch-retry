@@ -32,6 +32,12 @@ DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 MAX_TRIES="${DISPATCH_MAX_TRIES:-3}"
 BACKOFF="${DISPATCH_RETRY_BACKOFF:-0}"
 
+# Codex retries only a failure positively classified before execution began.
+# Codes 6 and all semantic/usage/interruption failures are ambiguous or final.
+backend="opencode"
+if [ "${1:-}" = "--backend" ]; then backend=${2:-}; fi
+if [ "$backend" = "codex" ]; then MAX_TRIES=3; fi
+
 args=("$@")
 
 # --task/--log locate the ledger for the dispatch_retry records. The forwarded
@@ -55,9 +61,11 @@ while [ "$attempt" -lt "$MAX_TRIES" ]; do
   "$DISPATCH_BIN" "${args[@]}"
   rc=$?
   set -e
-  case "$rc" in
-    0|2|3) break ;;
-  esac
+  if [ "$backend" = "codex" ]; then
+    [ "$rc" -eq 5 ] || break
+  else
+    case "$rc" in 0|2|3) break ;; esac
+  fi
   [ "$attempt" -lt "$MAX_TRIES" ] || break
   # Ledger the failed attempt (best effort, like the rest of the retry): a
   # run that had to retry is observable state, not a silent in-memory decision.
@@ -67,7 +75,9 @@ while [ "$attempt" -lt "$MAX_TRIES" ]; do
     "$SCRIPT_DIR/ledger-append" "$ledger_dir/ledger.jsonl" dispatch_retry "$task" \
       "dispatch attempt $attempt failed rc=$rc" >/dev/null 2>&1 || true
   fi
-  if [ "$BACKOFF" -gt 0 ] 2>/dev/null; then
+  if [ "$backend" = "codex" ]; then
+    if [ "$attempt" -eq 1 ]; then sleep 1; else sleep 3; fi
+  elif [ "$BACKOFF" -gt 0 ] 2>/dev/null; then
     sleep "$BACKOFF"
   fi
   echo "DISPATCH-RETRY: attempt $attempt failed (rc=$rc) - retrying (max $MAX_TRIES)" >&2

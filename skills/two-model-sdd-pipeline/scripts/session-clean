@@ -12,13 +12,45 @@
 # Exit codes: 0 = done (best-effort); 2 = usage / no workspace.
 set -u
 
-if [ $# -ne 2 ]; then
-  echo "usage: session-clean WORKSPACE TASK|all" >&2
+if [ $# -lt 2 ] || [ $# -gt 4 ]; then
+  echo "usage: session-clean WORKSPACE TASK|all [--backend codex]" >&2
   exit 2
 fi
 
 ws=$1
 task=$2
+if [ "${3:-}" = "--backend" ] && [ "${4:-}" = "codex" ]; then
+  retention="${CODEX_RETENTION_DAYS:-30}"
+  case "$retention" in *[!0-9]*|'') echo "SESSION-CLEAN: invalid CODEX_RETENTION_DAYS" >&2; exit 2 ;; esac
+  python3 - "$ws" "$task" "$retention" <<'PY'
+import datetime, json, pathlib, shutil, sys
+root=pathlib.Path(sys.argv[1]).resolve(); task=sys.argv[2]; days=int(sys.argv[3])
+records=root/".superpowers"/"sessions"
+if not records.exists(): raise SystemExit(0)
+cutoff=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=days)
+for path in records.glob("*.json"):
+    try: item=json.loads(path.read_text(encoding="utf-8"))
+    except Exception: continue
+    ident=item.get("identity", {})
+    if task != "all" and str(ident.get("task_id")) != task: continue
+    if item.get("status") != "completed": continue
+    stamp=item.get("completed_at")
+    try: completed=datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except Exception: continue
+    if completed > cutoff: continue
+    evidence=item.get("evidence_dir")
+    if evidence:
+        target=pathlib.Path(evidence).resolve()
+        try: target.relative_to(root)
+        except ValueError:
+            print("SESSION-CLEAN: refusing evidence outside workspace", file=sys.stderr); continue
+        if target.is_dir(): shutil.rmtree(target)
+    path.unlink()
+    print("SESSION-CLEAN: expired local Codex record/evidence; provider session deletion is unsupported")
+PY
+  exit $?
+fi
+if [ $# -ne 2 ]; then echo "SESSION-CLEAN: invalid backend selection" >&2; exit 2; fi
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
 
 [ -d "$ws" ] || { echo "SESSION-CLEAN: no workspace: $ws" >&2; exit 2; }
