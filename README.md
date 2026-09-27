@@ -13,7 +13,8 @@ turned into an AI-assisted, **two-tier** development pipeline with a
 Flutter/Dart layer on top. The design rule: **LLMs reason and scripts
 decide** — mechanical steps are chained into deterministic scripts whose
 verdict is an exit code, and LLM calls are **cache-aware** (within-task
-resume via `--continue --session`; fresh dispatch when the task changes).
+OpenCode within-task resume via `--continue --session`, while Codex resume
+uses explicit identity-checked session IDs; fresh context when the task changes).
 
 Each of the 14 original skills was kept intact and given a **"Pipeline
 Integration"** section inserted right after its title, applying this
@@ -456,7 +457,8 @@ implementations**. These fields drive the `template-search` query
   gate runs before commit. Only TEST_DEFECT leaves the loop.
 - **route-next** — deterministic router; Script CEO executes its emitted
   action.
-- **dispatch** — headless subagent launcher with session resume.
+- **dispatch** — legacy OpenCode headless launcher with `--continue --session`
+  resume; Codex worker continuation uses an explicit identity-checked session ID.
 - **cmd** — command runner; RTK-compressed LLM-facing stdout, full output
   to files.
 - **Context retention:** operador and revisor keep their sessions until
