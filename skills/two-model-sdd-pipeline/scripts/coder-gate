@@ -60,6 +60,15 @@ brief="$ws/task-$task-brief.md"
 [ -f "$ledger" ] || { echo "CODER-GATE: no ledger: $ledger" >&2; exit 3; }
 [ -f "$brief" ] || { echo "CODER-GATE: no brief: $brief" >&2; exit 3; }
 
+pipeline_backend=${PIPELINE_BACKEND:-}
+if [ -z "$pipeline_backend" ]; then
+  if [ -f "$ws/plan.json" ] && python3 -c 'import json,sys; raise SystemExit(0 if "spec_doc" in json.load(open(sys.argv[1],encoding="utf-8")) else 1)' "$ws/plan.json"; then
+    echo "CODER-GATE: canonical plan requires explicit PIPELINE_BACKEND" >&2; exit 4
+  fi
+  pipeline_backend=opencode
+fi
+case "$pipeline_backend" in codex|opencode) ;; *) echo "CODER-GATE: unsupported backend $pipeline_backend" >&2; exit 4 ;; esac
+
 # A task selects its gate by exact toolchain identity. Language remains a
 # separate value used only to select the matching operator prompt.
 task_toolchain=$("$SCRIPT_DIR/task-toolchain" "$ws" "$task" 2>/dev/null || true)
@@ -91,6 +100,10 @@ PY
 )
   current=$("$GIT_BIN" rev-parse HEAD)
   if [ -n "$saved_base" ] && [ "$saved_candidate" = "$current" ] && [ -s "$review_pkg" ]; then
+    if [ "$pipeline_backend" = "codex" ]; then
+      echo "CODER-GATE: candidate $saved_candidate awaits normalized Codex review" >&2
+      exit 0
+    fi
     DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
     if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
       --prompt-file "$review_pkg" --log "$ws/task-$task-reviewer.log"; then
@@ -411,6 +424,10 @@ with os.fdopen(fd,"w",encoding="utf-8") as f:
  f.write("\n")
 os.replace(tmp,p)
 PY
+      if [ "$pipeline_backend" = "codex" ]; then
+        echo "CODER-GATE: committed candidate $candidate is ready for normalized Codex review"
+        exit 0
+      fi
       DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
       if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
         --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then

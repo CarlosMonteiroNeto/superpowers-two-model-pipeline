@@ -4,8 +4,20 @@
 # operator or changes the committed candidate.
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ "${1:-}" = "--build-request" ] && [ "$#" -eq 4 ]; then
+  python3 - "$SCRIPT_DIR" "$2" "$3" "$4" <<'PY'
+import sys
+sys.path.insert(0,sys.argv[1])
+import review_dispatch
+try: review_dispatch.build_request(sys.argv[2],sys.argv[3],sys.argv[4])
+except Exception as exc:
+ print("review-dispatch: cannot build Codex request: {}".format(exc),file=sys.stderr)
+ raise SystemExit(1)
+PY
+  exit $?
+fi
 if [ "$#" -ne 6 ] || [ "$1" != "--request" ] || [ "$3" != "--runtime" ] || [ "$5" != "--output" ]; then
-  echo "usage: review-dispatch --request REQUEST.json --runtime RUNTIME.json --output RESULT.json" >&2
+  echo "usage: review-dispatch --build-request WORKSPACE TASK REQUEST.json | --request REQUEST.json --runtime RUNTIME.json --output RESULT.json" >&2
   exit 2
 fi
 python3 - "$SCRIPT_DIR" "$2" "$4" "$6" <<'PY'
@@ -14,12 +26,16 @@ sys.path.insert(0,sys.argv[1])
 import review_dispatch
 request=json.load(open(sys.argv[2],encoding="utf-8"))
 runtime=json.load(open(sys.argv[3],encoding="utf-8"))
+request["result_path"]=sys.argv[4]
+request["normalized_result_path"]=sys.argv[4]
 result=review_dispatch.ensure_review(request,runtime)
 target=sys.argv[4]
 os.makedirs(os.path.dirname(os.path.abspath(target)),exist_ok=True)
 fd,tmp=tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(target)),prefix="review-result-")
 with os.fdopen(fd,"w",encoding="utf-8") as f:
- json.dump(result,f,ensure_ascii=False,indent=2); f.write("\n")
+ if result.get("status")=="review_pending": value=result
+ else: value=json.load(open(target,encoding="utf-8"))
+ json.dump(value,f,ensure_ascii=False,indent=2); f.write("\n")
 os.replace(tmp,target)
 if result.get("status")=="review_pending": raise SystemExit(5)
 PY

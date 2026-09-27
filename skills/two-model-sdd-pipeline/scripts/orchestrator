@@ -45,6 +45,15 @@ ws=$1
 task=$2
 total=${3:-}
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+PIPELINE_BACKEND=${PIPELINE_BACKEND:-}
+if [ -z "$PIPELINE_BACKEND" ]; then
+  if [ -f "$ws/plan.json" ] && python3 -c 'import json,sys; raise SystemExit(0 if "spec_doc" in json.load(open(sys.argv[1],encoding="utf-8")) else 1)' "$ws/plan.json"; then
+    echo "ORCHESTRATOR: canonical plan requires explicit PIPELINE_BACKEND" >&2; exit 2
+  fi
+  PIPELINE_BACKEND=opencode
+fi
+case "$PIPELINE_BACKEND" in codex|opencode) ;; *) echo "ORCHESTRATOR: unsupported backend $PIPELINE_BACKEND" >&2; exit 2 ;; esac
+export PIPELINE_BACKEND
 
 [ -f "$ws/ledger.jsonl" ] || { echo "ORCHESTRATOR: no ledger at $ws" >&2; exit 2; }
 
@@ -144,6 +153,79 @@ case "$action" in
     # duplicate the review seat, exactly what task_reviewer's "no
     # worker-spawned reviewer" rule exists to prevent.
     state="$ws/task-$task-review-state.json"
+    if [ "$PIPELINE_BACKEND" = "codex" ]; then
+      [ -n "${CODEX_RUNTIME_JSON:-}" ] || { echo "ORCHESTRATOR: CODEX_RUNTIME_JSON required for Codex review" >&2; exit 5; }
+      [ -f "$state" ] || { echo "ORCHESTRATOR: candidate-bound review state missing for task $task" >&2; exit 1; }
+      candidate=$(git rev-parse HEAD)
+      read -r saved_base saved_candidate < <(python3 - "$state" <<'PY'
+import json,sys
+try:
+ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""),d.get("candidate_commit", ""))
+except Exception: print("", "")
+PY
+)
+      [ -n "$saved_base" ] && [ "$candidate" = "$saved_candidate" ] || { echo "ORCHESTRATOR: candidate/base binding changed; refusing Codex review" >&2; exit 1; }
+      pkg="$ws/task-$task-review-package.diff"
+      "$SCRIPT_DIR/review-package" "$ws" "$saved_base" "$candidate" "$pkg" "$task"
+      python3 - "$state" "$ws/plan.json" "$ws/task-$task-brief.md" "$pkg" <<'PY'
+import hashlib,json,os,sys,tempfile
+state,plan,brief,package=sys.argv[1:]
+def digest(path): return hashlib.sha256(open(path,"rb").read()).hexdigest()
+d=json.load(open(state,encoding="utf-8"))
+plan_hash=digest(plan)
+d["plan_hash"]=plan_hash
+d["context_hash"]=hashlib.sha256((plan_hash+digest(brief)+digest(package)).encode()).hexdigest()
+fd,tmp=tempfile.mkstemp(dir=os.path.dirname(state),prefix="review-state-")
+with os.fdopen(fd,"w",encoding="utf-8") as f: json.dump(d,f); f.write("\n")
+os.replace(tmp,state)
+PY
+      request="$ws/task-$task-review-request.json"
+      result="$ws/task-$task-review-result.json"
+      "$SCRIPT_DIR/review-dispatch" --build-request "$ws" "$task" "$request" || { echo "ORCHESTRATOR: cannot construct strict Codex review request" >&2; exit 4; }
+      if ! "$SCRIPT_DIR/review-dispatch" --request "$request" --runtime "$CODEX_RUNTIME_JSON" --output "$result"; then
+        echo "ORCHESTRATOR: normalized Codex review remains pending for candidate $candidate" >&2
+        exit 5
+      fi
+      "$SCRIPT_DIR/parse-review" --backend codex "$result" "$request" "$ws/task-$task-review.json" \
+        || { echo "ORCHESTRATOR: normalized Codex review result is invalid" >&2; exit 4; }
+      verdict=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["verdict"])' "$ws/task-$task-review.json")
+      findings=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1],encoding="utf-8"))["findings"]))' "$ws/task-$task-review.json")
+      "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_outcome "$task" "$verdict" "findings=$findings"
+      if [ "$verdict" = "APPROVED" ]; then
+        parked=$(python3 - "$ws/task-$task-review.json" <<'PY'
+import json,sys
+v=json.load(open(sys.argv[1],encoding="utf-8")); minors=v.get("minors",[])
+rank={"Minor":1,"Important":2,"Critical":3}; best=max((rank.get(m.get("severity"),0) for m in minors if isinstance(m,dict)),default=0)
+notes="; ".join(str(m.get("note") or m.get("issue") or "") for m in minors if isinstance(m,dict))
+print((notes or "__NONE__")+"\t"+{0:"none",1:"Minor",2:"Important",3:"Critical"}[best])
+PY
+)
+        IFS=$'\t' read -r notes severity <<< "$parked"
+        if [ "$notes" != "__NONE__" ]; then
+          "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" task_complete "$task" APPROVED "PARKED=$notes" "PARKED_SEVERITY=$severity"
+        else
+          "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" task_complete "$task" APPROVED "PARKED_SEVERITY=$severity"
+        fi
+        # Resolve any parent in a corrective family exactly once.
+        python3 - "$ws/plan.json" "$task" <<'PY' | while read -r parent; do
+import json,sys
+plan=json.load(open(sys.argv[1],encoding="utf-8")); tasks={str(t["id"]):t for t in plan["tasks"]}; child=tasks.get(sys.argv[2]); seen=set()
+while child and child.get("corrects") is not None:
+ p=str(child["corrects"])
+ if p in seen or p not in tasks: break
+ seen.add(p); print(p); child=tasks[p]
+PY
+          if ! grep -E '"type": *"task_complete"' "$ws/ledger.jsonl" | grep -qE "\"task\": *\"$parent\""; then
+            "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_outcome "$parent" APPROVED "superseded_by=corrective-$task"
+            "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" task_complete "$parent" APPROVED "RECONCILED_BY=$task"
+          fi
+        done
+      fi
+      rm -f "$state"
+      action=$(route)
+      echo "OUTCOME: $action"
+      exit 0
+    fi
     if [ -f "$state" ]; then
       candidate=$(git rev-parse HEAD)
       read -r saved_base saved_candidate < <(python3 - "$state" <<'PY'
