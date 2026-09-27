@@ -10,11 +10,6 @@ import codex_sessions
 import dispatch_contract
 
 
-def _semantic(value):
-    # Reuse the canonical strict schema validator used at the transport seam.
-    return dispatch_contract._validate_reviewer(value)
-
-
 def load_review_result(request):
     path = request.get("result_path") or request.get("review_result_path")
     if not path:
@@ -33,14 +28,20 @@ def _matches(result, request):
 def _validated_result(result, request):
     if not _matches(result, request):
         raise ValueError("review result does not match current candidate identity")
-    semantic = _semantic(result.get("final_output"))
-    # A full normalized dispatch result gets all transport/hash checks too.
-    if set(dispatch_contract.RESULT_FIELDS).issubset(result):
-        req = {k: v for k, v in request.items() if k in dispatch_contract.REQUEST_FIELDS}
-        req.setdefault("role", "reviewer")
-        result = dispatch_contract.validate_result(result, req)
-        semantic = result["final_output"]
-    return semantic
+    req = {k: v for k, v in request.items() if k in dispatch_contract.REQUEST_FIELDS}
+    req.setdefault("role", "reviewer")
+    clean_request = dispatch_contract.validate_request(req)
+    # Every accepted result, including a cached/reused review, must satisfy the
+    # complete normalized transport envelope and semantic schema. Matching
+    # identity and a plausible verdict alone never constitute approval.
+    clean_result = dispatch_contract.validate_result(result, clean_request)
+    candidate = request.get("candidate_commit")
+    attempt_base = request.get("attempt_base")
+    if candidate is not None and clean_result["candidate_commit"] != candidate:
+        raise ValueError("review result belongs to a stale candidate")
+    if attempt_base is not None and clean_result["base_commit"] != attempt_base:
+        raise ValueError("review result belongs to a stale attempt base")
+    return clean_result["final_output"]
 
 
 def ensure_review(request, runtime):
