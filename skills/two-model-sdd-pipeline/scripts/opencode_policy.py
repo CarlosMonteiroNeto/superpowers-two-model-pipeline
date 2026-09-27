@@ -10,6 +10,11 @@ _REVIEW_FORBIDDEN_TOOLS = {
     "pytest", "py.test", "unittest", "tox", "nox", "jest", "vitest",
     "mocha", "cargo", "go", "ruff", "mypy", "pyright", "eslint",
     "tsc", "prettier", "black", "yapf", "isort", "autopep8",
+    # Do not let a reviewer descriptor invoke arbitrary code through a runtime
+    # or package runner (`python -m pytest`, `node ...jest`, `npx jest`).
+    "python", "python2", "python3", "py", "node", "nodejs", "npx",
+    "deno", "bun", "ruby", "perl", "php", "java", "javac",
+    "npm", "pnpm", "yarn", "pip", "pip3", "poetry", "uv",
 }
 
 
@@ -31,9 +36,6 @@ def _review_safe_argv(argv):
     if executable in _REVIEW_FORBIDDEN_TOOLS:
         return False
     action_tokens = {token.casefold() for token in argv[1:]}
-    if executable in {"npm", "pnpm", "yarn", "bun"} and action_tokens.intersection(
-            {"test", "run", "lint", "check", "format", "fmt"}):
-        return False
     return not (executable in {"make", "gmake", "cmake"} and action_tokens.intersection(
         {"test", "check", "lint", "format", "fmt", "analyze", "analyse"}))
 

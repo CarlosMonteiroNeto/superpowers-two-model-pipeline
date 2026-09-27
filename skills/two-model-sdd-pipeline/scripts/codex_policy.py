@@ -26,6 +26,11 @@ _REVIEW_FORBIDDEN_TOOLS = {
     "pytest", "py.test", "unittest", "tox", "nox", "jest", "vitest",
     "mocha", "cargo", "go", "ruff", "mypy", "pyright", "eslint",
     "tsc", "prettier", "black", "yapf", "isort", "autopep8",
+    # Reviewer argv descriptors cannot safely authorize arbitrary code runners:
+    # test launchers can be hidden behind `python -m`, `node`, or `npx`.
+    "python", "python2", "python3", "py", "node", "nodejs", "npx",
+    "deno", "bun", "ruby", "perl", "php", "java", "javac",
+    "npm", "pnpm", "yarn", "pip", "pip3", "poetry", "uv",
 }
 
 
@@ -38,11 +43,7 @@ def _review_safe_read_only(argv):
         executable = executable.rsplit(".", 1)[0]
     if executable in _REVIEW_FORBIDDEN_TOOLS:
         return False
-    # Common package-manager test/analyze/format subcommands are forbidden too.
     action_tokens = {token.casefold() for token in argv[1:]}
-    if executable in {"npm", "pnpm", "yarn", "bun"} and action_tokens.intersection(
-            {"test", "run", "lint", "check", "format", "fmt"}):
-        return False
     if executable in {"make", "gmake", "cmake"} and action_tokens.intersection(
             {"test", "check", "lint", "format", "fmt", "analyze", "analyse"}):
         return False
