@@ -69,8 +69,9 @@ class ReviewRecoveryTests(unittest.TestCase):
             approved = module.ensure_review(req, env)
             self.assertEqual(approved["verdict"], "APPROVED")
             self.assertEqual(dispatch.call_count, 2)
-            self.assertEqual(dispatch.call_args_list[0].args[0]["candidate_commit"], "a" * 40)
-            self.assertEqual(dispatch.call_args_list[1].args[0]["candidate_commit"], "a" * 40)
+            self.assertEqual(dispatch.call_args_list[0].args[0]["base_commit"], "b" * 40)
+            self.assertEqual(dispatch.call_args_list[1].args[0]["base_commit"], "b" * 40)
+            self.assertEqual(dispatch.call_args_list[1].args[0]["dispatch_id"], req["dispatch_id"])
 
     def test_completed_verdict_for_old_candidate_is_not_reused(self):
         module = load(self)
