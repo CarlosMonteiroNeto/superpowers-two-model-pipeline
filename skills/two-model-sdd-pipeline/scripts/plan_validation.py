@@ -2,8 +2,8 @@
 import os
 import re
 
-TASK_REQUIRED = {"id", "title", "summary", "spec_refs", "touches", "depends_on", "acceptance"}
-ROOT_REQUIRED = {"version", "title", "spec_doc", "global_constraints", "interfaces", "verification", "tasks"}
+TASK_REQUIRED = {"id", "title", "summary", "spec_refs", "touches", "depends_on", "acceptance", "interfaces", "verification"}
+ROOT_REQUIRED = {"version", "title", "spec_doc", "global_constraints", "tasks"}
 FORBIDDEN_CONTROLS = {"runtime", "model", "reasoning", "reasoning_effort", "backend", "executable", "approval", "force_approve"}
 
 
@@ -32,8 +32,6 @@ def validate_plan(plan: dict, repo_root: str) -> None:
         _fail("title must be a non-empty string")
     if not _strings(plan.get("global_constraints")):
         _fail("global_constraints must be a non-empty string list")
-    if not isinstance(plan.get("interfaces"), dict):
-        _fail("interfaces must be an object")
     def reject_controls(value, location="plan"):
         if isinstance(value, dict):
             for key, child in value.items():
@@ -93,16 +91,17 @@ def validate_plan(plan: dict, repo_root: str) -> None:
             _fail("task {} acceptance and spec_refs must be non-empty string lists".format(tid))
         if not isinstance(task["depends_on"], list):
             _fail("task {} depends_on must be a list".format(tid))
-        task_verification = task.get("verification")
-        if task_verification is not None:
-            if not isinstance(task_verification, dict) or not isinstance(task_verification.get("new_test_files", []), list):
-                _fail("task {} verification metadata is invalid".format(tid))
-            if "command" in task_verification and (not isinstance(task_verification["command"], str) or not task_verification["command"].strip()):
-                _fail("task {} verification command is invalid".format(tid))
-            for test_path in task_verification.get("new_test_files", []):
-                test_path = _canonical_path(root, test_path, "task {} new_test_files".format(tid))
-                _claim(test_path, seen_paths)
-                all_paths.append(test_path)
+        if not isinstance(task["interfaces"], dict):
+            _fail("task {} interfaces must be an object".format(tid))
+        task_verification = task["verification"]
+        if not isinstance(task_verification, dict) or not isinstance(task_verification.get("new_test_files", []), list):
+            _fail("task {} verification metadata is invalid".format(tid))
+        if "command" in task_verification and (not isinstance(task_verification["command"], str) or not task_verification["command"].strip()):
+            _fail("task {} verification command is invalid".format(tid))
+        for test_path in task_verification.get("new_test_files", []):
+            test_path = _canonical_path(root, test_path, "task {} new_test_files".format(tid))
+            _claim(test_path, seen_paths)
+            all_paths.append(test_path)
         paths = task["touches"]
         if not isinstance(paths, list):
             _fail("task {} touches must be a list".format(tid))
