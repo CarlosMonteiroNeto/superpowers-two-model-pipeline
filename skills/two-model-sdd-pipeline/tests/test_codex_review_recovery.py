@@ -71,3 +71,15 @@ class ReviewRecoveryTests(unittest.TestCase):
             result = module.ensure_review(req, runtime())
         dispatch.assert_called_once()
         self.assertEqual(result["verdict"], "SEND_BACK")
+
+    def test_matching_but_incomplete_normalized_envelope_is_rejected(self):
+        module = load(self)
+        req = request()
+        partial = {"role": "reviewer", "run_id": "run-a", "task_id": 2,
+            "task_family": 2, "base_commit": "b" * 40, "candidate_commit": "a" * 40,
+            "final_output": {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"}}
+        with mock.patch.object(module, "load_review_result", return_value=partial), \
+             mock.patch.object(module.codex_dispatch, "run_dispatch", side_effect=OSError("unavailable")) as dispatch:
+            result = module.ensure_review(req, runtime())
+        dispatch.assert_called_once()
+        self.assertEqual(result["status"], "review_pending")
