@@ -25,9 +25,49 @@ ws=$1
 task=$2
 script_dir=$(cd "$(dirname "$0")" && pwd)
 root=$(git rev-parse --show-toplevel)
-wt="$root/.superpowers/two-model/worktrees/task-$task"
+owner_file="$ws/ownership/task-$task.json"
+if [ -f "$owner_file" ]; then
+  IFS=$'\t' read -r wt branch owner_run owner_base < <(python3 - "$owner_file" <<'PY'
+import json, sys
+o=json.load(open(sys.argv[1], encoding="utf-8"))
+print("\t".join(str(o.get(k, "")) for k in ("worktree", "branch", "run_id", "base")))
+PY
+)
+  wt=${wt//$'\r'/}; branch=${branch//$'\r'/}; owner_run=${owner_run//$'\r'/}; owner_base=${owner_base//$'\r'/}
+  if ! python3 - "$owner_file" "$root" "$ws" "$task" <<'PY'
+import json, os, sys
+o=json.load(open(sys.argv[1], encoding="utf-8"))
+if (os.path.realpath(o.get("repository_root", "")) != os.path.realpath(sys.argv[2])
+    or os.path.realpath(o.get("workspace", "")) != os.path.realpath(sys.argv[3])
+    or str(o.get("task_id")) != sys.argv[4]
+    or not o.get("run_id") or not o.get("branch")):
+    raise SystemExit(1)
+PY
+  then echo "WORKTREE-RELEASE: persisted worktree ownership does not match this run" >&2; exit 1; fi
+  root_for_python="$root"
+  if command -v cygpath >/dev/null 2>&1; then root_for_python=$(cygpath -w "$root"); fi
+  if ! python3 - "$wt" "$root_for_python" <<'PY'
+import os, sys
+root=os.path.realpath(os.path.join(sys.argv[2], ".superpowers", "two-model", "worktrees"))
+target=os.path.realpath(sys.argv[1])
+try: valid=os.path.commonpath((root,target)) == root and target != root
+except ValueError: valid=False
+raise SystemExit(0 if valid else 1)
+PY
+  then echo "WORKTREE-RELEASE: persisted path is outside owned worktree root" >&2; exit 1; fi
+else
+  if [ -f "$ws/.pipeline-identity.json" ]; then
+    echo "WORKTREE-RELEASE: canonical run has no persisted task ownership" >&2
+    exit 1
+  fi
+  wt="$root/.superpowers/two-model/worktrees/task-$task"
+  branch="task/$task"
+  owner_run="legacy"
+  owner_base=""
+fi
 
-branch="task/$task"
+wt_git="$wt"
+if command -v cygpath >/dev/null 2>&1; then wt_git=$(cygpath -m "$wt"); fi
 tip=$(git rev-parse --verify --quiet "refs/heads/$branch") || true
 if [ -z "$tip" ]; then
   echo "WORKTREE-RELEASE: $branch not found - keeping worktree" >&2
@@ -40,6 +80,10 @@ base=$(grep '"type": *"worktree_alloc"' "$ws/ledger.jsonl" 2>/dev/null \
 
 if [ -z "$base" ] || ! git merge-base --is-ancestor "$tip" HEAD; then
   echo "WORKTREE-RELEASE: $branch is not merged into HEAD - keeping worktree" >&2
+  exit 1
+fi
+if [ -n "$owner_base" ] && [ "$base" != "$owner_base" ]; then
+  echo "WORKTREE-RELEASE: persisted allocation base does not match ledger - keeping worktree" >&2
   exit 1
 fi
 
@@ -55,8 +99,16 @@ if [ "$tip" = "$base" ]; then
   fi
 fi
 
-if git worktree list --porcelain | grep -Fqx "worktree $wt"; then
-  git worktree remove --force "$wt"
+if git worktree list --porcelain | grep -Fqx "worktree $wt_git" || git worktree list --porcelain | grep -Fqx "worktree $wt"; then
+  dirty=$(git -C "$wt" status --porcelain) || { echo "WORKTREE-RELEASE: cannot verify worktree state" >&2; exit 1; }
+  if [ -n "$dirty" ]; then
+    echo "WORKTREE-RELEASE: dirty worktree - keeping user changes" >&2
+    exit 1
+  fi
+  git worktree remove "$wt"
+else
+  echo "WORKTREE-RELEASE: owned worktree is missing - keeping branch and state" >&2
+  exit 1
 fi
 git worktree prune
 # Never swallow a failed delete: a false "released" hides a live branch.
@@ -66,4 +118,4 @@ if ! git branch -d "$branch"; then
 fi
 
 "$script_dir/ledger-append" "$ws/ledger.jsonl" worktree_release "$task" \
-  "released task/$task"
+  "released $branch" branch="$branch" run_id="$owner_run"

@@ -17,8 +17,8 @@ Mechanical DISCARD triggers (first match wins):
      - a code-generated file (`.freezed.dart`, `.g.dart`, `.gr.dart`,
        `.gen.dart`, `.mocks.dart`): build output, not authored scope, and a
        whole-project generator run rewrites every drifted generated file;
-     - the tracked plan (`docs/superpowers/plans/*.json`): pipeline state the
-       diretor edits during arbitration, never a task's authored scope.
+     - no tracked plan exemption: plan transactions are script-owned, and
+       operator changes to canonical plans must be rejected here.
 
 The test exemption shares `is_test_path` with brief-scaffold: tests are
 defined as `changed - touches`, so every honest task writes files outside
@@ -107,9 +107,6 @@ def main():
             continue
         # Build output (codegen): derived, not authored scope (C3).
         if is_generated_path(c):
-            continue
-        # The tracked plan: pipeline state the diretor edits (C3).
-        if is_plan_path(c):
             continue
         out_of_scope.append(c)
     if out_of_scope:

@@ -63,6 +63,22 @@ append_line() {
   esac
 }
 
+take_writer_lock() {
+  writer_lock_dir="${file}.writer-lock"
+  if ! mkdir "$writer_lock_dir" 2>/dev/null; then
+    if [ -d "$writer_lock_dir" ]; then
+      echo "LEDGER-APPEND: writer lock exists at $writer_lock_dir; refusing concurrent or unreconciled write" >&2
+    else
+      echo "LEDGER-APPEND: cannot create writer lock at $writer_lock_dir" >&2
+    fi
+    exit 1
+  fi
+  printf '%s\n' "pid=$$" > "$writer_lock_dir/owner"
+  trap 'rm -f -- "$writer_lock_dir/owner"; rmdir -- "$writer_lock_dir" 2>/dev/null || true' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+}
+
 # make_line TYPE TASK SUMMARY EXTRAS_JSON - one JSON object, fresh ts.
 make_line() {
   local type=$1 task=$2 summary=$3 extras=$4
@@ -80,6 +96,7 @@ if [ "${1:-}" = "--stdin-tsv" ]; then
     echo "usage: ledger-append --stdin-tsv LEDGER_FILE" >&2
     exit 2
   }
+  take_writer_lock
   count=0
   while IFS= read -r row; do
     row=${row%$'\r'}   # CRLF-safe: a Windows producer may emit \r\n
@@ -120,6 +137,7 @@ file=$1
 type=$2
 task=$3
 summary=$4
+take_writer_lock
 
 extras=""
 if [ $# -gt 4 ]; then

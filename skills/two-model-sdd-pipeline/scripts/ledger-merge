@@ -44,8 +44,8 @@ def load_seen(path):
                     continue
                 try:
                     obj = json.loads(raw)
-                except ValueError:
-                    continue
+                except ValueError as exc:
+                    raise ValueError("corrupt ledger {}".format(path)) from exc
                 if not isinstance(obj, dict):
                     continue
                 seen.add(key_of(obj))
@@ -69,7 +69,8 @@ def main():
     rows = []
     for src in sources:
         if not os.path.isfile(src):
-            continue
+            print("LEDGER-MERGE: required shard is missing: {}".format(src), file=sys.stderr)
+            return 1
         with open(src, encoding="utf-8", errors="replace") as fh:
             for raw in fh:
                 line = raw.strip()
@@ -77,8 +78,9 @@ def main():
                     continue
                 try:
                     entry = json.loads(line)
-                except ValueError:
-                    continue
+                except ValueError as exc:
+                    print("LEDGER-MERGE: corrupt shard {}".format(src), file=sys.stderr)
+                    return 1
                 if not isinstance(entry, dict):
                     continue
                 if entry.get("type") == "gate":
@@ -111,16 +113,19 @@ def main():
         if proc.returncode != 0:
             failed = appended
             appended = 0
-            if proc.stderr.strip():
-                print(proc.stderr.strip(), file=sys.stderr)
-
-    subprocess.run(["bash", os.path.join(HERE, "ledger-migrate"), ws],
-                   capture_output=True)
-    print("LEDGER-MERGE: merged {} entry(ies) into {}".format(appended, ws))
+        if proc.stderr.strip():
+            print(proc.stderr.strip(), file=sys.stderr)
     if failed:
-        print("LEDGER-MERGE: {} entry(ies) failed to append".format(failed),
-              file=sys.stderr)
+        print("LEDGER-MERGE: merged 0 entry(ies) into {}".format(ws))
+        print("LEDGER-MERGE: {} entry(ies) failed to append".format(failed), file=sys.stderr)
         return 1
+
+    migrate = subprocess.run(["bash", os.path.join(HERE, "ledger-migrate"), ws],
+                             capture_output=True, text=True)
+    if migrate.returncode != 0:
+        print("LEDGER-MERGE: partition rebuild failed: {}".format(migrate.stderr.strip()), file=sys.stderr)
+        return 1
+    print("LEDGER-MERGE: merged {} entry(ies) into {}".format(appended, ws))
     return 0
 
 

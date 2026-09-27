@@ -57,7 +57,53 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 root=$(git rev-parse --show-toplevel)
 ws=$1
 ledger="$ws/ledger.jsonl"
+if [ "${PIPELINE_LOCK_HELD:-}" != "1" ]; then
+  branch=$(git branch --show-current)
+  git_common=$(git rev-parse --git-common-dir)
+  repo_id=$(python3 - "$root" "$git_common" <<'PY'
+import hashlib, os, sys
+root, common = sys.argv[1:]
+if not os.path.isabs(common): common = os.path.join(root, common)
+common = os.path.realpath(common)
+if os.name == "nt": common = common.casefold()
+print(hashlib.sha256(common.encode()).hexdigest()[:20])
+PY
+)
+  lock_dir=$(python3 - "$root" "$git_common" <<'PY'
+import os, sys
+root, common=sys.argv[1:]
+if not os.path.isabs(common): common=os.path.join(root,common)
+print(os.path.join(os.path.realpath(common),"pipeline-locks"))
+PY
+)
+  lock_run="${PIPELINE_RUN_ID:-legacy}"
+  if [ -z "${PIPELINE_RUN_ID:-}" ] && [ -f "$ws/.pipeline-identity.json" ]; then
+    lock_run=$(python3 - "$ws/.pipeline-identity.json" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1],encoding="utf-8")).get("run_id","legacy"))
+PY
+)
+  fi
+  mkdir -p "$lock_dir"
+  lock="$lock_dir/$(printf '%s' "$branch" | sha256sum | cut -c1-20).lock"
+  owner=$(REPO_ID="$repo_id" BRANCH="$branch" RUN_ID="$lock_run" python3 -c 'import json,os; print(json.dumps({"repository_id":os.environ["REPO_ID"],"branch":os.environ["BRANCH"],"run_id":os.environ["RUN_ID"]},separators=(",",":")))')
+  REPO_ID="$repo_id" BRANCH="$branch" python3 "$script_dir/state_lock.py" --run "$lock" "$owner" -- bash "$0" "$@"
+  exit $?
+fi
 shift
+
+if ! python3 - "$ledger" <<'PY'
+import json, os, sys
+path=sys.argv[1]
+if not os.path.isfile(path): raise SystemExit("missing ledger")
+for number, line in enumerate(open(path,encoding="utf-8"),1):
+    if not line.strip(): continue
+    try: value=json.loads(line)
+    except ValueError: raise SystemExit("corrupt ledger line {}".format(number))
+    if not isinstance(value,dict) or not all(k in value for k in ("type","task","summary")):
+        raise SystemExit("invalid ledger record at line {}".format(number))
+PY
+then echo "INTEGRATE: corrupt or missing ledger; refusing to change Git state" >&2; exit 1; fi
 
 RUN_GATES_BIN="${RUN_GATES_BIN:-$script_dir/run-gates}"
 GREEN_GATE_BIN="${GREEN_GATE_BIN:-$script_dir/../../flutter-app-pipeline/scripts/green-gate}"
@@ -78,7 +124,7 @@ if [ "$dirty_rc" -ne 0 ]; then
   echo "INTEGRATE: cannot verify a clean integration checkout (git status rc=$dirty_rc) - refusing to integrate" >&2
   for n in "$@"; do
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" \
-      "dirty worktree (status unavailable, rc=$dirty_rc)" || true
+      "dirty worktree (status unavailable, rc=$dirty_rc)"
   done
   exit 1
 fi
@@ -87,12 +133,59 @@ if [ -n "$dirty" ]; then
   printf '%s\n' "$dirty" >&2
   for n in "$@"; do
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" \
-      "dirty worktree" || true
+      "dirty worktree"
   done
   exit 1
 fi
 
-shard_of() { printf '%s' "$root/.superpowers/two-model/worktrees/task-$1/.superpowers/two-model/$slug/ledger.jsonl"; }
+owner_of() { printf '%s/ownership/task-%s.json' "$ws" "$1"; }
+worktree_of() {
+  if [ -f "$(owner_of "$1")" ]; then
+    python3 - "$(owner_of "$1")" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["worktree"])
+PY
+  else printf '%s/.superpowers/two-model/worktrees/task-%s' "$root" "$1"; fi
+}
+branch_of() {
+  if [ -f "$(owner_of "$1")" ]; then
+    python3 - "$(owner_of "$1")" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["branch"])
+PY
+  else printf 'task/%s' "$1"; fi
+}
+shard_of() { printf '%s' "$(worktree_of "$1")/.superpowers/two-model/$slug/ledger.jsonl"; }
+
+ownership_valid() {
+  local n=$1 owner wt branch top current dirty
+  owner=$(owner_of "$n")
+  if [ ! -f "$owner" ]; then
+    [ ! -f "$ws/.pipeline-identity.json" ] && return 0
+    echo "INTEGRATE: task $n has no persisted ownership record" >&2
+    return 1
+  fi
+  wt=$(worktree_of "$n"); branch=$(branch_of "$n")
+  if ! python3 - "$owner" "$root" "$ws" "$n" "$wt" "$branch" <<'PY'
+import json, os, sys
+path, root, workspace, task, wt, branch = sys.argv[1:]
+o=json.load(open(path,encoding="utf-8"))
+same=lambda a,b: os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+if (not same(o.get("repository_root",""),root) or not same(o.get("workspace",""),workspace)
+    or not same(o.get("worktree",""),wt) or str(o.get("task_id")) != task
+    or o.get("branch") != branch or not o.get("run_id")):
+    raise SystemExit(1)
+PY
+  then echo "INTEGRATE: task $n ownership mismatch; refusing integration" >&2; return 1; fi
+  top=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || { echo "INTEGRATE: task $n worktree is missing" >&2; return 1; }
+  current=$(git -C "$wt" branch --show-current 2>/dev/null) || return 1
+  dirty=$(git -C "$wt" status --porcelain 2>/dev/null) || return 1
+  if [ "$current" != "$branch" ] || [ -n "$dirty" ]; then
+    echo "INTEGRATE: task $n worktree branch/state does not match persisted ownership" >&2
+    return 1
+  fi
+  return 0
+}
 
 approved() { grep -qE '"type": *"task_complete"' "$(shard_of "$1")" 2>/dev/null; }
 
@@ -169,6 +262,57 @@ ledger_and_release() {
     # Do NOT release: the worktree holds the only copy of the lost shard.
     return 1
   fi
+  local wt archive manifest branch tip
+  wt=$(worktree_of "$n")
+  branch=$(branch_of "$n")
+  tip=$(git rev-parse "refs/heads/$branch") || return 1
+  if ! git merge-base --is-ancestor "$tip" HEAD; then
+    echo "INTEGRATE: branch tip for task $n is not merged; preserving evidence and worktree" >&2
+    return 1
+  fi
+  local worker_dirty
+  worker_dirty=$(git -C "$wt" status --porcelain) || return 1
+  if [ -n "$worker_dirty" ]; then
+    echo "INTEGRATE: task $n worktree is dirty; preserving user changes" >&2
+    return 1
+  fi
+  archive="$ws/evidence/family-$n.tar.gz"
+  local archive_run="$slug"
+  if [ -f "$(owner_of "$n")" ]; then
+    archive_run=$(python3 - "$(owner_of "$n")" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("run_id", "legacy"))
+PY
+)
+  fi
+  local evidence_root="$wt/.superpowers"
+  manifest=$(python3 - "$evidence_root" "$n" "$archive_run" "$tip" <<'PY'
+import json, os, sys
+root, family, run_id, tip = sys.argv[1:]
+files=[]
+for base, dirs, names in os.walk(root):
+    dirs[:] = sorted(d for d in dirs if d not in ("__pycache__", ".git"))
+    for name in sorted(names):
+        path=os.path.relpath(os.path.join(base,name),root).replace(os.sep,"/")
+        if not path.endswith((".tmp", ".lock")):
+            files.append(path)
+print(json.dumps({"run_id":run_id,"family_id":family,"files":files,"stopped":True,"strict":True,
+                  "clean":True,"approved":True,"merged":True,"merged_tip":tip},separators=(",",":")))
+PY
+)
+  mkdir -p "$(dirname "$archive")"
+  if ! python3 - "$script_dir/evidence_archive.py" "$evidence_root" "$archive" "$manifest" <<'PY'
+import importlib.util, json, sys
+source, root, target, raw = sys.argv[1:]
+spec=importlib.util.spec_from_file_location("evidence_archive",source)
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+module.export_family(root,target,json.loads(raw))
+PY
+  then
+    echo "INTEGRATE: evidence archive failed for task $n - retaining worktree" >&2
+    return 1
+  fi
+  "$script_dir/ledger-append" "$ledger" evidence_archived "$n" "family evidence exported" archive="$archive" || return 1
   rc=0
   "$script_dir/worktree-release" "$ws" "$n" || rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -182,7 +326,8 @@ ledger_and_release() {
 # Carries the ADR-0013 skip. Returns non-zero (and ledgers integration_failed)
 # on conflict / red gate / failed commit.
 merge_one() {
-  local n=$1 shard gated_tree task_tree suite_skip mrc
+  local n=$1 shard gated_tree task_tree suite_skip mrc task_branch
+  task_branch=$(branch_of "$n")
 
   # Suite-skip precheck (ADR-0013): coder-gate's green-gate validated the exact
   # tree of task/N's tip (recorded as `tree=` on the shard's `commit` entry).
@@ -193,17 +338,17 @@ merge_one() {
   suite_skip=0
   gated_tree=""
   if [ -z "$(git status --porcelain 2>/dev/null)" ] \
-     && git merge-base --is-ancestor HEAD "task/$n" 2>/dev/null; then
+     && git merge-base --is-ancestor HEAD "$task_branch" 2>/dev/null; then
     shard="$(shard_of "$n")"
     gated_tree=$(grep -E '"type": *"commit"' "$shard" 2>/dev/null \
       | tail -1 | sed -n 's/.*"tree": *"\([0-9a-fA-F]*\)".*/\1/p' || true)
-    task_tree=$(git rev-parse "task/$n^{tree}" 2>/dev/null || true)
+    task_tree=$(git rev-parse "$task_branch^{tree}" 2>/dev/null || true)
     if [ -n "$gated_tree" ] && [ "$gated_tree" = "$task_tree" ]; then
       suite_skip=1
     fi
   fi
 
-  if ! git merge --no-commit --no-ff "task/$n" >/dev/null 2>&1; then
+  if ! git merge --no-commit --no-ff "$task_branch" >/dev/null 2>&1; then
     git merge --abort 2>/dev/null || true
     "$script_dir/ledger-append" "$ledger" integration_failed "$n" "conflict"
     return 1
@@ -238,6 +383,7 @@ ordered=$(printf '%s\n' "$@" | sort -n)
 todo=""
 noop=""
 for n in $ordered; do
+  if ! ownership_valid "$n"; then failed=1; continue; fi
   # Approval precheck: only a shard carrying `task_complete` proves the revisor
   # approved the task. Merging (and releasing) an un-approved branch would ship
   # unreviewed work and destroy the only debug copy.
@@ -252,7 +398,8 @@ for n in $ordered; do
   # commit" (which would strand the worktree and block final-gate's
   # leftover-branch check).
   base_sha=$(alloc_base "$n")
-  tip_sha=$(git rev-parse --verify --quiet "refs/heads/task/$n" || true)
+  task_branch=$(branch_of "$n")
+  tip_sha=$(git rev-parse --verify --quiet "refs/heads/$task_branch" || true)
   if [ -n "$base_sha" ] && [ -n "$tip_sha" ] && [ "$tip_sha" = "$base_sha" ]; then
     noop="$noop $n"
   else
@@ -280,7 +427,8 @@ else
   batch_ok=1
   batch_shas=()
   for n in $todo; do
-    if ! git merge --no-ff -m "merge task/$n" "task/$n" >/dev/null 2>&1; then
+    task_branch=$(branch_of "$n")
+    if ! git merge --no-ff -m "merge $task_branch" "$task_branch" >/dev/null 2>&1; then
       git merge --abort 2>/dev/null || true
       batch_ok=0
       break

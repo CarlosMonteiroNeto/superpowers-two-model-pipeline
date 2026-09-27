@@ -44,11 +44,25 @@ def task_of(entry):
     return entry.get("task")
 
 
-def touches_of(task):
-    return set(task.get("touches") or [])
+def touches_of(task, plan=None):
+    result = set(task.get("touches") or [])
+    verification = task.get("verification") or {}
+    if isinstance(verification, dict):
+        result.update(verification.get("new_test_files") or [])
+    result.update(task.get("new_test_files") or [])
+    result.update(task.get("shared_resources") or [])
+    result.update(task.get("resources") or [])
+    if plan:
+        global_verification = plan.get("verification") or {}
+        if isinstance(global_verification, dict):
+            per_task = global_verification.get("by_task", {}).get(str(task.get("id")), {})
+            if isinstance(per_task, dict):
+                result.update(per_task.get("new_test_files") or [])
+                result.update(per_task.get("shared_resources") or [])
+    return {os.path.normcase(str(p).replace("\\", "/")).replace("\\", "/") for p in result}
 
 
-def conflicts(selected, candidate):
+def conflicts(selected, candidate, plan=None):
     """Declared-touches overlap between a candidate and the chosen wave.
 
     A local set intersection (the same contract as the standalone
@@ -57,8 +71,8 @@ def conflicts(selected, candidate):
     """
     claimed = set()
     for t in selected:
-        claimed |= touches_of(t)
-    return sorted(claimed & touches_of(candidate))
+        claimed |= touches_of(t, plan)
+    return sorted(claimed & touches_of(candidate, plan))
 
 
 def main():
@@ -74,7 +88,8 @@ def main():
     if not os.path.isfile(plan_path) or cap < 1:
         return 2
     with open(plan_path, encoding="utf-8", errors="replace") as fh:
-        tasks = json.load(fh).get("tasks", [])
+        plan = json.load(fh)
+    tasks = plan.get("tasks", [])
     ledger = load_ledger(os.path.join(ws, "ledger.jsonl"))
 
     # One pass over the ledger into per-task event lists (the previous shape
@@ -133,7 +148,7 @@ def main():
     for t in sorted(ready, key=lambda x: (len(touches_of(x)), int(x["id"]))):
         if len(selected) >= cap:
             break
-        clash = conflicts(selected, t)
+        clash = conflicts(selected, t, plan)
         if clash:
             print(
                 "WAVE-DEFER: task {} deferred - shares {} with the wave".format(

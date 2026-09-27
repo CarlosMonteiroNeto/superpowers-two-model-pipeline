@@ -55,8 +55,49 @@ slug=${slug%.md}
 
 root=$(git rev-parse --show-toplevel)
 root=$(normalize_posix_path "$root")
+root_python="$root"
+if command -v cygpath >/dev/null 2>&1; then root_python=$(cygpath -w "$root"); fi
 base="$root/.superpowers/two-model"
-dir="$base/$slug"
+# New canonical plans are namespaced by repository and relative plan path.
+# Preserve the historic basename workspace only for pre-contract legacy plans.
+identity=$(python3 - "$SCRIPT_DIR" "$root_python" "$plan" <<'PY'
+import importlib.util, json, os, sys
+scripts, root, plan_path = sys.argv[1:]
+with open(plan_path, encoding="utf-8") as f: plan = json.load(f)
+if not isinstance(plan, dict) or "spec_doc" not in plan:
+    print(""); raise SystemExit(0)
+spec = importlib.util.spec_from_file_location("run_identity", os.path.join(scripts, "run_identity.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+run_id = os.environ.get("PIPELINE_RUN_ID", "default")
+value = mod.create_identity(root, plan_path, run_id)
+print(json.dumps(value, separators=(",", ":")))
+PY
+)
+if [ -n "$identity" ]; then
+  workspace_key=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["workspace_key"])' "$identity")
+  dir="$base/$workspace_key"
+  export PIPELINE_IDENTITY_JSON="$identity"
+else
+  dir="$base/$slug"
+fi
+
+# The same validator gates first creation and every later refresh. Old plans
+# without the R3 canonical contract retain the legacy reader during migration.
+python3 - "$SCRIPT_DIR" "$root_python" "$plan" <<'PY'
+import importlib.util, json, os, sys
+scripts, root, path = sys.argv[1:]
+try:
+    with open(path, encoding="utf-8") as f: plan = json.load(f)
+except Exception as exc:
+    print("PIPELINE-WORKSPACE: invalid plan: {}".format(exc), file=sys.stderr); raise SystemExit(1)
+if isinstance(plan, dict) and "spec_doc" in plan:
+    spec = importlib.util.spec_from_file_location("plan_validation", os.path.join(scripts, "plan_validation.py"))
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    try: module.validate_plan(plan, root)
+    except ValueError as exc:
+        print("PIPELINE-WORKSPACE: {}".format(exc), file=sys.stderr); raise SystemExit(1)
+PY
+[ $? -eq 0 ] || exit 1
 
 if [ "$refresh" -eq 1 ]; then
   mkdir -p "$dir"
@@ -64,10 +105,12 @@ if [ "$refresh" -eq 1 ]; then
   # unreadable file, invalid JSON, a non-object root, missing/non-list/empty
   # tasks, missing required task fields, duplicate/nonpositive integer ids, and
   # empty/non-list acceptance. A failure leaves the previous snapshot intact.
-  python3 - "$plan" <<'PY'
+  python3 - "$plan" "$root_python" "$SCRIPT_DIR" <<'PY'
 import json, sys
 
 path = sys.argv[1]
+root = sys.argv[2]
+scripts = sys.argv[3]
 
 
 def fail(msg):
@@ -83,6 +126,14 @@ except Exception as exc:
 
 if not isinstance(plan, dict):
     fail("root is not an object")
+if "spec_doc" in plan:
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location("plan_validation", os.path.join(scripts, "plan_validation.py"))
+    validator = importlib.util.module_from_spec(spec); spec.loader.exec_module(validator)
+    try:
+        validator.validate_plan(plan, os.getcwd())
+    except ValueError as exc:
+        fail(str(exc))
 tasks = plan.get("tasks")
 if not isinstance(tasks, list) or not tasks:
     fail("tasks must be a non-empty list")
@@ -118,6 +169,10 @@ PY
     echo "PIPELINE-WORKSPACE: cannot replace the plan snapshot" >&2
     exit 1
   fi
+  if [ -n "$identity" ]; then
+    printf '%s\n' "$identity" > "$dir/.pipeline-identity.json.tmp.$$"
+    mv -f "$dir/.pipeline-identity.json.tmp.$$" "$dir/.pipeline-identity.json"
+  fi
   cd "$dir" && pwd
   exit 0
 fi
@@ -127,6 +182,10 @@ printf '*\n' > "$base/.gitignore"
 # Working copy for the gates (route-next reads $dir/plan.json); the
 # tracked original at $plan is the permanent record.
 cp -f "$plan" "$dir/plan.json"
+if [ -n "$identity" ]; then
+  printf '%s\n' "$identity" > "$dir/.pipeline-identity.json.tmp.$$"
+  mv -f "$dir/.pipeline-identity.json.tmp.$$" "$dir/.pipeline-identity.json"
+fi
 # One-time backward-compat split: mid-project upgrades may have a global
 # ledger.jsonl with no per-task partitions yet. Rebuild them best-effort so
 # route-next's hot path stays O(this task). Fresh workspaces have no ledger

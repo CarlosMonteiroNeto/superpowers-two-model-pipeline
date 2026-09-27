@@ -36,8 +36,23 @@ def main():
     if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list):
         print("TOUCHES-OVERLAP: plan.json has no tasks list", file=sys.stderr)
         return 2
-    touches = {str(t.get("id")): set(t.get("touches", []))
-               for t in plan.get("tasks", [])}
+    def resources(task):
+        result = set(task.get("touches") or [])
+        verification = task.get("verification") or {}
+        if isinstance(verification, dict):
+            result.update(verification.get("new_test_files") or [])
+        result.update(task.get("new_test_files") or [])
+        result.update(task.get("shared_resources") or [])
+        result.update(task.get("resources") or [])
+        global_verification = plan.get("verification") or {}
+        if isinstance(global_verification, dict):
+            per_task = global_verification.get("by_task", {}).get(str(task.get("id")), {})
+            if isinstance(per_task, dict):
+                result.update(per_task.get("new_test_files") or [])
+                result.update(per_task.get("shared_resources") or [])
+        return {os.path.normcase(str(p).replace("\\", "/")).replace("\\", "/") for p in result}
+
+    touches = {str(t.get("id")): resources(t) for t in plan.get("tasks", [])}
     unknown = [i for i in ids if i not in touches]
     if unknown:
         print("TOUCHES-OVERLAP: unknown task id(s) {}".format(",".join(unknown)),

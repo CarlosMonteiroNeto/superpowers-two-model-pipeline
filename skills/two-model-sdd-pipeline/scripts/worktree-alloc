@@ -23,11 +23,43 @@ ws=$1
 task=$2
 script_dir=$(cd "$(dirname "$0")" && pwd)
 root=$(git rev-parse --show-toplevel)
-wt="$root/.superpowers/two-model/worktrees/task-$task"
+slug="${WS_SLUG:-$(basename "$ws")}"
+owner_file="$ws/ownership/task-$task.json"
+if [ -f "$ws/.pipeline-identity.json" ]; then
+  identity=$(cat "$ws/.pipeline-identity.json")
+  root_for_python="$root"
+  if command -v cygpath >/dev/null 2>&1; then root_for_python=$(cygpath -w "$root"); fi
+  identity_fields=$(python3 - "$script_dir" "$root_for_python" "$ws/.pipeline-identity.json" <<'PY'
+import importlib.util, json, os, sys
+scripts, root, path = sys.argv[1:]
+try:
+    record=json.load(open(path,encoding="utf-8"))
+    spec=importlib.util.spec_from_file_location("run_identity",os.path.join(scripts,"run_identity.py"))
+    module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    expected=module.create_identity(record["repository_root"],record["plan_path"],record["run_id"])
+    same=lambda a,b: os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+    if not same(expected["repository_root"],root) or any(expected[k] != record.get(k) for k in ("repository_id","identity","workspace_key","run_id","plan_path")):
+        raise ValueError("identity does not match this repository/plan/run")
+    print(record["run_id"]+"\t"+record["workspace_key"])
+except Exception as exc:
+    print("WORKTREE-ALLOC: invalid run identity: {}".format(exc),file=sys.stderr); raise SystemExit(1)
+PY
+)
+  IFS=$'\t' read -r run_id plan_key <<< "$identity_fields"
+  safe_run=$(printf '%s' "$run_id" | tr -cs 'A-Za-z0-9._-' '-')
+  namespace="$plan_key/$safe_run"
+  wt="$root/.superpowers/two-model/worktrees/$namespace/task-$task"
+  branch="codex/pipeline/$namespace/task-$task"
+else
+  run_id="legacy"
+  namespace=""
+  wt="$root/.superpowers/two-model/worktrees/task-$task"
+  branch="task/$task"
+fi
 # Derived before the idempotency check so the already-allocated (exit 1) path
 # can still report where the live worktree and its workspace are: the bounded
 # integration-failure recovery reuses that worktree and needs both paths.
-wt_ws="$wt/.superpowers/two-model/${WS_SLUG:-$(basename "$ws")}"
+wt_ws="$wt/.superpowers/two-model/$slug"
 
 # Idempotency: a worktree OR an orphan branch for this task means "already
 # allocated". Checking only the worktree list would let `worktree add -b`
@@ -35,7 +67,25 @@ wt_ws="$wt/.superpowers/two-model/${WS_SLUG:-$(basename "$ws")}"
 # are printed on stdout in both cases so callers can reuse an existing
 # worktree (exit 1) exactly like a fresh one (exit 0).
 if git worktree list --porcelain | grep -Fqx "worktree $wt" \
-   || git show-ref --verify --quiet "refs/heads/task/$task"; then
+   || git show-ref --verify --quiet "refs/heads/$branch"; then
+  if [ ! -f "$owner_file" ]; then
+    echo "WORKTREE-ALLOC: orphaned branch/worktree for task $task; refusing reuse" >&2
+    exit 1
+  fi
+  valid_owner=$(python3 - "$owner_file" "$root" "$ws" "$wt" "$branch" "$run_id" "$task" <<'PY'
+import json, os, sys
+try:
+    o=json.load(open(sys.argv[1], encoding="utf-8"))
+    expected=(os.path.realpath(sys.argv[2]), os.path.realpath(sys.argv[3]), os.path.realpath(sys.argv[4]), sys.argv[5], sys.argv[6], str(sys.argv[7]))
+    actual=(os.path.realpath(o.get("repository_root", "")), os.path.realpath(o.get("workspace", "")), os.path.realpath(o.get("worktree", "")), o.get("branch"), o.get("run_id"), str(o.get("task_id")))
+    print("yes" if actual == expected else "no")
+except Exception: print("no")
+PY
+)
+  if [ "$valid_owner" != "yes" ] || ! git worktree list --porcelain | grep -Fqx "worktree $wt" || ! git show-ref --verify --quiet "refs/heads/$branch"; then
+    echo "WORKTREE-ALLOC: ownership mismatch for task $task; refusing reuse" >&2
+    exit 1
+  fi
   echo "WORKTREE-ALLOC: task $task already allocated at $wt" >&2
   echo "WORKTREE=$wt"
   echo "WS=$wt_ws"
@@ -45,7 +95,7 @@ fi
 base=$(git rev-parse HEAD)
 
 mkdir -p "$(dirname "$wt")"
-git worktree add -q "$wt" -b "task/$task" HEAD
+git worktree add -q "$wt" -b "$branch" HEAD
 
 # Warm the new tree: everything that makes a Flutter/Dart tree fast
 # (.dart_tool, pubspec.lock) is gitignored and does not travel with a worktree,
@@ -71,10 +121,24 @@ mkdir -p "$wt_ws"
 printf '*\n' > "$root/.superpowers/two-model/.gitignore"
 printf '*\n' > "$wt/.superpowers/two-model/.gitignore"
 cp -f "$ws/plan.json" "$wt_ws/plan.json"
+mkdir -p "$(dirname "$owner_file")"
+python3 - "$owner_file" "$root" "$ws" "$wt" "$branch" "$run_id" "$task" "$base" <<'PY'
+import json, os, sys, tempfile
+path, root, ws, wt, branch, run_id, task, base = sys.argv[1:]
+record = {"repository_root": os.path.realpath(root), "workspace": os.path.realpath(ws),
+          "worktree": os.path.realpath(wt), "branch": branch, "run_id": run_id,
+          "family_id": str(task), "task_id": str(task), "base": base}
+fd, tmp = tempfile.mkstemp(prefix="owner-", dir=os.path.dirname(path))
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    json.dump(record, f, sort_keys=True, indent=2); f.write("\n"); f.flush(); os.fsync(f.fileno())
+os.replace(tmp, path)
+PY
+cp -f "$owner_file" "$wt_ws/ownership.json"
+if [ -f "$ws/.pipeline-identity.json" ]; then cp -f "$ws/.pipeline-identity.json" "$wt_ws/.pipeline-identity.json"; fi
 grep '"type": *"gate"' "$ws/ledger.jsonl" | tail -1 > "$wt_ws/ledger.jsonl" || : > "$wt_ws/ledger.jsonl"
 
 "$script_dir/ledger-append" "$ws/ledger.jsonl" worktree_alloc "$task" \
-  "allocated task/$task" worktree="$wt" base="$base"
+  "allocated $branch" worktree="$wt" branch="$branch" base="$base" run_id="$run_id"
 
 echo "WORKTREE=$wt"
 echo "WS=$wt_ws"
