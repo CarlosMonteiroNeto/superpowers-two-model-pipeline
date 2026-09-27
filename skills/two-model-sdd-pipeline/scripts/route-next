@@ -99,6 +99,9 @@ for raw in sys.stdin:
  if e.get("type")=="operator_result": items.append(e)
 if items:
  e=items[-1]; status=e.get("status"); final=e.get("final_output")
+ if isinstance(final,str):
+  try: final=json.loads(final)
+  except Exception: final=None
  try: clean=dispatch_contract._validate_operator(final)
  except Exception: clean=None
  if not isinstance(clean,dict) or clean.get("status") != status:

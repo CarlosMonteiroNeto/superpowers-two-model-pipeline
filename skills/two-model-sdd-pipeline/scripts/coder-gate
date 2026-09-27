@@ -185,7 +185,7 @@ scope_ok() {
 
 while true; do
   flutter_green_gate=0
-  if [ -f "$log" ]; then
+  if [ -f "$log" ] || grep -qE '"type": *"operator_result"' "$ledger" 2>/dev/null; then
     # Scoped TEST_DEFECT detection: only the operador's final status line counts.
     # A whole-log grep would false-positive on the fix prompt text this script
     # itself writes into the round-N log (it contains the word TEST_DEFECT as
@@ -202,7 +202,9 @@ try:
   normalized=[json.loads(line) for line in f if line.strip()]
  normalized=[e for e in normalized if e.get("type")=="operator_result" and str(e.get("task"))==sys.argv[3]]
  if normalized:
-  event=normalized[-1]; clean=dispatch_contract._validate_operator(event.get("final_output"))
+  event=normalized[-1]; final=event.get("final_output")
+  if isinstance(final,str): final=json.loads(final)
+  clean=dispatch_contract._validate_operator(final)
   if clean.get("status") != event.get("status"): raise ValueError("status binding mismatch")
   print(clean["status"]); raise SystemExit(0)
 except Exception:

@@ -29,6 +29,16 @@ task=$2
 brief="$ws/task-$task-brief.md"
 ledger="$ws/ledger.jsonl"
 
+pipeline_backend=${PIPELINE_BACKEND:-}
+if [ -z "$pipeline_backend" ]; then
+  if [ -f "$ws/plan.json" ] && python3 -c 'import json,sys; raise SystemExit(0 if "spec_doc" in json.load(open(sys.argv[1],encoding="utf-8")) else 1)' "$ws/plan.json"; then
+    echo "RED-GATE: canonical plan requires explicit PIPELINE_BACKEND" >&2; exit 2
+  fi
+  pipeline_backend=opencode
+fi
+case "$pipeline_backend" in codex|opencode) ;; *) echo "RED-GATE: unsupported backend $pipeline_backend" >&2; exit 2 ;; esac
+export PIPELINE_BACKEND="$pipeline_backend"
+
 [ -f "$brief" ] || { echo "RED-GATE: no brief: $brief" >&2; exit 2; }
 
 test_cmd=${3:-}
@@ -103,7 +113,7 @@ fi
 # exit code already decided.
 DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
 set +e
-"$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$task" \
+"$DISPATCH_RETRY_BIN" --backend "$pipeline_backend" --agent "$coder_agent" --task "$task" \
   "${resume_args[@]}" \
   --prompt-file "$brief" --log "$ws/task-$task-coder.log"
 dispatch_rc=$?

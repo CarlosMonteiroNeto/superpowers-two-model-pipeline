@@ -1,23 +1,99 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-if [ "$#" -ne 2 ] || [ "$1" != "--request" ] || [ ! -f "$2" ]; then
-  echo "usage: dispatch-codex --request REQUEST.json" >&2; exit 2
-fi
-request=$2
 runtime=${CODEX_RUNTIME_JSON:-}
 if [ -z "$runtime" ] || [ ! -f "$runtime" ]; then echo "dispatch-codex: CODEX_RUNTIME_JSON must point to validated runtime envelope" >&2; exit 4; fi
-PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 - "$request" "$runtime" <<'PY'
-import json, sys
+if [ "${1:-}" = "--request" ] && [ "$#" -eq 2 ] && [ -f "$2" ]; then
+  mode=request
+  request=$2
+elif [ "$#" -ge 6 ] && [ "$1" = "--agent" ]; then
+  mode=operator
+else
+  echo "usage: dispatch-codex --request REQUEST.json | --agent OPERATOR --task N --prompt-file FILE --log FILE [--continue SESSION]" >&2; exit 2
+fi
+PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 - "$mode" "${request:-}" "$runtime" "$@" <<'PY'
+import hashlib, json, os, pathlib, subprocess, sys
 import codex_dispatch
+import dispatch_contract
+
+mode, request_path, runtime_path = sys.argv[1:4]
+args = sys.argv[4:]
+
+def parse_operator_args(argv):
+    values={}; i=0
+    while i < len(argv):
+        key=argv[i]
+        if key in ("--agent", "--task", "--prompt-file", "--log", "--continue") and i+1 < len(argv):
+            values[key]=argv[i+1]; i+=2
+        else: raise ValueError("unsupported Codex operator dispatch argument: " + key)
+    for key in ("--agent", "--task", "--prompt-file", "--log"):
+        if not values.get(key): raise ValueError("missing " + key)
+    return values
+
+def build_operator_request(v, runtime):
+    agent=v["--agent"]
+    if not agent.startswith("two-model-coder"):
+        raise ValueError("Codex legacy adapter only accepts the operator role")
+    task=int(v["--task"]); prompt=pathlib.Path(v["--prompt-file"]).resolve()
+    ws=pathlib.Path(v["--log"]).resolve().parent
+    plan_path=ws/"plan.json"; identity_path=ws/".pipeline-identity.json"
+    if not plan_path.is_file() or not identity_path.is_file():
+        raise ValueError("Codex operator dispatch requires canonical plan and pipeline identity")
+    plan=json.loads(plan_path.read_text(encoding="utf-8")); identity=json.loads(identity_path.read_text(encoding="utf-8"))
+    manifest=runtime.get("manifest",{}); role=manifest.get("roles",{}).get("operator",{})
+    config_hash=manifest.get("config_hash") or runtime.get("config_hash")
+    if manifest.get("backend")!="codex" or not config_hash or not role.get("model"):
+        raise ValueError("selected Codex runtime is missing operator configuration identity")
+    task_map={str(t.get("id")):t for t in plan.get("tasks",[])}
+    item=task_map.get(str(task))
+    if not item: raise ValueError("operator task is missing from canonical plan")
+    seen=set()
+    while item.get("corrects") is not None:
+        parent=str(item["corrects"])
+        if parent in seen or parent not in task_map: raise ValueError("invalid correction-family chain")
+        seen.add(parent); item=task_map[parent]
+    family=int(item["id"]); run_id=identity.get("run_id"); repo_id=identity.get("repository_id")
+    if not run_id or not repo_id: raise ValueError("canonical pipeline identity is incomplete")
+    root=pathlib.Path(subprocess.check_output(["git","rev-parse","--show-toplevel"],cwd=str(ws),text=True).strip()).resolve()
+    base=subprocess.check_output(["git","rev-parse","HEAD"],cwd=str(root),text=True).strip()
+    plan_hash=hashlib.sha256(plan_path.read_bytes()).hexdigest()
+    prompt_hash=hashlib.sha256(prompt.read_bytes()).hexdigest()
+    dispatch_id=hashlib.sha256("\0".join((run_id,str(task),"operator",plan_hash,prompt_hash)).encode()).hexdigest()[:32]
+    evidence=root/".superpowers"/"dispatch"/str(family)/"operator"/dispatch_id
+    req={"version":1,"backend":"codex","run_id":run_id,"dispatch_id":dispatch_id,
+      "task_id":task,"task_family":family,"episode_id":"{}-family-{}".format(run_id,family),
+      "role":"operator","repository_id":repo_id,"worktree":str(root),"plan_revision":plan_hash,
+      "base_commit":base,"config_hash":config_hash,"prompt_hash":prompt_hash,
+      "requested_model":role["model"],"requested_effort":role.get("settings",{}).get("model_reasoning_effort"),
+      "evidence_paths":{"request_path":str(evidence/"request.json"),"prompt_path":str(prompt),
+       "events_path":str(evidence/"events.jsonl"),"stderr_path":str(evidence/"stderr.log"),
+       "final_path":str(evidence/"final.json"),"result_path":str(evidence/"result.json")}}
+    req=dispatch_contract.validate_request(req)
+    return req, ws
+
 try:
-    with open(sys.argv[1], encoding="utf-8") as f: request=json.load(f)
-    with open(sys.argv[2], encoding="utf-8") as f: runtime=json.load(f)
+    with open(runtime_path, encoding="utf-8") as f: runtime=json.load(f)
     if not isinstance(runtime, dict):
         raise ValueError("runtime envelope must be an object")
     if not isinstance(runtime.get("process_registry"), list):
         runtime["process_registry"] = []
-    codex_dispatch.run_dispatch(request, runtime)
+    if mode == "request":
+        with open(request_path, encoding="utf-8") as f: request=json.load(f)
+        codex_dispatch.run_dispatch(request, runtime)
+    else:
+        values=parse_operator_args(args)
+        request, workspace=build_operator_request(values,runtime)
+        if values.get("--continue"):
+            runtime["resume"]=True; runtime["resume_session_id"]=values["--continue"]
+        result=codex_dispatch.run_dispatch(request,runtime)
+        status=result["final_output"]["status"]
+        cmd=[str(pathlib.Path(__file__).resolve().parent/"ledger-append"),str(workspace/"ledger.jsonl"),
+          "operator_result",str(request["task_id"]),status,
+          "status="+status,
+          "dispatch_id="+request["dispatch_id"],
+          "candidate_commit="+result["candidate_commit"],
+          "final_output="+json.dumps(result["final_output"],ensure_ascii=False,separators=(",",":"))]
+        subprocess.run(cmd,check=True)
 except KeyboardInterrupt:
     raise SystemExit(130)
 except Exception as exc:
