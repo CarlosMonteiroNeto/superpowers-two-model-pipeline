@@ -1,0 +1,21 @@
+test_conflicting_revisions_for_one_skill_are_surfaced (test_r2_prompt_headers.PromptHeaderTests.test_conflicting_revisions_for_one_skill_are_surfaced) ... ok
+test_empty_skill_content_still_renders_identity_for_revision_hashing (test_r2_prompt_headers.PromptHeaderTests.test_empty_skill_content_still_renders_identity_for_revision_hashing) ... FAIL
+test_prompt_hash_changes_when_dispatch_inputs_change (test_r2_prompt_headers.PromptHeaderTests.test_prompt_hash_changes_when_dispatch_inputs_change) ... ok
+test_prompt_hash_changes_when_skill_revision_changes_without_content_change (test_r2_prompt_headers.PromptHeaderTests.test_prompt_hash_changes_when_skill_revision_changes_without_content_change) ... ok
+test_prompt_keeps_required_sections_in_contract_order (test_r2_prompt_headers.PromptHeaderTests.test_prompt_keeps_required_sections_in_contract_order) ... ok
+test_required_prompt_context_is_rejected_when_over_budget (test_r2_prompt_headers.PromptHeaderTests.test_required_prompt_context_is_rejected_when_over_budget) ... ok
+test_shared_role_content_has_the_same_identity_across_backend_policies (test_r2_prompt_headers.PromptHeaderTests.test_shared_role_content_has_the_same_identity_across_backend_policies) ... ok
+test_unknown_roles_and_missing_mandatory_context_fail_before_dispatch (test_r2_prompt_headers.PromptHeaderTests.test_unknown_roles_and_missing_mandatory_context_fail_before_dispatch) ... ok
+
+======================================================================
+FAIL: test_empty_skill_content_still_renders_identity_for_revision_hashing (test_r2_prompt_headers.PromptHeaderTests.test_empty_skill_content_still_renders_identity_for_revision_hashing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_prompt_headers.py", line 129, in test_empty_skill_content_still_renders_identity_for_revision_hashing
+    self.assertIn("domain-test-skill", first["text"])
+AssertionError: 'domain-test-skill' not found in "## Role and protocol\nROLE-PROTOCOL-7\n\n## Authority\nAUTHORITY-ORDER-3\n\n## Adapted role core\nSource: https://github.com/obra/superpowers@v6.3.0 (b36e0829c6d0140e93cfef2ca599b1b07d4a7797)\n\n# Operator core\n\n## Test and implementation loop\n\nWrite the test first. Run it and confirm a behavior-specific RED before changing production code. A collection or setup error is not proof of the expected behavior. Implement the smallest change that satisfies the accepted test, then run the focused test and confirm GREEN. Do not weaken acceptance tests to make the implementation pass.\n\nDerive tests from the break they should catch. Prefer observable behavior and hand-checked expectations over mocks of the code under test. Keep each change within the assigned task and authorized paths.\n\n## Self-review and evidence\n\nBefore reporting, inspect the complete diff for scope, correctness, and missed requirements. Run the requested checks and report their commands and results accurately. Do not claim completion from an earlier run or from another worker's report.\n\n## Pipeline authority\n\nFollow the supplied task package and role protocol. Script CEO controls dispatch, retries, worktrees, commits, integration, and publication. Do not delegate, commit, alter plans or ledger state, or request an interactive approval. Report a concrete blocker or TEST_DEFECT through the output contract; do not invent authority to route around it.\n\n\n## Backend policy\nCODEX-POLICY\n\n## Domain skills\n\n\n## Task acceptance\nTASK-ACCEPTANCE-11\n\n## Output contract\nOUTPUT-CONTRACT-5"
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.022s
+
+FAILED (failures=1)

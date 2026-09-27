@@ -174,3 +174,9 @@ Task 3 — implementation candidate and independent review
 - Independent raw-blob audit matched all 13 source/license records and embedded MIT notice against `git cat-file blob` at `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`.
 - Controller `test-integrity f00fdf2 1ebc5d6` passed for both RED files. Review package: `.superpowers/sdd/r2-worker-runtime-codex/review-f00fdf2..1ebc5d6.diff`.
 - Task 3 remains pending the separate spec/quality review. Do not begin Task 4 until approval or another finding receives a controller-owned RED/GREEN cycle.
+
+Task 3 — independent review finding and controller-owned RED
+- The separate review found an Important edge case: `_skill_content` omitted an entry's ID and revision whenever selected content was empty/whitespace, leaving its revision out of prompt text/hash even though manifest validation permits an empty section list.
+- Controller verified the flow in `skill_manifest.py` and `prompt_headers.py`. Ruling: keep empty selections valid, but always render the selected skill identity/revision so the full-prompt hash binds every selected input.
+- Added `test_empty_skill_content_still_renders_identity_for_revision_hashing`; focused RED: `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_prompt_headers.py' -v` — 7 passed, 1 expected failure because `domain-test-skill` was absent from the rendered prompt. Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-3-red-empty-skill.txt`.
+- Task 3 requires a focused fix and independent re-review before it is approved. Task 4 remains pending.
