@@ -200,3 +200,8 @@ Task 4 — controller-owned RED baseline
 Task 5 — controller-owned RED baseline
 - Authored Task 5 brief and three controller-owned acceptance suites. Canonical 	est_codex_*.py run: 79 tests, 10 expected failures, 69 passed; failures assert missing Task 5 adapters/entrypoints and rejected incomplete resume request. Raw output: 	ask-5-red.txt.
 - Runtime envelope is documented separately from strict normalized R1 request. Implementer must preserve tests. Model preference: GPT-6 Luna, medium effort for all agents.
+
+Task 5 — backend adapters and shared lifecycle
+- Candidate history: initial implementation `ba1fd42`; review fix `2208c02`; registry correction `096a2c3`; exit classification `d31a346`. Independent review of the initial candidate found identity/config binding, lifecycle persistence, cancellation, and task-scoped cleanup gaps; controller RED rounds were added before each fix. Final code fixes the findings, and subsequent source inspection confirmed registry keeps runtime separate from normalized R1 requests, OpenCode cancellation reports unsupported instead of invoking Codex process termination, and Codex pre-exec launch failure maps to retryable code 5 while ambiguous/post-start failure maps to nonretryable code 6.
+- Final verification reported by implementer: `test_codex_*.py` 91 passed; legacy dispatch/retry/session-clean 31 passed; integrity checks passed against `ba44cc2..d31a346` and previous review baselines; raw logs: `task-5-fix3-codex-green.txt`, `task-5-fix3-legacy-green.txt`, `task-5-fix3-integrity.txt`. No live provider probe or native Windows cancellation probe.
+- Task 5 is accepted on source review and reported automated evidence; proceed to Task 6.
