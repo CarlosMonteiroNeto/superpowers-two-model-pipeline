@@ -22,6 +22,31 @@ CAPABILITY_LISTS = ("unhooked_mutating_tools", "managed_policy_conflicts",
                     "inherited_instruction_conflicts")
 _SHELL_SYNTAX = re.compile(r"[\n\r;&|<>`]|\$\(|\$\{|\x00")
 _PATCH_TARGET = re.compile(r"^\*\*\* (Update|Add|Delete) File: (.+?)\s*$")
+_REVIEW_FORBIDDEN_TOOLS = {
+    "pytest", "py.test", "unittest", "tox", "nox", "jest", "vitest",
+    "mocha", "cargo", "go", "ruff", "mypy", "pyright", "eslint",
+    "tsc", "prettier", "black", "yapf", "isort", "autopep8",
+}
+
+
+def _review_safe_read_only(argv):
+    """Keep reviewer descriptors limited to inspection, never validation/mutation."""
+    if not isinstance(argv, list) or not argv or not all(isinstance(v, str) and v for v in argv):
+        return False
+    executable = pathlib.PurePath(argv[0].replace("\\", "/")).name.casefold()
+    if executable.endswith((".exe", ".cmd", ".bat")):
+        executable = executable.rsplit(".", 1)[0]
+    if executable in _REVIEW_FORBIDDEN_TOOLS:
+        return False
+    # Common package-manager test/analyze/format subcommands are forbidden too.
+    action_tokens = {token.casefold() for token in argv[1:]}
+    if executable in {"npm", "pnpm", "yarn", "bun"} and action_tokens.intersection(
+            {"test", "run", "lint", "check", "format", "fmt"}):
+        return False
+    if executable in {"make", "gmake", "cmake"} and action_tokens.intersection(
+            {"test", "check", "lint", "format", "fmt", "analyze", "analyse"}):
+        return False
+    return True
 
 
 def _fail(message):
@@ -107,6 +132,9 @@ def _policy_root(policy):
         raise ValueError("workspace root is not a directory")
     if policy.get("role") not in ROLES or not policy.get("task_id") or not policy.get("attempt_id"):
         raise ValueError("invalid attempt policy identity")
+    if policy.get("role") == "reviewer" and any(
+            not _review_safe_read_only(argv) for argv in policy["read_only_commands"]):
+        raise ValueError("reviewer read-only command descriptor is unsafe or unavailable")
     return root
 
 
@@ -228,6 +256,8 @@ def _check_command(command, policy):
                         resolved_cwd == root and tokens == argv):
                     return
     for argv in policy.get("read_only_commands", []):
+        if (role == "reviewer" and not _review_safe_read_only(argv)):
+            continue
         if isinstance(argv, list) and tokens == argv:
             return
     raise ValueError("command is not an exact approved descriptor")

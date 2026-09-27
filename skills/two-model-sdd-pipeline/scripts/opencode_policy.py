@@ -6,6 +6,36 @@ import pathlib
 
 
 _ROLES = {"operator", "reviewer", "director"}
+_REVIEW_FORBIDDEN_TOOLS = {
+    "pytest", "py.test", "unittest", "tox", "nox", "jest", "vitest",
+    "mocha", "cargo", "go", "ruff", "mypy", "pyright", "eslint",
+    "tsc", "prettier", "black", "yapf", "isort", "autopep8",
+}
+
+
+def _valid_pattern_argv(argv):
+    # OpenCode v1 patterns match command values using * and ?. Joining argv
+    # cannot preserve shell quoting, and wildcard characters broaden access.
+    return (isinstance(argv, list) and bool(argv) and
+            all(isinstance(value, str) and value and
+                not any(ch.isspace() or ch in "*?;|&<>`$()" for ch in value)
+                for value in argv))
+
+
+def _review_safe_argv(argv):
+    if not _valid_pattern_argv(argv):
+        return False
+    executable = pathlib.PurePath(argv[0].replace("\\", "/")).name.casefold()
+    if executable.endswith((".exe", ".cmd", ".bat")):
+        executable = executable.rsplit(".", 1)[0]
+    if executable in _REVIEW_FORBIDDEN_TOOLS:
+        return False
+    action_tokens = {token.casefold() for token in argv[1:]}
+    if executable in {"npm", "pnpm", "yarn", "bun"} and action_tokens.intersection(
+            {"test", "run", "lint", "check", "format", "fmt"}):
+        return False
+    return not (executable in {"make", "gmake", "cmake"} and action_tokens.intersection(
+        {"test", "check", "lint", "format", "fmt", "analyze", "analyse"}))
 
 
 def _rel(root, value):
@@ -63,19 +93,26 @@ def build_settings(role, runtime, request):
             unsupported.append("malformed scoped runner descriptors")
             runners = {}
         for descriptor in runners.values():
-            if isinstance(descriptor, dict) and isinstance(descriptor.get("argv"), list):
-                permission["bash"][" ".join(descriptor["argv"])] = "allow"
+            argv = descriptor.get("argv") if isinstance(descriptor, dict) else None
+            if not _valid_pattern_argv(argv):
+                unsupported.append("ambiguous scoped runner argv")
+                continue
+            permission["bash"][" ".join(argv)] = "allow"
         for command in request.get("read_only_commands", []):
-            if isinstance(command, list):
-                permission["bash"][" ".join(command)] = "allow"
+            if not _valid_pattern_argv(command):
+                unsupported.append("ambiguous read-only command argv")
+                continue
+            permission["bash"][" ".join(command)] = "allow"
         if permission["bash"] != {"*": "deny"}:
             enforced.append("exact declared command allowlist")
     elif role == "reviewer":
         permission["edit"] = "deny"
         permission["bash"] = {"*": "deny"}
         for command in request.get("read_only_commands", []):
-            if isinstance(command, list):
-                permission["bash"][" ".join(command)] = "allow"
+            if not _review_safe_argv(command):
+                unsupported.append("invalid or disallowed reviewer command descriptor")
+                continue
+            permission["bash"][" ".join(command)] = "allow"
         enforced.append("read-only review")
     else:
         permission["edit"] = "deny"
