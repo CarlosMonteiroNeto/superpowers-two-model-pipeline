@@ -166,15 +166,32 @@ ownership_valid() {
     return 1
   fi
   wt=$(worktree_of "$n"); branch=$(branch_of "$n")
-  if ! python3 - "$owner" "$root" "$ws" "$n" "$wt" "$branch" <<'PY'
-import json, os, sys
-path, root, workspace, task, wt, branch = sys.argv[1:]
+  if ! python3 - "$owner" "$root" "$ws" "$n" "$wt" "$branch" "$script_dir" <<'PY'
+import importlib.util, json, os, re, sys
+path, root, workspace, task, wt, branch, scripts = sys.argv[1:]
 o=json.load(open(path,encoding="utf-8"))
 same=lambda a,b: os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
 if (not same(o.get("repository_root",""),root) or not same(o.get("workspace",""),workspace)
     or not same(o.get("worktree",""),wt) or str(o.get("task_id")) != task
     or o.get("branch") != branch or not o.get("run_id")):
     raise SystemExit(1)
+identity_path=os.path.join(workspace, ".pipeline-identity.json")
+if os.path.isfile(identity_path):
+    record=json.load(open(identity_path,encoding="utf-8"))
+    spec=importlib.util.spec_from_file_location("run_identity", os.path.join(scripts,"run_identity.py"))
+    module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    expected=module.create_identity(record["repository_root"],record["plan_path"],record["run_id"])
+    if any(expected[k] != record.get(k) for k in ("repository_id","identity","workspace_key","run_id","plan_path")):
+        raise SystemExit(1)
+    safe_run=re.sub(r"[^A-Za-z0-9._-]+", "-", expected["run_id"])
+    expected_wt=os.path.join(expected["repository_root"],".superpowers","two-model","worktrees",
+                             expected["workspace_key"],safe_run,"task-"+task)
+    expected_branch="codex/pipeline/{}/{}/task-{}".format(expected["workspace_key"],safe_run,task)
+    if (not same(record.get("repository_root",""),root)
+        or o.get("run_id") != expected["run_id"]
+        or not same(o.get("worktree",""),expected_wt)
+        or o.get("branch") != expected_branch):
+        raise SystemExit(1)
 PY
   then echo "INTEGRATE: task $n ownership mismatch; refusing integration" >&2; return 1; fi
   top=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || { echo "INTEGRATE: task $n worktree is missing" >&2; return 1; }
