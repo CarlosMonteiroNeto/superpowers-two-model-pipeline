@@ -297,6 +297,15 @@ class CodexRolePolicyTests(unittest.TestCase):
         policy["read_only_commands"].append(runner)
         self.assertEqual(self.decision(module.check_tool_call(self.event("Bash", shlex.join(runner)), policy)), "deny")
 
+    def test_codex_reviewer_rejects_test_launchers_in_read_only_list(self):
+        module = load_module(self, "codex_policy.py", "codex_policy", "check_tool_call")
+        policy = self.policy("reviewer")
+        launchers = (["npx", "jest"], ["node", "./node_modules/.bin/jest"])
+        policy["read_only_commands"].extend(launchers)
+        for argv in launchers:
+            with self.subTest(argv=argv):
+                self.assertEqual(self.decision(module.check_tool_call(self.event("Bash", shlex.join(argv)), policy)), "deny")
+
     def test_codex_director_cannot_run_shell_or_edit(self):
         module = load_module(self, "codex_policy.py", "codex_policy", "check_tool_call")
         policy = self.policy("director")
@@ -511,6 +520,19 @@ class OpenCodeRolePolicyTests(unittest.TestCase):
         result = module.build_settings("reviewer", opencode_runtime(), request)
         permission = result["config"]["agent"]["review"]["permission"]
         self.assertNotIn("make test", permission["bash"])
+        self.assertFalse(result["capabilities"]["available"])
+
+    def test_opencode_reviewer_rejects_interpreters_and_test_launchers(self):
+        module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
+        request = self.request()
+        launchers = (["python", "-m", "pytest"], ["python", "-m", "unittest", "discover"],
+                     ["node", "./node_modules/.bin/jest"], ["npx", "jest"])
+        request["read_only_commands"].extend(launchers)
+        result = module.build_settings("reviewer", opencode_runtime(), request)
+        permission = result["config"]["agent"]["review"]["permission"]
+        for argv in launchers:
+            with self.subTest(argv=argv):
+                self.assertNotIn(" ".join(argv), permission["bash"])
         self.assertFalse(result["capabilities"]["available"])
 
     def test_opencode_rejects_shell_syntax_in_declared_command_argv(self):
