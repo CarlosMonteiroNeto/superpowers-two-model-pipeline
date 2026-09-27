@@ -3,7 +3,7 @@ import os
 import re
 
 TASK_REQUIRED = {"id", "title", "summary", "spec_refs", "touches", "depends_on", "acceptance"}
-ROOT_REQUIRED = {"version", "title", "spec_doc", "global_constraints", "tasks"}
+ROOT_REQUIRED = {"version", "title", "spec_doc", "global_constraints", "interfaces", "verification", "tasks"}
 FORBIDDEN_CONTROLS = {"runtime", "model", "reasoning", "reasoning_effort", "backend", "executable", "approval", "force_approve"}
 
 
@@ -32,6 +32,8 @@ def validate_plan(plan: dict, repo_root: str) -> None:
         _fail("title must be a non-empty string")
     if not _strings(plan.get("global_constraints")):
         _fail("global_constraints must be a non-empty string list")
+    if not isinstance(plan.get("interfaces"), dict):
+        _fail("interfaces must be an object")
     def reject_controls(value, location="plan"):
         if isinstance(value, dict):
             for key, child in value.items():
@@ -114,7 +116,7 @@ def validate_plan(plan: dict, repo_root: str) -> None:
             file, anchor = ref.split("#", 1)
             file = _relative(file, "spec ref")
             content = _check_file(root, file)
-            headings = {re.sub(r"[^a-z0-9]+", "-", m.group(1).strip().lower()).strip("-") for m in re.finditer(r"^#{1,6}\s+(.+?)\s*#*\s*$", content, re.M)}
+            headings = {_heading_slug(m.group(1)) for m in re.finditer(r"^#{1,6}\s+(.+?)\s*#*\s*$", content, re.M)}
             if anchor.lower() not in headings and anchor not in ("",):
                 _fail("missing spec anchor {}#{}".format(file, anchor))
     if len(ids) != len(set(ids)) or sorted(ids) != list(range(1, len(ids) + 1)):
@@ -140,6 +142,14 @@ def validate_plan(plan: dict, repo_root: str) -> None:
 
 def _strings(value):
     return isinstance(value, list) and bool(value) and all(isinstance(x, str) and x.strip() for x in value)
+
+
+def _heading_slug(heading):
+    # GitHub removes punctuation but turns each whitespace character into a
+    # hyphen. Thus the roadmap's "D07 — Reuse" is `d07--reuse`, not `d07-reuse`.
+    heading = heading.strip().lower()
+    heading = re.sub(r"[^\w\s-]", "", heading, flags=re.UNICODE)
+    return re.sub(r"\s", "-", heading).strip("-")
 
 
 def _claim(path, seen):

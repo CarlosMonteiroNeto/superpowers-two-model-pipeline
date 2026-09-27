@@ -92,18 +92,36 @@ fi
 # unapproved never-worked branch is kept as the only debug copy.
 if [ "$tip" = "$base" ]; then
   slug="${WS_SLUG:-$(basename "$ws")}"
-  shard="$root/.superpowers/two-model/worktrees/task-$task/.superpowers/two-model/$slug/ledger.jsonl"
+  if [ -f "$owner_file" ]; then
+    shard="$wt/.superpowers/two-model/$slug/ledger.jsonl"
+  else
+    shard="$root/.superpowers/two-model/worktrees/task-$task/.superpowers/two-model/$slug/ledger.jsonl"
+  fi
   if ! grep -qE '"type": *"task_complete"' "$shard" 2>/dev/null; then
     echo "WORKTREE-RELEASE: $branch never committed and is not approved - keeping worktree" >&2
     exit 1
   fi
+  noop_shard_rel=".superpowers/two-model/$slug/ledger.jsonl"
 fi
 
-if git worktree list --porcelain | grep -Fqx "worktree $wt_git" || git worktree list --porcelain | grep -Fqx "worktree $wt"; then
-  dirty=$(git -C "$wt" status --porcelain) || { echo "WORKTREE-RELEASE: cannot verify worktree state" >&2; exit 1; }
+registered_root=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null || true)
+wt_real=$(cd "$wt" 2>/dev/null && pwd -P || true)
+registered_real=$(cd "$registered_root" 2>/dev/null && pwd -P || true)
+if [ -n "$wt_real" ] && [ "$wt_real" = "$registered_real" ]; then
+  if [ -n "${noop_shard_rel:-}" ]; then
+    git -C "$wt" diff --quiet && git -C "$wt" diff --cached --quiet || { echo "WORKTREE-RELEASE: dirty tracked worktree - keeping user changes" >&2; exit 1; }
+    dirty=$(git -C "$wt" status --porcelain --untracked-files=all -- . ":(exclude)$noop_shard_rel") || { echo "WORKTREE-RELEASE: cannot verify worktree state" >&2; exit 1; }
+  else
+    dirty=$(git -C "$wt" status --porcelain) || { echo "WORKTREE-RELEASE: cannot verify worktree state" >&2; exit 1; }
+  fi
   if [ -n "$dirty" ]; then
     echo "WORKTREE-RELEASE: dirty worktree - keeping user changes" >&2
     exit 1
+  fi
+  if [ -n "${noop_shard_rel:-}" ] && [ -f "$wt/$noop_shard_rel" ]; then
+    rm -- "$wt/$noop_shard_rel"
+    rmdir --ignore-fail-on-non-empty "$wt/.superpowers/two-model/$slug" \
+      "$wt/.superpowers/two-model" "$wt/.superpowers" 2>/dev/null || true
   fi
   git worktree remove "$wt"
 else

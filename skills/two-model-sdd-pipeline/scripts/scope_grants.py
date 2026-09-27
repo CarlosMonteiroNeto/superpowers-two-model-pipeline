@@ -20,29 +20,36 @@ def reserve(request: dict, ownership: dict) -> dict:
         raise ValueError("ownership requires run_id and family_id")
     path = _normal(request.get("path"))
     kind = request.get("kind")
-    allowed_roots = [_normal(x).rstrip("/") for x in ownership.get("allowed_roots", [])]
+    repo_root = ownership.get("repo_root")
+    if repo_root:
+        root = os.path.realpath(repo_root)
+        path = _resolve_path(root, path)
+    allowed_roots = [_resolve_path(root, _normal(x)).rstrip("/") if repo_root else _normal(x).rstrip("/")
+                     for x in ownership.get("allowed_roots", [])]
     path_key = os.path.normcase(path)
-    protected = {os.path.normcase(_normal(x)) for x in ownership.get("protected_paths", [])}
+    protected = {os.path.normcase(_resolve_path(root, _normal(x)) if repo_root else _normal(x))
+                 for x in ownership.get("protected_paths", [])}
     if any(path_key == p or path_key.startswith(p + os.sep) for p in protected):
         return {"decision": "block", "reason": "protected path", "path": path}
     in_root = any(path == root or path.startswith(root + "/") for root in allowed_roots)
     if not in_root:
         return {"decision": "block", "reason": "outside approved task roots", "path": path}
-    conflicts = {os.path.normcase(_normal(x)) for x in ownership.get("conflicting_paths", [])}
-    conflicts.update(os.path.normcase(_normal(x)) for x in ownership.get("active_task_paths", []))
-    conflicts.update(os.path.normcase(_normal(x)) for x in ownership.get("future_task_paths", []))
+    conflicts = {os.path.normcase(_resolve_path(root, _normal(x)) if repo_root else _normal(x))
+                 for x in ownership.get("conflicting_paths", [])}
+    conflicts.update(os.path.normcase(_resolve_path(root, _normal(x)) if repo_root else _normal(x))
+                     for x in ownership.get("active_task_paths", []))
+    conflicts.update(os.path.normcase(_resolve_path(root, _normal(x)) if repo_root else _normal(x))
+                     for x in ownership.get("future_task_paths", []))
     if path_key in conflicts:
         return {"decision": "block", "reason": "path conflicts with active or future task scope", "path": path}
-    approved = {os.path.normcase(_normal(x)) for x in ownership.get("director_approved_existing", [])}
+    approved = {os.path.normcase(_resolve_path(root, _normal(x)) if repo_root else _normal(x))
+                for x in ownership.get("director_approved_existing", [])}
     if kind == "existing_file" and path_key not in approved:
         return {"decision": "block", "reason": "existing file requires director approval", "path": path}
     if kind not in ("new_file", "existing_file"):
         return {"decision": "block", "reason": "unsupported path kind", "path": path}
-    repo_root = ownership.get("repo_root")
     if repo_root:
-        absolute = os.path.realpath(os.path.join(repo_root, *path.split("/")))
-        if os.path.commonpath((os.path.realpath(repo_root), absolute)) != os.path.realpath(repo_root):
-            return {"decision": "block", "reason": "path escapes repository", "path": path}
+        absolute = os.path.join(root, *path.split("/"))
         exists = os.path.exists(absolute)
         if kind == "new_file" and exists:
             return {"decision": "block", "reason": "new-file request already exists", "path": path}
@@ -52,6 +59,17 @@ def reserve(request: dict, ownership: dict) -> dict:
     if registry:
         _reserve_registry(registry, path, ownership)
     return {"decision": "grant", "path": path, "run_id": ownership.get("run_id"), "family_id": ownership.get("family_id")}
+
+
+def _resolve_path(root, relative):
+    """Resolve aliases before comparing scope declarations or protected paths."""
+    absolute = os.path.realpath(os.path.join(root, *relative.split("/")))
+    try:
+        if os.path.commonpath((root, absolute)) != root:
+            raise ValueError("path escapes ownership root")
+    except ValueError as exc:
+        raise ValueError("path escapes ownership root") from exc
+    return os.path.relpath(absolute, root).replace(os.sep, "/")
 
 
 def _reserve_registry(path, relative, owner):
