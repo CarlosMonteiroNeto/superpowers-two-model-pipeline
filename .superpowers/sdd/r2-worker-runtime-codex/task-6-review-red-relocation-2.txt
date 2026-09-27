@@ -1,0 +1,10 @@
+test_delivery_archive_contains_relocatable_worker_runtime_references (test_r2_packaged_workers.PackagedWorkersTests.test_delivery_archive_contains_relocatable_worker_runtime_references) ... ok
+test_harness_export_bundle_contains_both_relocatable_worker_adapters (test_r2_packaged_workers.PackagedWorkersTests.test_harness_export_bundle_contains_both_relocatable_worker_adapters) ... C:\Users\Carlos_Neto\superpowers-two-model-pipeline\.worktrees\r2-r3-sdd\skills\two-model-sdd-pipeline\tests\test_r2_packaged_workers.py:89: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(relocated)
+ok
+test_runtime_guide_states_verified_and_unknown_platform_support (test_r2_packaged_workers.PackagedWorkersTests.test_runtime_guide_states_verified_and_unknown_platform_support) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 21.861s
+
+OK
