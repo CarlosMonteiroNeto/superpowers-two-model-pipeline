@@ -30,7 +30,7 @@ Exact task touch sets were checked against the canonical plans: no intra-R2 path
 ## Task status
 - Task 1: approved (independent re-review accepted at `7f82848`)
 - Task 2: approved (`1d738e5`, independent review approved; complete suite passed)
-- Task 3: active
+- Task 3: implementation candidate `1ebc5d6` green; independent review pending
 - Task 4: pending
 - Task 5: pending
 - Task 6: pending
@@ -167,3 +167,10 @@ Task 3 — revision-only prompt invalidation RED
 - Self-review identified that a selected skill revision change with byte-identical section content is still a changed prompt input and must invalidate reuse. The existing test only varied content, so the controller added a separate revision-only test and required the revision to be represented in the rendered prompt whose SHA-256 is returned.
 - Focused RED: `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_prompt_headers.py' -v` — 6 passed, 1 expected failure because `sha256:domain-r2` did not appear in the rendered prompt. Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-3-red-skill-revision.txt`.
 - The implementation agent reverted its premature uncommitted provenance change and is paused. The controller-owned test is committed before the agent resumes; the next BASE is that test commit.
+
+Task 3 — implementation candidate and independent review
+- Final implementation BASE: `f00fdf220deffb831350a33135853fdc198b5041`; production candidate: `1ebc5d668aa3f99f7d6748dfa664e694a9e2b061`.
+- Controller rerun of `python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r2_*.py' -v` — 45 tests passed. Evidence: `.superpowers/sdd/r2-worker-runtime-codex/task-3-green-controller.txt`.
+- Independent raw-blob audit matched all 13 source/license records and embedded MIT notice against `git cat-file blob` at `b36e0829c6d0140e93cfef2ca599b1b07d4a7797`.
+- Controller `test-integrity f00fdf2 1ebc5d6` passed for both RED files. Review package: `.superpowers/sdd/r2-worker-runtime-codex/review-f00fdf2..1ebc5d6.diff`.
+- Task 3 remains pending the separate spec/quality review. Do not begin Task 4 until approval or another finding receives a controller-owned RED/GREEN cycle.
