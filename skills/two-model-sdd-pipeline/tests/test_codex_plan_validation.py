@@ -28,6 +28,8 @@ def valid_plan():
         "tasks": [{"id": 1, "title": "First task", "summary": "Do work",
             "spec_refs": ["docs/spec.md#Contract"], "touches": ["src/a.py"],
             "depends_on": [], "acceptance": ["Output is valid"],
+            "interfaces": {"produces": [], "consumes": []},
+            "verification": {"new_test_files": ["tests/test_new.py"]},
             "extension": {"non_authoritative": "preserved"}}]}
 
 
@@ -54,15 +56,18 @@ class PlanValidationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate_plan(plan, str(root))
 
-    def test_requires_interfaces_and_verification_contract_fields(self):
+    def test_validates_actual_canonical_plan_and_requires_task_contract_fields(self):
         validator = load(self)
+        canonical_path = ROOT / "docs" / "superpowers" / "plans" / "2026-09-25-r3-pipeline-integration" / "plan.json"
+        result = validator.validate_plan(__import__("json").loads(canonical_path.read_text(encoding="utf-8")), str(ROOT))
+        self.assertEqual(result["round_id"], "R3")
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
             (root / "docs").mkdir()
             (root / "docs" / "spec.md").write_text("# Contract\n", encoding="utf-8")
             for field in ("interfaces", "verification"):
                 plan = valid_plan()
-                del plan[field]
+                del plan["tasks"][0][field]
                 with self.subTest(field=field), self.assertRaises(ValueError):
                     validator.validate_plan(plan, str(root))
             plan = valid_plan()
