@@ -16,11 +16,17 @@ class BackendContractParityTests(unittest.TestCase):
         self.assertIn("not", text)
 
     def test_readme_distinguishes_worker_backend_from_unfinished_r3_launcher(self):
-        text = (ROOT / "README.md").read_text(encoding="utf-8").casefold()
+        text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").casefold().split())
         self.assertIn("codex worker", text)
         self.assertIn("r3", text)
         self.assertIn("no silent fallback", text)
         self.assertNotIn("r1 does not yet supply a working codex pipeline", text)
+
+    def test_readme_scopes_continue_session_syntax_to_opencode(self):
+        text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").casefold().split())
+        self.assertIn("opencode within-task resume via `--continue --session`", text)
+        self.assertIn("codex resume uses explicit identity-checked session ids", text)
+        self.assertIn("legacy opencode headless launcher", text)
 
     def test_compatibility_matrix_disclaims_live_permission_validation(self):
         guide = ROOT / "skills" / "two-model-sdd-pipeline" / "references" / "worker-runtime.md"
