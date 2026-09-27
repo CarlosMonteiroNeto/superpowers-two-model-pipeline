@@ -34,14 +34,33 @@ print("\t".join(str(o.get(k, "")) for k in ("worktree", "branch", "run_id", "bas
 PY
 )
   wt=${wt//$'\r'/}; branch=${branch//$'\r'/}; owner_run=${owner_run//$'\r'/}; owner_base=${owner_base//$'\r'/}
-  if ! python3 - "$owner_file" "$root" "$ws" "$task" <<'PY'
-import json, os, sys
-o=json.load(open(sys.argv[1], encoding="utf-8"))
-if (os.path.realpath(o.get("repository_root", "")) != os.path.realpath(sys.argv[2])
-    or os.path.realpath(o.get("workspace", "")) != os.path.realpath(sys.argv[3])
-    or str(o.get("task_id")) != sys.argv[4]
+  if ! python3 - "$owner_file" "$root" "$ws" "$task" "$script_dir" <<'PY'
+import importlib.util, json, os, re, sys
+owner_path, root, workspace, task, scripts = sys.argv[1:]
+o=json.load(open(owner_path, encoding="utf-8"))
+same=lambda a,b: os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+if (not same(o.get("repository_root", ""), root)
+    or not same(o.get("workspace", ""), workspace)
+    or str(o.get("task_id")) != task
     or not o.get("run_id") or not o.get("branch")):
     raise SystemExit(1)
+identity_path=os.path.join(workspace, ".pipeline-identity.json")
+if os.path.isfile(identity_path):
+    record=json.load(open(identity_path, encoding="utf-8"))
+    spec=importlib.util.spec_from_file_location("run_identity", os.path.join(scripts, "run_identity.py"))
+    module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    expected=module.create_identity(record["repository_root"], record["plan_path"], record["run_id"])
+    if any(expected[k] != record.get(k) for k in ("repository_id", "identity", "workspace_key", "run_id", "plan_path")):
+        raise SystemExit(1)
+    safe_run=re.sub(r"[^A-Za-z0-9._-]+", "-", expected["run_id"])
+    expected_worktree=os.path.join(root, ".superpowers", "two-model", "worktrees",
+                                   expected["workspace_key"], safe_run, "task-" + task)
+    expected_branch="codex/pipeline/{}/{}/task-{}".format(expected["workspace_key"], safe_run, task)
+    if (not same(record.get("repository_root", ""), root)
+        or o.get("run_id") != expected["run_id"]
+        or not same(o.get("worktree", ""), expected_worktree)
+        or o.get("branch") != expected_branch):
+        raise SystemExit(1)
 PY
   then echo "WORKTREE-RELEASE: persisted worktree ownership does not match this run" >&2; exit 1; fi
   root_for_python="$root"
