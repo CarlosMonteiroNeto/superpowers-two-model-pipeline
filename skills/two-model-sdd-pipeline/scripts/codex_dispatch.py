@@ -124,6 +124,10 @@ def run_dispatch(request, runtime):
     codex_sessions.store_session(identity, lifecycle)
     try:
         captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), runtime.get("env"), on_start=register_process)
+    except codex_process.ProcessLaunchError:
+        lifecycle.update(status="preexec_failed", error="Codex executable could not be started")
+        codex_sessions.store_session(identity, lifecycle)
+        raise
     except Exception:
         lifecycle.update(status="unresolved", error="process start/capture did not complete")
         codex_sessions.store_session(identity, lifecycle)
@@ -131,6 +135,10 @@ def run_dispatch(request, runtime):
     _atomic(ep["events_path"], captured["stdout"])
     _atomic(ep["stderr_path"], captured["stderr"])
     _json(ep["request_path"], req)
+    if captured.get("timed_out"):
+        lifecycle.update(status="unresolved", process_exit=124)
+        codex_sessions.store_session(identity, lifecycle)
+        raise TimeoutError("Codex dispatch timed out after process start")
     events = _event_stream(captured["stdout"])
     threads = [e.get("thread_id") for e in events if e["type"] == "thread.started"]
     completions = [e for e in events if e["type"] == "turn.completed"]

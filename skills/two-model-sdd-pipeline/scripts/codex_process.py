@@ -5,6 +5,10 @@ import subprocess
 import time
 
 
+class ProcessLaunchError(OSError):
+    """The child process could not be created; no provider work began."""
+
+
 def _start_identity(pid):
     if os.name == "nt":
         query = "$p=Get-Process -Id %d -ErrorAction Stop; $p.StartTime.ToUniversalTime().Ticks" % pid
@@ -29,7 +33,10 @@ def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     else:
         kwargs["start_new_session"] = True
-    proc = subprocess.Popen(list(argv), **kwargs)
+    try:
+        proc = subprocess.Popen(list(argv), **kwargs)
+    except OSError as exc:
+        raise ProcessLaunchError(str(exc)) from exc
     started = time.time()
     start_identity = _start_identity(proc.pid)
     ownership = {"pid": proc.pid, "start_identity": start_identity}
@@ -42,12 +49,19 @@ def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
         except Exception:
             stop_owned_processes([ownership], 0)
             raise
+    timed_out = False
     try:
         out, err = proc.communicate(stdin_text.encode("utf-8"), timeout=timeout)
     except subprocess.TimeoutExpired:
+        timed_out = True
         stop_owned_processes([ownership], 1.0)
         out, err = proc.communicate()
+    except KeyboardInterrupt:
+        stop_owned_processes([ownership], 1.0)
+        try: proc.communicate()
+        finally: raise
     return {"pid": proc.pid, "started": started, "start_identity": start_identity, "returncode": proc.returncode,
+            "timed_out": timed_out,
             "stdout": out.decode("utf-8", errors="strict"),
             "stderr": err.decode("utf-8", errors="strict"), "argv": list(argv),
             "cwd": os.path.abspath(cwd)}

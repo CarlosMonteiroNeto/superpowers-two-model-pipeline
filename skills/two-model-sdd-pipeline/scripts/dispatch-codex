@@ -13,8 +13,22 @@ import codex_dispatch
 try:
     with open(sys.argv[1], encoding="utf-8") as f: request=json.load(f)
     with open(sys.argv[2], encoding="utf-8") as f: runtime=json.load(f)
+    if not isinstance(runtime, dict):
+        raise ValueError("runtime envelope must be an object")
+    if not isinstance(runtime.get("process_registry"), list):
+        runtime["process_registry"] = []
     codex_dispatch.run_dispatch(request, runtime)
+except KeyboardInterrupt:
+    raise SystemExit(130)
 except Exception as exc:
     print("dispatch-codex: " + str(exc), file=sys.stderr)
-    raise SystemExit(6)
+    if isinstance(exc, codex_dispatch.codex_process.ProcessLaunchError):
+        raise SystemExit(5)
+    if isinstance(exc, TimeoutError):
+        raise SystemExit(124)
+    # Before Popen succeeds, inputs/capability/evidence errors are stable
+    # configuration failures. Once an owned child was registered, replay is
+    # ambiguous and failures use the nonretryable post-start class.
+    registry = runtime.get("process_registry", []) if "runtime" in locals() and isinstance(runtime, dict) else []
+    raise SystemExit(6 if registry else 4)
 PY
