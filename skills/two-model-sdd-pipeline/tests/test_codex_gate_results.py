@@ -37,3 +37,40 @@ class GateResultRoutingTests(unittest.TestCase):
         result = self.route("BLOCKED")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BLOCKED", result.stderr)
+
+    def test_codex_review_route_uses_normalized_candidate_request_not_legacy_log(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp) / "repo"
+            root.mkdir()
+            def git(*args):
+                return subprocess.run(["git", "-C", str(root), *args], check=True,
+                    capture_output=True, text=True)
+            git("init", "-q"); git("config", "user.email", "test@example.invalid")
+            git("config", "user.name", "test")
+            (root / "code.txt").write_text("base\n", encoding="utf-8")
+            git("add", "code.txt"); git("commit", "-qm", "base")
+            base = git("rev-parse", "HEAD").stdout.strip()
+            (root / "code.txt").write_text("candidate\n", encoding="utf-8")
+            git("commit", "-qam", "candidate")
+            candidate = git("rev-parse", "HEAD").stdout.strip()
+            ws = root / ".superpowers" / "two-model" / "plan"
+            ws.mkdir(parents=True)
+            (root / ".superpowers" / "two-model" / ".gitignore").write_text("*\n", encoding="utf-8")
+            (ws / "plan.json").write_text(json.dumps({"tasks":[{"id":1}]}), encoding="utf-8")
+            (ws / "task-1-brief.md").write_text("brief", encoding="utf-8")
+            (ws / ".pipeline-identity.json").write_text(json.dumps({"run_id":"run-a","repository_id":"repo-a"}), encoding="utf-8")
+            (ws / "task-1-review-state.json").write_text(json.dumps({"base_commit":base,"candidate_commit":candidate}), encoding="utf-8")
+            (ws / "ledger.jsonl").write_text("\n".join(json.dumps(e) for e in [
+                {"type":"brief_ready","task":"1","summary":"ready"},
+                {"type":"red_check","task":"1","summary":"red"},
+                {"type":"commit","task":"1","summary":"committed"}]) + "\n", encoding="utf-8")
+            runtime = root / "runtime.json"
+            runtime.write_text(json.dumps({"manifest":{"backend":"codex"}}), encoding="utf-8")
+            env = dict(os.environ, PIPELINE_BACKEND="codex", CODEX_RUNTIME_JSON=str(runtime))
+            result = subprocess.run([BASH, str(SCRIPTS / "orchestrator"), str(ws), "1", "1"],
+                cwd=root, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue("candidate/base binding changed" in result.stderr or
+                "strict Codex review request" in result.stderr,
+                "state={} base={} candidate={} {}{}".format((ws / "task-1-review-state.json").read_text(encoding="utf-8"), base, candidate, result.stdout, result.stderr))
+            self.assertNotIn("no verdict in task 1 reviewer log", result.stderr)
