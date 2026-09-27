@@ -182,3 +182,8 @@ Task 3 — independent review finding and controller-owned RED
 - Fix `f047f39496a29ef0ac26122c8883f8afe7955b0c` renders selected skill identity/revision even for empty content. The implementer reports 8 prompt-header tests and 46 R2 tests passing, plus compile and diff checks; see `task-3-review-fix-report.md`.
 - Controller integrity check `test-integrity a08f4e6 f047f39` passed for `test_r2_skill_manifest.py` and `test_r2_prompt_headers.py`. Scoped package: `review-a08f4e6..f047f39.diff`.
 - Independent scoped re-review: finding addressed at `prompt_headers.py:107`; no new breakage or out-of-scope observations. Task 3 is approved; Task 4 may begin.
+
+Task 4 — controller-owned RED baseline
+- Task 3 approval was recorded before Task 4 began. The Task 4 brief defines the explicit Codex/OpenCode role-policy contracts and trust/capability fail-closed behavior.
+- Added controller-owned tests in `test_codex_role_policy.py` and `test_codex_worker_instructions.py`; ran the canonical `test_codex_*.py` verification command before production changes. RED evidence: `task-4-red.txt` — 60 tests ran, 38 failed with assertions for missing `codex_policy.py` / `opencode_policy.py`; 22 existing tests passed.
+- The implementation BASE is the commit containing these tests and this brief/evidence. Implementer must leave both controller-owned test files unchanged.
