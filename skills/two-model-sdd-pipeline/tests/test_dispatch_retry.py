@@ -113,6 +113,20 @@ exit {ok_exit}
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 1)
 
+    def test_codex_retries_only_preexecution_code_five(self):
+        r = self.run_it("--backend", "codex", "--task", "2", "--log",
+                        str(self.ws / "task-2-codex.log"),
+                        fails=1, fail_exit="5", ok_exit="0")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.calls(), 2)
+
+    def test_codex_does_not_retry_ambiguous_code_six(self):
+        r = self.run_it("--backend", "codex", "--task", "2", "--log",
+                        str(self.ws / "task-2-codex.log"),
+                        fails=1, fail_exit="6", ok_exit="0")
+        self.assertEqual(r.returncode, 6, r.stdout + r.stderr)
+        self.assertEqual(self.calls(), 1)
+
     def test_gives_up_after_max_tries_preserving_last_code(self):
         r = self.run_it("--task", "1", "--log",
                         str(self.ws / "task-1-coder.log"),

@@ -2,6 +2,11 @@
 import importlib.util
 import json
 import pathlib
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -57,3 +62,38 @@ class CodexDispatchTests(unittest.TestCase):
     def test_dispatch_entrypoint_and_codex_adapter_exist(self):
         self.assertTrue((SCRIPTS / "dispatch-codex").is_file())
         self.assertTrue((SCRIPTS / "dispatch-opencode").is_file())
+
+    def test_preexecution_launch_failure_uses_retryable_exit_five(self):
+        bash = shutil.which("bash")
+        if os.name == "nt":
+            git_bash = pathlib.Path(r"C:\Program Files\Git\bin\bash.exe")
+            bash = str(git_bash) if git_bash.exists() else bash
+        if not bash:
+            self.skipTest("Bash is required for dispatch wrapper contract")
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            prompt = root / "prompt.md"
+            prompt.write_text("prompt", encoding="utf-8")
+            paths = {key: str(root / value) for key, value in (
+                ("request_path", "request.json"), ("prompt_path", "prompt.md"),
+                ("events_path", "events.jsonl"), ("stderr_path", "stderr.log"),
+                ("final_path", "final.json"), ("result_path", "result.json"))}
+            request = {"version":1,"backend":"codex","run_id":"r","dispatch_id":"d",
+                "task_id":1,"task_family":1,"episode_id":"e","role":"operator",
+                "repository_id":"repo","worktree":directory,"plan_revision":"p",
+                "base_commit":"a"*40,"config_hash":"b"*64,
+                "prompt_hash":hashlib.sha256(b"prompt").hexdigest(),
+                "requested_model":"m","requested_effort":"medium","evidence_paths":paths}
+            capabilities = {k:True for k in ("hooks_enabled","hooks_trusted","sandbox_enforced","bash_hook_covered","apply_patch_hook_covered")}
+            capabilities.update({k:[] for k in ("unhooked_mutating_tools","managed_policy_conflicts","inherited_instruction_conflicts")})
+            runtime = {"manifest":{"backend":"codex","version":"test","roles":{"operator":{
+                "model":"m","settings":{"model_reasoning_effort":"medium"},"policy":"workspace-write","instruction":"operator"}}},
+                "capabilities":capabilities,"developer_instructions":"instructions",
+                "executable":["definitely-missing-codex-executable-r25"]}
+            request_path, runtime_path = root / "request.json", root / "runtime.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
+            env = dict(os.environ, CODEX_RUNTIME_JSON=str(runtime_path))
+            result = subprocess.run([bash, str(SCRIPTS / "dispatch-codex"), "--request", str(request_path)],
+                                    cwd=str(root), env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
