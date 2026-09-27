@@ -18,6 +18,14 @@ def load(filename):
 
 
 class ReviewFixTests(unittest.TestCase):
+    def test_registry_requires_separate_codex_runtime_and_reports_opencode_cancel(self):
+        registry=load("backend_registry.py")
+        with self.assertRaisesRegex(ValueError,"runtime envelope"):
+            registry.resolve("codex").invoke({"backend":"codex"})
+        result=registry.resolve("opencode").cancel({"processes":[]})
+        self.assertFalse(result["supported"])
+        self.assertEqual(result["backend"],"opencode")
+
     def test_task_id_separates_persisted_sessions(self):
         sessions = load("codex_sessions.py")
         with tempfile.TemporaryDirectory() as d:
