@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Codex PreToolUse hook adapter. Reads one event and an attempt policy."""
+
+import json
+import os
+import pathlib
+import sys
+
+from codex_policy import check_tool_call
+
+
+def main():
+    try:
+        policy_path = os.environ.get("PIPELINE_ROLE_POLICY")
+        if not policy_path:
+            raise ValueError("PIPELINE_ROLE_POLICY is required")
+        policy = json.loads(pathlib.Path(policy_path).read_text(encoding="utf-8"))
+        event = json.load(sys.stdin)
+        decision = check_tool_call(event, policy)
+    except Exception as exc:
+        decision = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                    "permissionDecision": "deny", "reason": str(exc)}}
+    sys.stdout.write(json.dumps(decision, ensure_ascii=False, separators=(",", ":")) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
