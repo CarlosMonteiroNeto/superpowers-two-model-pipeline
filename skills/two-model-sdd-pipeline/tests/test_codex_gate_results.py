@@ -12,6 +12,27 @@ BASH = r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else "bash"
 
 
 class GateResultRoutingTests(unittest.TestCase):
+    def test_generic_and_flutter_red_gates_pass_explicit_codex_backend_to_operator_dispatch(self):
+        for gate in (SCRIPTS / "red-gate", ROOT / "skills" / "flutter-app-pipeline" / "scripts" / "red-gate"):
+            with self.subTest(gate=gate.name), tempfile.TemporaryDirectory() as temp:
+                ws = pathlib.Path(temp) / "workspace"; ws.mkdir()
+                (ws / "plan.json").write_text(json.dumps({"tasks":[{"id":1,"toolchain_id":"go"}]}), encoding="utf-8")
+                (ws / "ledger.jsonl").write_text(json.dumps({"type":"gate","task":"-","summary":"fixture",
+                    "toolchain_id":"go","lang":"go","test_cmd":"go test ./...","analyze_cmd":"go vet ./..."}) + "\n", encoding="utf-8")
+                (ws / "task-1-brief.md").write_text("operator brief", encoding="utf-8")
+                args_log = pathlib.Path(temp) / "dispatch-args.txt"
+                dispatch = pathlib.Path(temp) / "dispatch-retry.sh"
+                dispatch.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" > "$ARGS_LOG"\nexit 0\n', encoding="utf-8")
+                coder = pathlib.Path(temp) / "coder-gate.sh"
+                coder.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+                if os.name != "nt": dispatch.chmod(0o755); coder.chmod(0o755)
+                env = dict(os.environ, PIPELINE_BACKEND="codex", CODEX_RUNTIME_JSON="runtime.json",
+                    DISPATCH_RETRY_BIN=str(dispatch), CODER_GATE_BIN=str(coder), ARGS_LOG=str(args_log))
+                result = subprocess.run([BASH, str(gate), str(ws), "1"], env=env,
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("--backend codex", args_log.read_text(encoding="utf-8"))
+
     def route(self, status):
         with tempfile.TemporaryDirectory() as temp:
             ws = pathlib.Path(temp)
