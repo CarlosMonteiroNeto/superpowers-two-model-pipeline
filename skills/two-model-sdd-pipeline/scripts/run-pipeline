@@ -124,6 +124,24 @@ INTEGRATE_BIN="${INTEGRATE_BIN:-$SCRIPT_DIR/integrate}"
 say() { echo "RUN-PIPELINE: $1"; }
 block() { echo "RUN-PIPELINE: BLOCKED - $1" >&2; exit 1; }
 
+if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+  PIPELINE_RUN_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["run_id"])' "$WS/.pipeline-identity.json") \
+    || block "pipeline identity has no run id"
+  export PIPELINE_RUN_ID
+  PIPELINE_RUN_CONTROL_MANIFEST="$WS/run-control.json"
+  export PIPELINE_RUN_CONTROL_MANIFEST
+  python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import run_control; run_control.initialize(sys.argv[2],sys.argv[3],{"backend":"codex","publication":sys.argv[4]})' \
+    "$SCRIPT_DIR" "$PIPELINE_RUN_CONTROL_MANIFEST" "$PIPELINE_RUN_ID" "${PIPELINE_PUBLICATION:-}" \
+    || block "cannot initialize run-control manifest"
+  trap 'python3 "$SCRIPT_DIR/run_control.py" cancel --manifest "$PIPELINE_RUN_CONTROL_MANIFEST" --run-id "$PIPELINE_RUN_ID" >/dev/null 2>&1 || true' INT TERM
+fi
+
+ensure_not_cancelled() {
+  [ "${PIPELINE_BACKEND:-opencode}" != codex ] && return 0
+  python3 -c 'import json,sys; raise SystemExit(1 if json.load(open(sys.argv[1],encoding="utf-8")).get("cancel_requested") else 0)' "$PIPELINE_RUN_CONTROL_MANIFEST" \
+    || block "run cancellation requested; no new task will start"
+}
+
 ledger() { "$SCRIPT_DIR/ledger-append" "$LEDGER" "$@" || true; }
 
 plan_json() {
@@ -304,11 +322,17 @@ tasks_usable || block "plan has no usable tasks (every task needs acceptance) - 
 if [ "$MAX_PARALLEL" -eq 1 ]; then
   task=$(first_incomplete)
   while true; do
+    ensure_not_cancelled
     total=$(total_now)
     check_total_fresh
     rc=0
     task_run_bin="${TASK_RUN_BIN:-$SCRIPT_DIR/task-run}"
-    PLAN="$PLAN" "$task_run_bin" "$WS" "$task" "$total" || rc=$?
+    if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+      PLAN="$PLAN" python3 "$SCRIPT_DIR/run_control.py" exec --manifest "$PIPELINE_RUN_CONTROL_MANIFEST" \
+        --run-id "$PIPELINE_RUN_ID" -- bash "$task_run_bin" "$WS" "$task" "$total" || rc=$?
+    else
+      PLAN="$PLAN" "$task_run_bin" "$WS" "$task" "$total" || rc=$?
+    fi
     case "$rc" in
       0) ;;
       1) block "task $task blocked (inspect task-$task logs)";;
@@ -325,6 +349,7 @@ if [ "$MAX_PARALLEL" -eq 1 ]; then
   done
 else
   while true; do
+    ensure_not_cancelled
     rc=0
     wave=$("$SCRIPT_DIR/wave-next" "$WS" "$MAX_PARALLEL") || rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -340,6 +365,7 @@ else
     declare -A wt_of=()
     declare -A wsws_of=()
     for n in $ids; do
+      ensure_not_cancelled
       rc=0
       out=$("$SCRIPT_DIR/worktree-alloc" "$WS" "$n") || rc=$?
       # rc 0 = fresh, 1 = already allocated (a resumed run after a crash/block).
@@ -369,8 +395,14 @@ else
           # the task id, so a wave shows progress instead of going silent until
           # `wait` returns. `sed -u` keeps the stream unbuffered; pipefail keeps
           # task-run's status.
-          PLAN="$plan_task" "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
-            2>&1 | tee "$WS/task-$n-run.log" | sed -u "s/^/[task $n] /" || rc=$?
+          if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+            PLAN="$plan_task" python3 "$SCRIPT_DIR/run_control.py" exec --manifest "$PIPELINE_RUN_CONTROL_MANIFEST" \
+              --run-id "$PIPELINE_RUN_ID" -- bash "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
+              2>&1 | tee "$WS/task-$n-run.log" | sed -u "s/^/[task $n] /" || rc=$?
+          else
+            PLAN="$plan_task" "$SCRIPT_DIR/task-run" "${wsws_of[$n]}" "$n" "$total" \
+              2>&1 | tee "$WS/task-$n-run.log" | sed -u "s/^/[task $n] /" || rc=$?
+          fi
         fi
         printf '%s\n' "$rc" >"$WS/task-$n-run.rc"
       ) &
@@ -418,9 +450,16 @@ else
         # unresolved: SEND_BACK"). The task's real history stays untouched.
         total=$(total_now)
         plan_task=$(wave_plan "$wt")
-        rc=0
-        ( cd "$wt" && PLAN="$plan_task" "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \
+      rc=0
+        ensure_not_cancelled
+        if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+          ( cd "$wt" && PLAN="$plan_task" python3 "$SCRIPT_DIR/run_control.py" exec --manifest "$PIPELINE_RUN_CONTROL_MANIFEST" \
+            --run-id "$PIPELINE_RUN_ID" -- bash "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \
+            >"$WS/task-$n-recovery.log" 2>&1 || rc=$?
+        else
+          ( cd "$wt" && PLAN="$plan_task" "$SCRIPT_DIR/task-run" "$wt_ws" "$n" "$total" ) \
           >"$WS/task-$n-recovery.log" 2>&1 || rc=$?
+        fi
         [ "$rc" -eq 0 ] || block "task $n recovery task-run exit $rc"
         rc=0
         "$INTEGRATE_BIN" "$WS" "$n" || rc=$?
@@ -474,6 +513,14 @@ if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
   result=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["evidence_paths"]["result_path"])' "$request") || block "cannot resolve closing result"
   verdict=$(python3 -c 'import sys,json,pathlib; sys.path.insert(0,sys.argv[1]); import codex_closing; snapshot=json.loads(sys.argv[2]); req=json.load(open(sys.argv[3],encoding="utf-8")); result=json.load(open(sys.argv[4],encoding="utf-8")); clean=codex_closing.validate_closing_result(result,snapshot,req); codex_closing.assert_snapshot_current(sys.argv[5],sys.argv[6],sys.argv[7],sys.argv[8],snapshot); print(clean["verdict"])' \
     "$SCRIPT_DIR" "$snapshot" "$request" "$result" "$ROOT" "$PLAN" "$spec_abs" "$LEDGER") || block "closing result failed validation or candidate changed"
+  if [ "$verdict" = REOPEN ]; then
+    "$SCRIPT_DIR/closing-reopen" --workspace "$WS" --request "$request" --result "$result" --snapshot "$snapshot" \
+      || block "closing follow-up transaction failed"
+    "$SCRIPT_DIR/pipeline-workspace" --refresh "$PLAN" >/dev/null || block "plan refresh failed after closing reopen"
+    rerun=("$PLAN" --max-parallel "$MAX_PARALLEL")
+    [ "$NO_PUSH" -eq 0 ] || rerun+=(--no-push)
+    exec "$SCRIPT_DIR/run-pipeline" "${rerun[@]}"
+  fi
   [ "$verdict" = APPROVED ] || block "director closing verdict is $verdict; no publication allowed"
   snapshot_hash=$(printf '%s' "$snapshot" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')
   "$SCRIPT_DIR/ledger-append" "$LEDGER" final_review - "Codex director approved candidate" \
@@ -483,6 +530,17 @@ else
   dispatch_task_generator "$WS/diretor-closing.md" "$WS/task-generator-closing.log" \
     || block "diretor dispatch failed"
   ledger final_review "-" "diretor closing complete"
+fi
+if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+  publication=${PIPELINE_PUBLICATION:-}
+  [ "$NO_PUSH" -eq 0 ] || publication=local
+  case "$publication" in local|pull_request) ;; *) block "Codex run requires explicit local or pull_request publication policy" ;; esac
+  branch=$(git branch --show-current) || block "cannot determine branch"
+  [ -n "$branch" ] || block "detached HEAD - select an integration branch"
+  python3 "$SCRIPT_DIR/publication.py" --repository "$ROOT" --branch "$branch" \
+    --target "$target_branch" --policy "$publication" || block "publication failed; run remains resumable"
+  say "closing complete under $publication policy"
+  exit 0
 fi
 if [ "$NO_PUSH" -eq 1 ]; then
   say "closing complete (--no-push): package $WS/closing-review.diff, assessment $WS/task-generator-closing.log"

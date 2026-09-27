@@ -73,7 +73,7 @@ def stop_owned_processes(records, grace_seconds):
     for record in records:
         if not isinstance(record, dict) or not isinstance(record.get("pid"), int) or not isinstance(record.get("start_identity"), str) or not record.get("start_identity"):
             raise ValueError("process ownership record requires pid and verified start identity")
-        pid = record["pid"]
+            pid = record["pid"]
         try:
             if _start_identity(pid) != record["start_identity"]:
                 continue
@@ -89,6 +89,11 @@ def stop_owned_processes(records, grace_seconds):
                     time.sleep(.05)
                 try: os.killpg(pid, signal.SIGKILL)
                 except OSError: pass
+            deadline = time.monotonic() + max(1.0, grace_seconds + 1.0)
+            while time.monotonic() < deadline and _start_identity(pid) == record["start_identity"]:
+                time.sleep(.05)
+            if _start_identity(pid) == record["start_identity"]:
+                raise RuntimeError("owned process did not terminate: {}".format(pid))
         except ProcessLookupError:
             pass
         except OSError:

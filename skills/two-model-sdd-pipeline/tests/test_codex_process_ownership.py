@@ -1,46 +1,63 @@
-"""Controller-owned R2.5 acceptance tests for bounded process ownership."""
+"""Controller-owned durable run process registry tests."""
 import importlib.util
 import pathlib
+import tempfile
 import unittest
+import json
+import threading
 from unittest import mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-SCRIPTS = ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
+ROOT=pathlib.Path(__file__).resolve().parents[3]
+SCRIPT=ROOT/"skills"/"two-model-sdd-pipeline"/"scripts"/"run_control.py"
+spec=importlib.util.spec_from_file_location("r35_run_control",SCRIPT)
+control=importlib.util.module_from_spec(spec); spec.loader.exec_module(control)
 
 
-def load(test, filename, function):
-    path = SCRIPTS / filename
-    test.assertTrue(path.is_file(), "R2.5 requires scripts/" + filename)
-    spec = importlib.util.spec_from_file_location("r25_" + filename.replace(".", "_"), path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    test.assertTrue(callable(getattr(module, function, None)))
-    return module
+class RunControlTests(unittest.TestCase):
+    def test_registration_and_cancel_are_run_bound_and_stop_exact_process_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=pathlib.Path(temp)/"run.json"; control.initialize(path,"run-a")
+            record={"pid":123,"start_identity":"start-a"}
+            control.register_process(path,"run-a",record)
+            with mock.patch.object(control.codex_process,"stop_owned_processes") as stop:
+                state=control.request_cancel(path,"run-a")
+            stop.assert_called_once_with([record],1.0)
+            self.assertTrue(state["cancel_requested"])
+            self.assertEqual(state["processes"][0]["status"],"interrupted")
+            with self.assertRaisesRegex(ValueError,"identity mismatch"):
+                control.request_cancel(path,"run-b")
+
+    def test_task_run_exec_registers_owned_child_and_preserves_exit_code(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=pathlib.Path(temp)/"run.json"; control.initialize(path,"run-a")
+            identity={"pid":456,"start_identity":"start-b"}
+            with mock.patch.object(control.subprocess,"Popen") as popen, mock.patch.object(control.codex_process,"_start_identity",return_value="start-b"):
+                popen.return_value.pid=456; popen.return_value.wait.return_value=7
+                with mock.patch.object(control,"register_process") as register, mock.patch.object(control,"mark_process") as mark:
+                    result=control.execute_owned(path,"run-a",["fake-task"])
+            self.assertEqual(result,7); register.assert_called_once()
+            self.assertEqual(mark.call_args.args[3],"failed")
+
+    def test_parallel_process_registration_is_serialized_without_lost_records(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=pathlib.Path(temp)/"run.json"; control.initialize(path,"run-a")
+            workers=[threading.Thread(target=control.register_process,args=(path,"run-a",{"pid":i+100,"start_identity":"s"+str(i)})) for i in range(24)]
+            for worker in workers: worker.start()
+            for worker in workers: worker.join()
+            state=json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(len(state["processes"]),24)
+
+    def test_resume_clears_cancel_flag_only_after_stopping_orphaned_owned_processes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=pathlib.Path(temp)/"run.json"; control.initialize(path,"run-a")
+            record={"pid":91,"start_identity":"start"}
+            control.register_process(path,"run-a",record)
+            with mock.patch.object(control.codex_process,"stop_owned_processes") as stop:
+                resumed=control.initialize(path,"run-a")
+            stop.assert_called_once_with([record],1.0)
+            self.assertFalse(resumed["cancel_requested"])
+            self.assertEqual(resumed["status"],"active")
+            self.assertEqual(resumed["processes"][0]["status"],"interrupted")
 
 
-class ProcessOwnershipTests(unittest.TestCase):
-    def test_run_owned_returns_process_identity_and_separate_streams(self):
-        process = load(self, "codex_process.py", "run_owned")
-        self.assertTrue(callable(process.run_owned))
-
-    def test_cancel_requires_recorded_ownership_and_bounded_grace(self):
-        process = load(self, "codex_process.py", "stop_owned_processes")
-        with self.assertRaises((ValueError, TypeError)):
-            process.stop_owned_processes([], -1)
-
-    def test_cleanup_is_adapter_scoped(self):
-        registry = load(self, "backend_registry.py", "resolve")
-        self.assertIsNotNone(registry.resolve("codex"))
-        self.assertIsNotNone(registry.resolve("opencode"))
-
-    def test_timeout_cancellation_uses_verified_start_identity(self):
-        process = load(self, "codex_process.py", "run_owned")
-        fake = mock.Mock()
-        fake.pid = 123
-        fake.returncode = -9
-        fake.communicate.side_effect = [__import__("subprocess").TimeoutExpired(["fake"], 0.01), (b"", b"")]
-        with mock.patch.object(process.subprocess, "Popen", return_value=fake), \
-             mock.patch.object(process, "_start_identity", return_value="start-123"), \
-             mock.patch.object(process, "stop_owned_processes") as stop:
-            process.run_owned(["fake"], ".", timeout=0.01)
-        self.assertEqual(stop.call_args.args[0], [{"pid": 123, "start_identity": "start-123"}])
+if __name__=="__main__": unittest.main()

@@ -30,6 +30,26 @@ def load(test):
 
 
 class PlanTransactionTests(unittest.TestCase):
+    def test_validated_closing_reopen_creates_script_owned_followup_task(self):
+        transaction=load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            repo=pathlib.Path(temp)/"repo"; repo.mkdir(); git(repo,"init","-q")
+            git(repo,"config","user.email","test@example.invalid"); git(repo,"config","user.name","test")
+            (repo/"docs").mkdir(); (repo/"docs"/"spec.md").write_text("# Contract\n",encoding="utf-8")
+            path=repo/"plan.json"; plan={"version":1,"title":"Fixture","spec_doc":"docs/spec.md","global_constraints":["Safe"],
+                "tasks":[{"id":1,"title":"First","summary":"Existing","spec_refs":["docs/spec.md#Contract"],"touches":["src/a.py"],"depends_on":[],
+                    "acceptance":["Works"],"interfaces":{"produces":[],"consumes":[]},"verification":{"new_test_files":["tests/test_a.py"]}}]}
+            path.write_text(json.dumps(plan),encoding="utf-8"); git(repo,"add","-A"); git(repo,"commit","-qm","plan")
+            source=hashlib.sha256(path.read_bytes()).hexdigest()
+            closing={"verdict":"REOPEN","summary":"Add omitted coverage","findings":[],"parked_minors":[],
+                "proposed_tasks":[{"title":"Add coverage","summary":"Cover omitted behavior","acceptance":["Behavior is verified"]}]}
+            manifest={"repository_root":str(repo),"plan_path":str(path),"run_id":"run-a","ledger_path":str(repo/"ledger.jsonl")}
+            result=transaction.apply_closing_reopen(closing,source,manifest)
+            updated=json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(result["assigned_ids"],[2])
+            self.assertEqual(updated["tasks"][1]["depends_on"],[1])
+            self.assertEqual(updated["tasks"][1]["spec_refs"],["docs/spec.md#Contract"])
+
     def test_proposal_updates_and_commits_canonical_plan(self):
         transaction = load(self)
         with tempfile.TemporaryDirectory() as temp:

@@ -432,6 +432,15 @@ class CodexRolePolicyTests(unittest.TestCase):
         self.assertTrue(any("codex-policy" in command for command in commands))
         self.assertFalse(any("dangerously-bypass-hook-trust" in command for command in commands))
 
+    def test_plugin_manifest_bundles_hooks_without_replacing_claude_hooks(self):
+        manifest=json.loads((ROOT/".codex-plugin"/"plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest.get("hooks"),"./codex-plugin-hooks/hooks.json")
+        bundled=json.loads((ROOT/"codex-plugin-hooks"/"hooks.json").read_text(encoding="utf-8"))
+        matchers={entry["matcher"] for entry in bundled["hooks"]["PreToolUse"]}
+        self.assertEqual(matchers,{"Bash","apply_patch"})
+        repository_hooks=json.loads((ROOT/"hooks"/"hooks.json").read_text(encoding="utf-8"))
+        self.assertIn("SessionStart",repository_hooks["hooks"])
+
 
 class OpenCodeRolePolicyTests(unittest.TestCase):
     def setUp(self):

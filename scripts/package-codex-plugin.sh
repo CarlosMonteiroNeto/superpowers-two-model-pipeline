@@ -249,7 +249,8 @@ git -C "$REPO_ROOT" -c tar.umask=0022 archive --format=tar "$REF" -- \
   CODE_OF_CONDUCT.md \
   LICENSE \
   README.md \
-  assets \
+    assets \
+    codex-plugin-hooks \
   skills \
   | tar -xpf - -C "$STAGE"
 

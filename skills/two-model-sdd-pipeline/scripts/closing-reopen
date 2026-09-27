@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ "$#" -ne 8 ] || [ "$1" != "--workspace" ] || [ "$3" != "--request" ] || [ "$5" != "--result" ] || [ "$7" != "--snapshot" ]; then
+  echo "usage: closing-reopen --workspace WS --request REQUEST --result RESULT --snapshot JSON" >&2
+  exit 2
+fi
+python3 - "$SCRIPT_DIR" "$2" "$4" "$6" "$8" <<'PY'
+import json,os,pathlib,subprocess,sys
+scripts,ws,request_path,result_path,snapshot_text=sys.argv[1:]
+sys.path.insert(0,scripts)
+import codex_closing,dispatch_contract,plan_transaction
+try:
+    request=json.load(open(request_path,encoding="utf-8")); result=json.load(open(result_path,encoding="utf-8"))
+    snapshot=json.loads(snapshot_text)
+    closing=codex_closing.validate_closing_result(result,snapshot,request)
+    if closing["verdict"]!="REOPEN": raise ValueError("closing verdict is not REOPEN")
+    identity=json.load(open(pathlib.Path(ws)/".pipeline-identity.json",encoding="utf-8"))
+    root=pathlib.Path(identity["repository_root"]).resolve(); plan_path=(root/identity["plan_path"]).resolve()
+    refresh=pathlib.Path(scripts)/"pipeline-workspace"
+    global_ws=subprocess.run(["bash",str(refresh),str(plan_path)],cwd=str(root),capture_output=True,text=True,check=True).stdout.strip()
+    if os.name=="nt": global_ws=subprocess.check_output(["cygpath","-w",global_ws],text=True).strip()
+    manifest={"repository_root":str(root),"repository_id":identity["repository_id"],"plan_path":str(plan_path),
+      "run_id":identity["run_id"],"ledger_path":str(pathlib.Path(global_ws)/"ledger.jsonl")}
+    applied=plan_transaction.apply_closing_reopen(closing,snapshot["plan_hash"],manifest)
+    subprocess.run(["bash",str(refresh),"--refresh",str(plan_path)],cwd=str(root),env=dict(os.environ,PIPELINE_RUN_ID=identity["run_id"]),check=True,capture_output=True,text=True)
+    print(json.dumps(applied,sort_keys=True))
+except Exception as exc:
+    print("CLOSING-REOPEN: "+str(exc),file=sys.stderr); raise SystemExit(1)
+PY

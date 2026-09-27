@@ -74,13 +74,15 @@ class CodexDispatchTests(unittest.TestCase):
             root = pathlib.Path(directory)
             prompt = root / "prompt.md"
             prompt.write_text("prompt", encoding="utf-8")
+            plan_path = root / "plan.json"
+            plan_path.write_text(json.dumps({"tasks":[{"id":1,"touches":[],"verification":{}}]}), encoding="utf-8")
             paths = {key: str(root / value) for key, value in (
                 ("request_path", "request.json"), ("prompt_path", "prompt.md"),
                 ("events_path", "events.jsonl"), ("stderr_path", "stderr.log"),
                 ("final_path", "final.json"), ("result_path", "result.json"))}
             request = {"version":1,"backend":"codex","run_id":"r","dispatch_id":"d",
                 "task_id":1,"task_family":1,"episode_id":"e","role":"operator",
-                "repository_id":"repo","worktree":directory,"plan_revision":"p",
+                "repository_id":"repo","worktree":directory,"plan_revision":hashlib.sha256(plan_path.read_bytes()).hexdigest(),
                 "base_commit":"a"*40,"config_hash":"b"*64,
                 "prompt_hash":hashlib.sha256(b"prompt").hexdigest(),
                 "requested_model":"m","requested_effort":"medium","evidence_paths":paths}

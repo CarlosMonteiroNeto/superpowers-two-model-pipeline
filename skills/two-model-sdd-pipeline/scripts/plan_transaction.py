@@ -188,3 +188,58 @@ def apply_director_proposal(proposal: dict, manifest: dict) -> dict:
                 subprocess.run(["git", "reset", "-q", "HEAD", "--", str(plan_path)], cwd=str(root), check=False)
                 plan_path.write_bytes(old_bytes)
             raise
+
+
+def apply_closing_reopen(closing: dict, source_plan_hash: str, manifest: dict) -> dict:
+    """Canonicalize closing follow-up tasks after a validated REOPEN ruling."""
+    clean=director_result.dispatch_contract._validate_closing(closing)
+    if clean["verdict"]!="REOPEN" or not clean["proposed_tasks"]:
+        raise ValueError("REOPEN requires at least one validated proposed task")
+    root=pathlib.Path(manifest.get("repository_root") or "").resolve()
+    plan_path=pathlib.Path(manifest.get("plan_path") or "").resolve()
+    if not root.is_dir() or not plan_path.is_file() or os.path.commonpath((str(root),str(plan_path)))!=str(root):
+        raise ValueError("repository and canonical plan must exist inside repository")
+    if not manifest.get("run_id"):
+        raise ValueError("run_id is required")
+    proposal_id=_proposal_id({"mode":"closing_reopen","source_plan_hash":source_plan_hash,"closing":clean})
+    owner={"repository_id":manifest.get("repository_id",str(root)),"branch":_git(root,"branch","--show-current"),"run_id":manifest["run_id"]}
+    with state_lock.acquire_lock(str(_lock_path(root,manifest)),owner):
+        dirty=subprocess.run(["git","status","--porcelain","--",str(plan_path)],cwd=str(root),capture_output=True,text=True,check=True).stdout
+        if dirty: raise ValueError("canonical plan has user changes; refusing closing transaction")
+        old_bytes=plan_path.read_bytes(); old_hash=_sha(old_bytes); head_before=_git(root,"rev-parse","HEAD")
+        message=_git(root,"log","-1","--format=%B")
+        if proposal_id in message and "closing-transaction:" in message:
+            ids_match=__import__("re").search(r"assigned=([0-9,]+)",message)
+            ids=[int(v) for v in ids_match.group(1).split(",")] if ids_match else []
+            record={"old_plan_hash":source_plan_hash,"new_plan_hash":old_hash,"assigned_ids":ids,"commit":head_before,"recovered":True}
+            _append_ledger(manifest,proposal_id,{"event":"closing_reopen",**record})
+            return record
+        if old_hash!=source_plan_hash: raise ValueError("stale source plan hash; closing must be repeated")
+        plan=json.loads(old_bytes.decode("utf-8")); tasks=plan.get("tasks",[])
+        next_id=max(t["id"] for t in tasks)+1; assigned=[]
+        spec_refs=sorted({ref for t in tasks for ref in t.get("spec_refs",[])})
+        touches=sorted({p for f in clean["findings"] for p in f.get("affected_paths",[])})
+        dependencies=[t["id"] for t in tasks]
+        for proposed in clean["proposed_tasks"]:
+            task={"id":next_id,"title":proposed["title"],"summary":proposed["summary"],
+                "spec_refs":list(spec_refs),"touches":list(touches),"depends_on":list(dependencies),
+                "acceptance":list(proposed["acceptance"]),"interfaces":{"produces":[],"consumes":[]},
+                "verification":{"new_test_files":[]}}
+            tasks.append(task); assigned.append(next_id); next_id+=1
+        plan_validation.validate_plan(plan,str(root))
+        new_bytes=(json.dumps(plan,ensure_ascii=False,indent=2)+"\n").encode("utf-8"); new_hash=_sha(new_bytes)
+        _write_atomic(plan_path,new_bytes)
+        try:
+            _git(root,"add","--",str(plan_path))
+            metadata="closing-transaction: {} old={} new={} assigned={}".format(proposal_id,old_hash,new_hash,",".join(map(str,assigned)))
+            result=subprocess.run(["git","commit","-m",metadata,"--",str(plan_path)],cwd=str(root),capture_output=True,text=True)
+            if result.returncode: raise RuntimeError(result.stderr.strip() or "closing transaction commit failed")
+            commit=_git(root,"rev-parse","HEAD")
+            record={"old_plan_hash":old_hash,"new_plan_hash":new_hash,"assigned_ids":assigned,"commit":commit,"recovered":False}
+            _append_ledger(manifest,proposal_id,{"event":"closing_reopen",**record})
+            return {**record,"parent_commit":head_before}
+        except Exception:
+            if _git(root,"rev-parse","HEAD")==head_before:
+                subprocess.run(["git","reset","-q","HEAD","--",str(plan_path)],cwd=str(root),check=False)
+                plan_path.write_bytes(old_bytes)
+            raise

@@ -13,6 +13,7 @@ import dispatch_contract
 import codex_process
 import codex_sessions
 import codex_policy
+import run_control
 
 
 def _atomic(path, content):
@@ -72,6 +73,12 @@ def run_dispatch(request, runtime):
         raise ValueError("requested effort does not match role manifest")
     policy_request = {"developer_instructions": runtime.get("developer_instructions", ""), "capabilities": capabilities}
     overrides = codex_policy.build_overrides(req["role"], manifest, policy_request)
+    role_instruction=runtime.get("role_instructions",{}).get(req["role"],"")
+    if not role_instruction:
+        role_file=pathlib.Path(__file__).resolve().parent.parent/"codex"/(req["role"]+".md")
+        role_instruction=role_file.read_text(encoding="utf-8") if role_file.is_file() else ""
+    if not isinstance(role_instruction,str) or not role_instruction.strip(): raise ValueError("packaged role instructions are missing")
+    prompt=role_instruction.rstrip()+"\n\n"+prompt
     resume_id = runtime.get("resume_session_id")
     recovery = runtime.get("recovery")
     if runtime.get("resume") and (not isinstance(resume_id, str) or not resume_id.strip()):
@@ -94,6 +101,9 @@ def run_dispatch(request, runtime):
     requested_root = pathlib.Path(runtime.get("attempt_root") or pathlib.Path(ep["request_path"]).parent)
     attempt_dir = requested_root / ("attempt-" + req["dispatch_id"] + "-" + uuid.uuid4().hex)
     attempt_dir.mkdir(parents=True, exist_ok=False)
+    policy_path=attempt_dir/"policy.json"
+    policy=codex_policy.build_attempt_policy(req,runtime)
+    _json(str(policy_path),policy)
     for key, name in (("request_path", "request.json"), ("events_path", "events.jsonl"),
                       ("stderr_path", "stderr.log"), ("final_path", "final.json"),
                       ("result_path", "result.json")):
@@ -117,6 +127,9 @@ def run_dispatch(request, runtime):
         if registry is not None:
             if not isinstance(registry, list): raise ValueError("process_registry must be a list")
             registry.append(dict(record))
+        control_path=runtime.get("process_registry_path")
+        if control_path:
+            run_control.register_process(control_path,req["run_id"],record)
         callback = runtime.get("on_process_start")
         if callback is not None:
             if not callable(callback): raise ValueError("on_process_start must be callable")
@@ -125,12 +138,22 @@ def run_dispatch(request, runtime):
                  "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown"))}
     codex_sessions.store_session(identity, lifecycle)
     try:
-        captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), runtime.get("env"), on_start=register_process)
+        env=dict(os.environ)
+        if isinstance(runtime.get("env"),dict): env.update(runtime["env"])
+        env["PIPELINE_ROLE_POLICY"]=str(policy_path)
+        env["CODEX_SKILL_ROOT"]=str(pathlib.Path(__file__).resolve().parent.parent)
+        captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), env, on_start=register_process)
+        if active_process and runtime.get("process_registry_path"):
+            run_control.mark_process(runtime["process_registry_path"],req["run_id"],active_process[0],
+                "completed" if captured["returncode"]==0 and not captured.get("timed_out") else "failed")
     except codex_process.ProcessLaunchError:
         lifecycle.update(status="preexec_failed", error="Codex executable could not be started")
         codex_sessions.store_session(identity, lifecycle)
         raise
     except Exception:
+        if active_process and runtime.get("process_registry_path"):
+            try: run_control.mark_process(runtime["process_registry_path"],req["run_id"],active_process[0],"interrupted")
+            except Exception: pass
         lifecycle.update(status="unresolved", error="process start/capture did not complete")
         codex_sessions.store_session(identity, lifecycle)
         raise

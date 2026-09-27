@@ -50,12 +50,14 @@ engine):
   messages, skill files: English regardless of the developer's language. The
   only exception anywhere in the pipeline is user-facing UI copy.
 
-**Execution honesty.** OpenCode runs the plan-driven pipeline. R2 adds
-packaged `Codex worker` and OpenCode task-worker adapters, but does not wire
-the R3 plan-driven Codex launcher. Backend selection has no silent fallback.
-Package extraction and fake-runtime fixtures
-verify paths and contracts; they do not prove live model, authentication, or
-permission behavior. See the packaged
+**Execution honesty.** OpenCode and Codex use explicit plan-driven entry
+points. Codex runs through `scripts/run-codex-pipeline PLAN --config FILE`
+(PowerShell: `run-codex-pipeline.ps1`), with pinned role models, reasoning,
+publication and concurrency. Before dispatch, review and trust the packaged
+hooks and confirm managed policy and inherited instructions are clear.
+Backend selection has no silent fallback. Package extraction and fake-runtime
+fixtures verify paths and contracts; they do not prove live model,
+authentication, hook trust or permission behavior. See the packaged
 [worker runtime compatibility guide](skills/two-model-sdd-pipeline/references/worker-runtime.md).
 
 ## 2. Installation

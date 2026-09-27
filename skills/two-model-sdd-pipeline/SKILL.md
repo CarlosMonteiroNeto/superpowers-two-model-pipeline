@@ -109,18 +109,25 @@ Before `brainstorming` starts:
   ledger is detected as a resume and keeps its original bundle.
 
   First-use enrollment calls `harness-project init` under the entry point.
-  It enrolls only the project in use. The Codex entry point resolves project
-  configuration only. R1 does not provide Codex dispatch or claim that the
-  Codex execution path works.
+  It enrolls only the project in use. For Codex, run the packaged launcher
+  `scripts/run-codex-pipeline PLAN_FILE --config CONFIRMED_CONFIG` (or
+  `scripts/run-codex-pipeline.ps1` in PowerShell). The config pins all three
+  role models and reasoning effort, publication mode and concurrency. Review
+  and trust the packaged PreToolUse hooks in Codex, then confirm policy and
+  inherited instructions are clear; headless runs must pass
+  `--confirm-hooks-trusted --confirm-policy-clean`. Codex is selected before
+  dispatch and never falls back to OpenCode. Local publication makes no push;
+  `pull_request` pushes and creates or reuses a PR after candidate-bound
+  closing approval, without merging it automatically.
 
 If declined, fall back to native superpowers:subagent-driven-development
 behavior. Do not run both pipelines on one branch.
 
-**Execution honesty.** OpenCode executes this pipeline today.
-Round 1 does not yet supply a working Codex pipeline: the Codex backend
-shares configuration and contracts only, and later rounds wire dispatch.
-Package smoke checks validate files and contract fixtures, not live
-model behavior.
+**Execution honesty.** OpenCode and Codex use explicit backend entry points.
+Codex package tests validate scripts, contracts and fake-runtime behavior;
+they do not certify live model, authentication, hook trust or policy behavior.
+The launcher requires explicit confirmation of hook trust and a clean review
+of managed policy and inherited instructions before dispatch.
 
 Record the answers in the ledger (`gate` entry) — every later dispatch
 depends on them, and they must survive compaction.

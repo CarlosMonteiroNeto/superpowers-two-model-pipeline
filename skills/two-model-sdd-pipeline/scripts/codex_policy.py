@@ -90,7 +90,7 @@ def build_overrides(role, runtime, request):
             "--ask-for-approval", "never"]
     values = {"developer_instructions": request["developer_instructions"],
               "model_reasoning_effort": settings["model_reasoning_effort"],
-              "agents.enabled": False, "features.apps": False,
+              "agents.enabled": False, "features.apps": False, "features.hooks": True,
               "web_search": "disabled"}
     if role == "director":
         values["features.shell_tool"] = False
@@ -99,6 +99,45 @@ def build_overrides(role, runtime, request):
         encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         argv.extend(("--config", key + "=" + encoded))
     return argv
+
+
+def build_attempt_policy(request, runtime):
+    """Derive tool scope from the current workspace plan and role request."""
+    worktree=pathlib.Path(request["worktree"]).resolve(strict=True)
+    prompt=pathlib.Path(request["evidence_paths"]["prompt_path"]).resolve(strict=True)
+    workspace=prompt.parent
+    plan_path=workspace/"plan.json"
+    if not plan_path.is_file(): raise PolicyUnavailable("attempt workspace plan snapshot is missing")
+    plan=json.loads(plan_path.read_text(encoding="utf-8"))
+    if hashlib.sha256(plan_path.read_bytes()).hexdigest()!=request["plan_revision"]:
+        raise PolicyUnavailable("attempt plan snapshot does not match request revision")
+    task=next((item for item in plan.get("tasks",[]) if item.get("id")==request["task_id"]),None)
+    if task is None: raise PolicyUnavailable("attempt task is absent from plan snapshot")
+    verification=task.get("verification",{})
+    runner_commands={}
+    for toolchain in plan.get("verification",{}).get("toolchains",[]):
+        if isinstance(toolchain,dict) and toolchain.get("id"):
+            for name in ("test","analyze","format"):
+                command=toolchain.get(name)
+                if isinstance(command,dict) and isinstance(command.get("argv"),list):
+                    runner_commands[toolchain["id"]+"-"+name]={"argv":command["argv"],"cwd":command.get("cwd",".")}
+    if isinstance(verification.get("command"),str):
+        runner_commands["task"]={"argv":shlex.split(verification["command"]),"cwd":"."}
+    if isinstance(verification.get("toolchains"),list):
+        for command in verification["toolchains"]:
+            if isinstance(command,dict) and isinstance(command.get("argv"),list):
+                runner_commands[command.get("id","task")]= {"argv":command["argv"],"cwd":command.get("cwd",".")}
+    if request["role"]!="operator": runner_commands={}
+    caps=runtime.get("capabilities",{})
+    return {"role":request["role"],"workspace_root":str(worktree),"task_id":request["task_id"],
+        "attempt_id":request["dispatch_id"],"touches":list(task.get("touches",[])),
+        "new_test_files":list(verification.get("new_test_files",[])),
+        "protected_paths":[str((worktree/".pipeline-identity.json").resolve())],
+        "runner_commands":runner_commands,
+        "read_only_commands":runtime.get("read_only_commands",[]),
+        "supervisor_path_grants":runtime.get("supervisor_path_grants",[]),
+        "director_approved_existing_changes":runtime.get("director_approved_existing_changes",[]),
+        "hooks_enabled":caps.get("hooks_enabled"),"hooks_trusted":caps.get("hooks_trusted")}
 
 
 def _deny(reason):

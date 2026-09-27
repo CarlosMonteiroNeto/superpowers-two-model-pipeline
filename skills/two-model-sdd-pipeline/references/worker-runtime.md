@@ -1,8 +1,7 @@
 # Worker runtime compatibility
 
-This guide describes the packaged task-worker adapters. It does not describe a
-complete autonomous pipeline: the R3 plan driver is not wired yet. The Codex
-and OpenCode workers consume the same strict request/result contracts while
+This guide describes the packaged task-worker adapters and the Codex pipeline
+launcher. The Codex and OpenCode workers consume the same strict request/result contracts while
 using separate launch, event, session, policy, and cancellation behavior.
 
 ## Package contents and relocation
@@ -55,15 +54,22 @@ requests fail closed. There is no provider fallback between adapters.
 
 ## Compatibility and evidence
 
+The executable support matrix is intentionally conservative. This repository
+was exercised on Windows with PowerShell and Git Bash. Unix-specific execution
+is not certified by those runs; live provider behavior requires separate
+opt-in evidence.
+
 | Backend and surface | Verified here | Unknown or not claimed |
 |---|---|---|
-| Codex adapter contract | Fake CLI and contract fixtures; request/result validation; fake fresh/resume, malformed and mismatched-session cases; source-level Windows process handling | Live Codex CLI version/model/auth behavior; provider permissions; native Windows process-tree behavior; Linux/macOS execution for this round |
-| OpenCode adapter contract | Legacy CLI wrapper fixtures and cross-backend no-fallback checks | Live OpenCode model/auth/policy behavior; provider permissions; Linux/macOS execution for this round |
-| Archive packaging | Disposable metadata fixture; archive extraction and required path checks | Marketplace installation and runtime behavior after installation |
+| Codex CLI, Windows | Launcher and worker contract tests; PowerShell shim shape; Git Bash script checks; fake CLI dispatch and process ownership | Live Codex CLI version/model/auth behavior; Windows process-tree termination with the installed Codex version; managed policy state |
+| Codex CLI, Linux/macOS | Shared Python unit tests only | Launcher shell integration, signals, provider and process-tree behavior |
+| OpenCode adapter | Legacy CLI wrapper fixtures and cross-backend no-fallback checks | Live OpenCode model/auth/policy behavior and provider permissions |
+| Codex plugin package | Disposable metadata fixture; archive extraction, bundled PreToolUse hooks and path checks | Marketplace installation and runtime hook activation/trust after installation |
 
 Fixture success does not prove live provider permissions. Both backends'
-live model, authentication, and policy behavior remain unverified until an
-opt-in probe is run with a confirmed model and captured evidence. Automated
+live model, authentication, and policy behavior remain unverified. Codex
+launch requires explicit hook-trust and policy-review confirmation; these
+human confirmations do not convert an offline fixture into live certification. Automated
 tests do not authorize real inference, publishing, or session deletion.
 
 Codex process cancellation is restricted to a process whose PID and start

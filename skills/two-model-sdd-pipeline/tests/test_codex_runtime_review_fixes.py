@@ -1,5 +1,7 @@
 """Focused regression tests for R2.5 review correction round."""
 import importlib.util
+import json
+import hashlib
 import pathlib
 import os
 import subprocess
@@ -50,7 +52,8 @@ class ReviewFixTests(unittest.TestCase):
                 "plan_revision":"p","base_commit":"a"*40,"config_hash":"b"*64,
                 "prompt_hash":""}
             prompt=pathlib.Path(d)/"prompt.md"; prompt.write_text("prompt", encoding="utf-8")
-            import hashlib
+            plan_path=pathlib.Path(d)/"plan.json"; plan_path.write_text(json.dumps({"tasks":[{"id":1,"touches":[],"verification":{}}]}),encoding="utf-8")
+            request["plan_revision"]=hashlib.sha256(plan_path.read_bytes()).hexdigest()
             request["prompt_hash"]=hashlib.sha256(b"prompt").hexdigest()
             request["evidence_paths"]={k:str(pathlib.Path(d)/v) for k,v in (("request_path","req.json"),("prompt_path","prompt.md"),("events_path","ev.jsonl"),("stderr_path","err.log"),("final_path","final.json"),("result_path","res.json"))}
             flags={k:True for k in ("hooks_enabled","hooks_trusted","sandbox_enforced","bash_hook_covered","apply_patch_hook_covered")}
@@ -79,6 +82,8 @@ class ReviewFixTests(unittest.TestCase):
                 "plan_revision":"p","base_commit":"a"*40,"config_hash":"b"*64,
                 "requested_model":"m","requested_effort":"medium","prompt_hash":hashlib.sha256(b"prompt").hexdigest()}
             prompt=pathlib.Path(d)/"prompt.md"; prompt.write_text("prompt",encoding="utf-8")
+            plan_path=pathlib.Path(d)/"plan.json"; plan_path.write_text(json.dumps({"tasks":[{"id":2,"touches":[],"verification":{}}]}),encoding="utf-8")
+            request["plan_revision"]=hashlib.sha256(plan_path.read_bytes()).hexdigest()
             request["evidence_paths"]={k:str(pathlib.Path(d)/v) for k,v in (("request_path","req.json"),("prompt_path","prompt.md"),("events_path","ev.jsonl"),("stderr_path","err.log"),("final_path","final.json"),("result_path","res.json"))}
             flags={k:True for k in ("hooks_enabled","hooks_trusted","sandbox_enforced","bash_hook_covered","apply_patch_hook_covered")}
             flags.update({k:[] for k in ("unhooked_mutating_tools","managed_policy_conflicts","inherited_instruction_conflicts")})
