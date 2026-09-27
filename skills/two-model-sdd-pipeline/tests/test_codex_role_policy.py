@@ -279,6 +279,16 @@ class CodexRolePolicyTests(unittest.TestCase):
         patch = "*** Begin Patch\n*** Update File: src/app.py\n@@\n-value = 1\n+value = 2\n*** End Patch"
         self.assertEqual(self.decision(module.check_tool_call(self.event("apply_patch", patch), policy)), "deny")
 
+    def test_codex_reviewer_rejects_test_analyze_and_format_entries_even_in_read_only_list(self):
+        module = load_module(self, "codex_policy.py", "codex_policy", "check_tool_call")
+        policy = self.policy("reviewer")
+        forbidden = (["pytest", "-q"], ["ruff", "check", "."], ["prettier", "--check", "."])
+        policy["read_only_commands"].extend(forbidden)
+        for argv in forbidden:
+            with self.subTest(argv=argv):
+                command = shlex.join(argv)
+                self.assertEqual(self.decision(module.check_tool_call(self.event("Bash", command), policy)), "deny")
+
     def test_codex_director_cannot_run_shell_or_edit(self):
         module = load_module(self, "codex_policy.py", "codex_policy", "check_tool_call")
         policy = self.policy("director")
@@ -457,6 +467,32 @@ class OpenCodeRolePolicyTests(unittest.TestCase):
         self.assertIn("rg --files", agent["bash"])
         runner = " ".join(self.request()["runner_commands"]["test"]["argv"])
         self.assertNotIn(runner, agent["bash"])
+
+    def test_opencode_reviewer_rejects_test_analyze_and_format_read_only_entries(self):
+        module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
+        request = self.request()
+        forbidden = (["pytest", "-q"], ["ruff", "check", "."], ["prettier", "--check", "."])
+        request["read_only_commands"].extend(forbidden)
+        result = module.build_settings("reviewer", opencode_runtime(), request)
+        agent = result["config"]["agent"]["review"]["permission"]
+        for argv in forbidden:
+            with self.subTest(argv=argv):
+                self.assertNotIn(" ".join(argv), agent["bash"])
+        self.assertFalse(result["capabilities"]["available"])
+        self.assertTrue(result["capabilities"]["unsupported"])
+
+    def test_opencode_reports_ambiguous_argv_permissions_unsupported(self):
+        module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
+        request = self.request()
+        request["runner_commands"]["query"] = {
+            "argv": ["rg", "query with spaces", "README.md"],
+            "cwd": str(self.workspace),
+        }
+        result = module.build_settings("operator", opencode_runtime(), request)
+        agent = result["config"]["agent"]["build"]["permission"]
+        self.assertFalse(result["capabilities"]["available"])
+        self.assertTrue(result["capabilities"]["unsupported"])
+        self.assertNotIn("rg query with spaces README.md", agent["bash"])
 
     def test_opencode_director_has_no_shell_edit_or_delegation(self):
         module = load_module(self, "opencode_policy.py", "opencode_policy", "build_settings")
