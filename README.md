@@ -38,9 +38,10 @@ engine):
 - **State is external** — plan.json + git + JSONL ledger, never
   conversational memory; this is what makes every loop resumable after
   compaction.
-- **Cache-aware, logged dispatch** — all subagent calls go through
-  `scripts/dispatch --agent NAME [--continue SESSION]`, never inline/ad-hoc
-  prompts.
+- **Cache-aware, logged dispatch** — OpenCode task workers use the legacy
+  `scripts/dispatch` route; Codex task workers use the explicit Codex adapter
+  and identity-bound session contract. Model-directed Codex subagents are a
+  separate host feature, not a substitute for the pipeline's worker protocol.
 - **RTK compression** — large outputs (logs, diffs, JSON reports) get
   minified via `cmd` before hitting context; dependency context comes from
   diffs and gate reports, not manual grepping.
@@ -48,9 +49,13 @@ engine):
   messages, skill files: English regardless of the developer's language. The
   only exception anywhere in the pipeline is user-facing UI copy.
 
-**Execution honesty.** OpenCode executes this pipeline today.
-Round 1 does not yet supply a working Codex pipeline: the Codex backend shares configuration and contracts only, and later rounds wire dispatch.
-Package smoke checks validate files and contract fixtures, not live model behavior.
+**Execution honesty.** OpenCode runs the plan-driven pipeline. R2 adds
+packaged `Codex worker` and OpenCode task-worker adapters, but does not wire
+the R3 plan-driven Codex launcher. Backend selection has no silent fallback.
+Package extraction and fake-runtime fixtures
+verify paths and contracts; they do not prove live model, authentication, or
+permission behavior. See the packaged
+[worker runtime compatibility guide](skills/two-model-sdd-pipeline/references/worker-runtime.md).
 
 ## 2. Installation
 
@@ -120,9 +125,8 @@ The entry point enrolls only the project in use on first use. It writes a
 versioned `.superpowers/harness.json` pin (bundle id, bundle hash, backend,
 relocatable backend configuration and policy references) and merges a marked
 `AGENTS.md` section idempotently while preserving user instructions. It then
-starts OpenCode from that project's pinned bundle. The Codex entry point
-resolves the pinned configuration only; R1 does not ship Codex pipeline
-execution.
+starts OpenCode from that project's pinned bundle. The Codex worker adapter
+is packaged, but the full plan-driven Codex entry point remains R3 work.
 
 For an existing project, `harness-project prepare --project DIR --backend opencode`
 resolves its pin and reports changed paths when a newer bundle is selected.
@@ -261,9 +265,12 @@ detection; ask only on genuine ambiguity) and the generic `red-gate`, with
 | Agente revisor | Strategic (`two-model-reviewer`, `mode: all`) | JSON verdict (APPROVED / SEND_BACK / ESCALATE) on compiler-approved code + test-vs-acceptance fit; never runs test/analyze |
 | Strategic Coder | REMOVED | escalation is Agente diretor arbitration (`ARBITRATE`) |
 
-Always dispatch via `scripts/dispatch`, which targets the named agent
-definition explicitly; omitted model silently inherits the expensive
-session model. Both tier agents are `mode: all` (spike-verified:
+For the plan-driven OpenCode pipeline, `scripts/dispatch` targets the named
+agent definition explicitly. The compatibility route without `--backend`
+retains OpenCode behavior. New task-worker calls select a backend explicitly;
+the Codex adapter takes the strict request via `--request` and its validated
+runtime envelope via `CODEX_RUNTIME_JSON`. Both routes reject mismatched
+backend requests and never silently cross providers. Both tier agents are `mode: all` (spike-verified:
 subagent-mode agents cannot be targeted headlessly by `opencode run
 --agent`).
 
@@ -272,7 +279,9 @@ subagent-mode agents cannot be targeted headlessly by `opencode run
 | Script | Purpose | Verdict |
 |---|---|---|
 | `cmd --full-file FILE -- CMD...` (two-model) | Generic command runner: runs any LLM-invoked command, saves the FULL output to FILE, prints the RTK-compressed view on stdout, returns the command's true exit code | exit = command's exit code; 2 usage |
-| `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Headless subagent launcher: `opencode run --agent <def> --format json`, tees the JSON event stream to LOG plus a live progress digest, records the session id for resume | exit = opencode's exit; 2 usage; 3 not a primary agent |
+| `dispatch --agent NAME --task N [--continue SESSION] --prompt-file FILE --log LOG` (two-model) | Legacy-compatible OpenCode worker call; tees JSON events and records the session ID for continuation | OpenCode exit; 2 usage; 3 wrong OpenCode agent |
+| `dispatch --backend codex --request REQUEST.json` (two-model) | Native `codex exec --json` worker call; runtime envelope comes from `CODEX_RUNTIME_JSON`; resume requires an identity-bound explicit session ID | 2 usage; 4 invalid configuration/request; 5 confirmed pre-exec startup failure; 6 ambiguous/post-start failure; 124 timeout; 130 interruption |
+| `dispatch --backend opencode --agent NAME --task N ...` (two-model) | Explicit legacy OpenCode adapter selection; no Codex fallback | OpenCode exit; 2 usage; 3 wrong OpenCode agent |
 | `orchestrator WS TASK [TOTAL]` (two-model) | The single dispatch table: runs `route-next`, executes the script-owned emitted action, prints `OUTCOME:` for the runner | exit 0 handoff; 1 inconsistent; 2 usage |
 | `$SUPERPOWERS_DIR/.harness/entrypoints/opencode.sh PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]` | Project-aware OpenCode entry point in the installed vendor checkout: enrolls this project on first use, resolves its pin, and retains the bundle while resuming | exit 0 closed; 1 blocked; 2 usage; 4 upgrade decision required |
 | `run-pipeline PLAN_FILE [TOTAL] [--no-push] [--max-parallel N]` (two-model, internal) | Script CEO driver invoked by the project-aware entry point; drives a plan serially or in plan-derived waves to closing → push+PR | exit 0 closed; 1 blocked; 2 usage |

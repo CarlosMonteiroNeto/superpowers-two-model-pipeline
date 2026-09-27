@@ -40,8 +40,9 @@ Options:
   -h, --help               Show this help.
 
 The archive is rootless: .codex-plugin/, agent/, assets/, skills/, README.md,
-LICENSE, and CODE_OF_CONDUCT.md sit at the archive root. Source-only repo files, hooks, tests,
-docs, and other harness manifests are intentionally not shipped.
+LICENSE, and CODE_OF_CONDUCT.md sit at the archive root. Skill references,
+schemas, prompts, and scripts under skills/ are shipped together. Root-level
+source-only scripts, hooks, tests, docs/, and harness manifests are not shipped.
 EOF
 }
 
@@ -139,7 +140,18 @@ if [[ "$FORMAT" == "zip" ]]; then
   command -v unzip >/dev/null || die "unzip not found in PATH"
 fi
 
-[[ -d "$REPO_ROOT/.git" ]] || die "repo root is not a git checkout: $REPO_ROOT"
+# Git Bash may pass POSIX paths (for example /c/Users/...) to native Windows
+# Python, which does not interpret those paths. Keep shell/Git paths portable,
+# and translate only the Python file arguments when cygpath is available.
+native_python_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+[[ -e "$REPO_ROOT/.git" ]] || die "repo root is not a git checkout: $REPO_ROOT"
 git -C "$REPO_ROOT" rev-parse --verify "$REF^{commit}" >/dev/null ||
   die "git ref does not resolve to a commit: $REF"
 
@@ -241,7 +253,7 @@ git -C "$REPO_ROOT" -c tar.umask=0022 archive --format=tar "$REF" -- \
   skills \
   | tar -xpf - -C "$STAGE"
 
-VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$STAGE/.codex-plugin/plugin.json")"
+VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$(native_python_path "$STAGE/.codex-plugin/plugin.json")")"
 [[ -n "$VERSION" ]] || die "could not read version from .codex-plugin/plugin.json"
 
 if [[ -z "$OUTPUT" ]]; then
@@ -296,7 +308,7 @@ case "$FORMAT" in
     (
       cd "$STAGE"
       rm -f "$OUTPUT"
-      COPYFILE_DISABLE=1 zip -X -q - -@ <"$ARCHIVE_LIST" >"$OUTPUT"
+      COPYFILE_DISABLE=1 zip -X -q "$OUTPUT" -@ <"$ARCHIVE_LIST"
     )
     ;;
   tar.gz)
@@ -341,7 +353,7 @@ if [[ -n "$unexpected_paths" ]]; then
 fi
 
 entry_count="$(printf '%s\n' "$archive_paths" | wc -l | tr -d ' ')"
-checksum="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$OUTPUT")"
+checksum="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$(native_python_path "$OUTPUT")")"
 
 echo "Archive: $OUTPUT"
 echo "Format:  $FORMAT"
