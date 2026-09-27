@@ -142,7 +142,7 @@ class PlanTransactionTests(unittest.TestCase):
                 transaction.apply_director_proposal(proposal,manifest)
             self.assertEqual(len(json.loads(path.read_text(encoding="utf-8"))["tasks"]),1)
 
-    def test_stale_source_hash_and_dependency_cycle_leave_plan_unchanged(self):
+    def test_stale_source_hash_leaves_plan_unchanged(self):
         transaction = load(self)
         with tempfile.TemporaryDirectory() as temp:
             repo = pathlib.Path(temp) / "repo"
