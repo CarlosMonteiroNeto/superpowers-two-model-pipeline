@@ -42,7 +42,7 @@ class ReviewRecoveryTests(unittest.TestCase):
                 OSError("review transport unavailable"),
                 {"role": "reviewer", "run_id": "run-a", "task_id": 2,
                  "task_family": 2, "base_commit": "b" * 40, "candidate_commit": "a" * 40,
-                 "final_output": {"verdict": "APPROVED", "findings": []}}]) as dispatch:
+                 "final_output": {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"}}]) as dispatch:
             pending = module.ensure_review(req, env)
             self.assertEqual(pending["status"], "review_pending")
             approved = module.ensure_review(req, env)
@@ -56,13 +56,12 @@ class ReviewRecoveryTests(unittest.TestCase):
         req = request()
         old = {"role": "reviewer", "run_id": "run-a", "task_id": 2,
             "task_family": 2, "base_commit": "b" * 40, "candidate_commit": "e" * 40,
-            "final_output": {"verdict": "APPROVED", "findings": []}}
+            "final_output": {"verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved"}}
         with mock.patch.object(module, "load_review_result", return_value=old), \
              mock.patch.object(module.codex_dispatch, "run_dispatch", return_value={
                 "role": "reviewer", "run_id": "run-a", "task_id": 2, "task_family": 2,
                 "base_commit": "b" * 40, "candidate_commit": "a" * 40,
-                "final_output": {"verdict": "SEND_BACK", "findings": []}}) as dispatch:
+                "final_output": {"verdict": "SEND_BACK", "findings": [], "minors": [], "summary": "revise"}}) as dispatch:
             result = module.ensure_review(req, runtime())
         dispatch.assert_called_once()
         self.assertEqual(result["verdict"], "SEND_BACK")
-
