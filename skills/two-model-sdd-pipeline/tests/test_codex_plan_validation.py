@@ -53,6 +53,18 @@ class PlanValidationTests(unittest.TestCase):
             plan["tasks"].append({**copy.deepcopy(plan["tasks"][0]), "id": 3, "depends_on": [1]})
             with self.assertRaises(ValueError):
                 validator.validate_plan(plan, str(root))
+
+    def test_requires_interfaces_and_verification_contract_fields(self):
+        validator = load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "docs").mkdir()
+            (root / "docs" / "spec.md").write_text("# Contract\n", encoding="utf-8")
+            for field in ("interfaces", "verification"):
+                plan = valid_plan()
+                del plan[field]
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    validator.validate_plan(plan, str(root))
             plan = valid_plan()
             plan["tasks"][0]["depends_on"] = [1]
             with self.assertRaises(ValueError):

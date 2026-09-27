@@ -42,3 +42,22 @@ class MultitoolchainIntegrationTests(unittest.TestCase):
         self.assertEqual(approved["decision"], "grant")
         denied = grants.reserve({"path": "src/app.py", "kind": "existing_file"}, ownership)
         self.assertEqual(denied["decision"], "block")
+
+    def test_scope_grant_resolves_symlink_before_protected_path_checks(self):
+        grants = load(self, "scope_grants.py", "reserve")
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "src").mkdir()
+            (root / "plan.json").write_text("{}", encoding="utf-8")
+            alias = root / "src" / "plan-alias.json"
+            try:
+                alias.symlink_to(root / "plan.json")
+            except (OSError, NotImplementedError):
+                self.skipTest("symlink creation is unavailable")
+            ownership = {"run_id": "r", "family_id": 1, "repo_root": str(root),
+                "allowed_roots": ["src"], "declared_touches": [],
+                "protected_paths": ["plan.json"],
+                "director_approved_existing": ["src/plan-alias.json"]}
+            decision = grants.reserve({"path": "src/plan-alias.json", "kind": "existing_file"}, ownership)
+            self.assertEqual(decision["decision"], "block")
+            self.assertEqual(decision["reason"], "protected path")
