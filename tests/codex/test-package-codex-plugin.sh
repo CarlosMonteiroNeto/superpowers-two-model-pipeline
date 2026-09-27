@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PY_REPO_ROOT="$REPO_ROOT"
+if command -v cygpath >/dev/null 2>&1; then PY_REPO_ROOT="$(cygpath -w "$REPO_ROOT")"; fi
 SCRIPT_UNDER_TEST="$REPO_ROOT/scripts/package-codex-plugin.sh"
 
 FAILURES=0
@@ -134,13 +136,13 @@ EOF
 echo "Codex package archive tests"
 
 metadata_source="$TEST_ROOT/metadata-source"
-archive="$TEST_ROOT/superpowers"
+archive="$TEST_ROOT/superpowers.zip"
 tar_archive="$TEST_ROOT/superpowers.tar.gz"
 extracted="$TEST_ROOT/extracted"
 tar_extracted="$TEST_ROOT/tar-extracted"
 write_metadata_fixture "$metadata_source"
 
-source_hooks="$(python3 -c 'import json; print(json.load(open("'"$REPO_ROOT"'/.codex-plugin/plugin.json")).get("hooks"))')"
+source_hooks="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("hooks"))' "$PY_REPO_ROOT/.codex-plugin/plugin.json")"
 assert_equals "$source_hooks" "./codex-plugin-hooks/hooks.json" "source Codex manifest binds packaged pipeline hooks"
 
 if output="$("$SCRIPT_UNDER_TEST" --allow-dirty --metadata-source "$metadata_source" --output "$archive" 2>&1)"; then
@@ -173,7 +175,7 @@ assert_contains "$archive_paths" "assets/app-icon.png" "archive includes app ico
 assert_contains "$archive_paths" "assets/superpowers-small.svg" "archive includes composer icon"
 
 manifest_summary="$(read_archive_file "$archive" .codex-plugin/plugin.json | python3 -c 'import json,sys; data=json.load(sys.stdin); print("\t".join([data["name"], data["version"], data["skills"], str(data.get("hooks"))]))')"
-expected_version="$(python3 -c 'import json; print(json.load(open("'"$REPO_ROOT"'/.codex-plugin/plugin.json"))["version"])')"
+expected_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["version"])' "$PY_REPO_ROOT/.codex-plugin/plugin.json")"
 assert_equals "$manifest_summary" "superpowers	$expected_version	./skills/	$source_hooks" "archive manifest preserves source hooks"
 assert_contains "$(cat "$extracted/codex-plugin-hooks/hooks.json")" 'PLUGIN_ROOT' "packaged hooks resolve their script through the Codex plugin root"
 
