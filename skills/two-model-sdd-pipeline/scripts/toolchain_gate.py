@@ -275,8 +275,30 @@ def _run_one(workspace: str, entry: dict[str, Any], name: str, log_path: str) ->
     script_dir = Path(__file__).resolve().parent
     cmd_path = script_dir / "cmd"
     cwd = spec["cwd"] or workspace
+    # Toolchains are resolved before task worktrees are allocated. Rebase an
+    # absolute configured cwd from that source checkout into the active Git
+    # checkout so task gates run against the task branch they are approving.
+    descriptor = _descriptor(entry)
+    source_value = descriptor.get("project_root")
+    if source_value and Path(str(source_value)).is_absolute() and Path(cwd).is_absolute():
+        git_root = subprocess.run(
+            ["git", "-C", workspace, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+        )
+        if git_root.returncode == 0 and git_root.stdout.strip():
+            source_root = Path(str(source_value)).resolve()
+            checkout = Path(git_root.stdout.strip()).resolve()
+            try:
+                relative = Path(cwd).resolve().relative_to(source_root)
+            except ValueError:
+                pass
+            else:
+                mapped = (checkout / relative).resolve()
+                if mapped.is_dir():
+                    cwd = str(mapped)
     env = dict(os.environ)
     env.update(spec["env"])
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     process = subprocess.run(
         [bash, str(cmd_path), "--full-file", log_path, "--", *spec["argv"]],
         cwd=cwd, env=env,

@@ -438,6 +438,11 @@ class CodexRolePolicyTests(unittest.TestCase):
         bundled=json.loads((ROOT/"codex-plugin-hooks"/"hooks.json").read_text(encoding="utf-8"))
         matchers={entry["matcher"] for entry in bundled["hooks"]["PreToolUse"]}
         self.assertEqual(matchers,{"Bash","apply_patch"})
+        for group in bundled["hooks"]["PreToolUse"]:
+            for handler in group["hooks"]:
+                self.assertIn("commandWindows", handler)
+                self.assertNotIn("command_windows", handler)
+                self.assertIn("codex-policy", handler["commandWindows"])
         repository_hooks=json.loads((ROOT/"hooks"/"hooks.json").read_text(encoding="utf-8"))
         self.assertIn("SessionStart",repository_hooks["hooks"])
 

@@ -58,12 +58,17 @@ hooks and confirm managed policy and inherited instructions are clear.
 Backend selection has no silent fallback. Package extraction and fake-runtime
 fixtures verify paths and contracts; they do not prove live model,
 authentication, hook trust or permission behavior. See the packaged
-[worker runtime compatibility guide](skills/two-model-sdd-pipeline/references/worker-runtime.md).
+[Codex runtime reference](skills/two-model-sdd-pipeline/references/codex-runtime.md)
+and [worker runtime compatibility guide](skills/two-model-sdd-pipeline/references/worker-runtime.md).
+The tested limits and remaining live checks are tracked in the
+[Codex pipeline support matrix](docs/testing/codex-pipeline-support-matrix.md).
 
 ## 2. Installation
 
 The plugin loads from a vendored git checkout of this repository
-(`~/.config/opencode/vendor/superpowers`), decoupled from npm.
+(`~/.config/opencode/vendor/superpowers`), decoupled from npm. The validated
+bundle also carries the Codex plan-driven runtime described in the
+[Codex runtime reference](skills/two-model-sdd-pipeline/references/codex-runtime.md).
 
 ```
 scripts/install-superpowers          # clones the fork into the vendor dir
@@ -128,8 +133,9 @@ The entry point enrolls only the project in use on first use. It writes a
 versioned `.superpowers/harness.json` pin (bundle id, bundle hash, backend,
 relocatable backend configuration and policy references) and merges a marked
 `AGENTS.md` section idempotently while preserving user instructions. It then
-starts OpenCode from that project's pinned bundle. The Codex worker adapter
-is packaged, but the full plan-driven Codex entry point remains R3 work.
+starts OpenCode from that project's pinned bundle. Codex uses the packaged
+plan-driven entry point and explicit Codex adapter; see the Codex runtime
+reference for setup and evidence limitations.
 
 For an existing project, `harness-project prepare --project DIR --backend opencode`
 resolves its pin and reports changed paths when a newer bundle is selected.

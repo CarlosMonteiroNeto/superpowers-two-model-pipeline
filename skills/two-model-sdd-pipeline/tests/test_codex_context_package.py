@@ -172,6 +172,7 @@ class ContextPackageTests(unittest.TestCase):
         self.assertTrue(runner_lines, "the brief must invoke the shared scoped runner")
         red_line = next((line for line in runner_lines if "red" in line), runner_lines[0])
         tokens = shlex.split(red_line)
+        self.assertEqual(tokens[0], "bash", "the brief must invoke the Bash entrypoint explicitly on Windows")
         self.assertIn(workspace.as_posix(), tokens)
         self.assertIn("tests/test ação.py", tokens)
 

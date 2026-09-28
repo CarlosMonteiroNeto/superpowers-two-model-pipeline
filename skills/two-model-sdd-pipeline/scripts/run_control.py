@@ -121,10 +121,17 @@ def request_cancel(path,run_id,grace_seconds=1.0):
 
 def execute_owned(path,run_id,argv):
     if not argv: raise ValueError("owned command is required")
-    child=subprocess.Popen(argv,creationflags=(getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0)|getattr(subprocess,"CREATE_NO_WINDOW",0)) if os.name=="nt" else 0,
-        start_new_session=os.name!="nt")
+    kwargs={"creationflags":getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0) if os.name=="nt" else 0,
+        "start_new_session":os.name!="nt"}
+    child=subprocess.Popen(argv,**kwargs)
     identity=codex_process._start_identity(child.pid)
     if not identity:
+        completed=child.poll()
+        if completed is not None:
+            # Short commands can exit before the Windows start-time probe
+            # observes them. Preserve their terminal status without tracking
+            # a PID that no longer exists.
+            return completed
         child.terminate(); child.wait(timeout=3)
         raise RuntimeError("could not verify task-run process identity")
     record={"pid":child.pid,"start_identity":identity,"started":time.time(),"argv":argv}

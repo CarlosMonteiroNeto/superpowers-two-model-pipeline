@@ -241,6 +241,7 @@ class IntegrateTest(unittest.TestCase):
         }), encoding="utf-8")
         (self.ws / "ledger.jsonl").write_text(json.dumps({
             "type": "gate", "task": "-", "lang": "flutter",
+            "summary": "configured structured Flutter gate",
             "toolchain_id": toolchain_id,
             "toolchain_descriptor": json.dumps(descriptor),
         }) + "\n", encoding="utf-8")
@@ -286,6 +287,7 @@ class IntegrateTest(unittest.TestCase):
         }), encoding="utf-8")
         (self.ws / "ledger.jsonl").write_text(json.dumps({
             "type": "gate", "task": "-", "lang": "flutter",
+            "summary": "configured structured Flutter gate",
             "toolchain_id": "flutter-stable-v1",
             "toolchain_descriptor": json.dumps(descriptor),
         }) + "\n", encoding="utf-8")

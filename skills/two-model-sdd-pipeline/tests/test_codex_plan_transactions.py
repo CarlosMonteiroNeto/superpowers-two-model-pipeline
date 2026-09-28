@@ -30,6 +30,19 @@ def load(test):
 
 
 class PlanTransactionTests(unittest.TestCase):
+    def test_plan_transaction_ledger_entry_matches_pipeline_ledger_contract(self):
+        transaction=load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            ledger=pathlib.Path(temp)/"ledger.jsonl"
+            ledger.write_text(json.dumps({"ts":"now","type":"gate","task":"-","summary":"ready"})+"\n",encoding="utf-8")
+            transaction._append_ledger({"ledger_path":str(ledger)},"proposal-id",{
+                "old_plan_hash":"a"*64,"new_plan_hash":"b"*64,
+                "assigned_ids":[2],"commit":"c"*40,"recovered":False})
+            entry=json.loads(ledger.read_text(encoding="utf-8").splitlines()[-1])
+        self.assertTrue(all(key in entry for key in ("ts","type","task","summary")))
+        self.assertEqual(entry["type"],"plan_transaction")
+        self.assertEqual(entry["task"],"2")
+
     def test_validated_closing_reopen_creates_script_owned_followup_task(self):
         transaction=load(self)
         with tempfile.TemporaryDirectory() as temp:
@@ -161,6 +174,28 @@ class PlanTransactionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"reviewed affected paths"):
                 transaction.apply_director_proposal(proposal,manifest)
             self.assertEqual(len(json.loads(path.read_text(encoding="utf-8"))["tasks"]),1)
+
+    def test_arbitration_cannot_move_declared_new_tests_into_touches(self):
+        transaction=load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            repo=pathlib.Path(temp)/"repo"; repo.mkdir(); git(repo,"init","-q")
+            git(repo,"config","user.email","test@example.invalid"); git(repo,"config","user.name","test")
+            (repo/"docs").mkdir(); (repo/"docs"/"spec.md").write_text("# Contract\n",encoding="utf-8")
+            path=repo/"plan.json"
+            plan={"version":1,"title":"Fixture","spec_doc":"docs/spec.md","global_constraints":["Safe"],
+                "tasks":[{"id":1,"title":"First","summary":"Existing","spec_refs":["docs/spec.md#Contract"],
+                    "touches":["src/a.py"],"depends_on":[],"acceptance":["Works"],
+                    "interfaces":{"produces":[],"consumes":[]},"verification":{"new_test_files":["tests/test_a.py"]}}]}
+            path.write_text(json.dumps(plan),encoding="utf-8"); git(repo,"add","-A"); git(repo,"commit","-qm","plan")
+            source=hashlib.sha256(path.read_bytes()).hexdigest()
+            proposal={"mode":"arbitration","decision":"amend","reason":"wrongly move test into touches",
+                "source_plan_hash":source,"target_task":1,
+                "proposal":{"field_changes":{"touches":["src/a.py","tests/test_a.py"]}}}
+            manifest={"repository_root":str(repo),"plan_path":str(path),"run_id":"run-a",
+                "ledger_path":str(repo/"ledger.jsonl")}
+            with self.assertRaisesRegex(ValueError,"new test files belong in verification.new_test_files"):
+                transaction.apply_director_proposal(proposal,manifest)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")),plan)
 
     def test_stale_source_hash_leaves_plan_unchanged(self):
         transaction = load(self)

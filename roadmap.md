@@ -1,7 +1,7 @@
 # Shared Pipeline Roadmap
 
 Date: 2026-09-25
-Status: Consolidated confirmed design; implementation has not started.
+Status: Consolidated design; R3 Codex integration is implemented and accepted with documented backend limitations. R4 remains the next planned round.
 
 ## 1. Purpose and authority
 
@@ -183,6 +183,16 @@ production. R4 must pass before unattended production use of the redesigned flow
 Every round includes documentation, packaging and regression work. Implementation
 uses a pinned supervisor outside worker edits. Existing runtime remains unchanged
 during planning.
+
+R3 Codex acceptance completed on 2026-09-27: the full generic suite passed
+(947 tests, 2 skips), the offline Codex acceptance harness passed all seven
+scenario groups (213 test executions), a live two-task Codex run reached
+serialized integration and director closing approval, and extracted ZIP/TAR.GZ
+packages initialized successfully. The [Codex support matrix](docs/testing/codex-pipeline-support-matrix.md)
+records exact evidence and limits. OpenCode's unattended Free-tier closing path
+remains unsupported in this environment (HTTP 403 outside its UI); its requested
+Muse Spark 1.3 Free UI review was approved with two parked minor findings. This
+does not establish full OpenCode lifecycle parity or broad platform certification.
 
 ### Complete machine plans
 

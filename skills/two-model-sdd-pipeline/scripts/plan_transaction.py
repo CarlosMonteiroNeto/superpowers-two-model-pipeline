@@ -6,6 +6,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import datetime
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
@@ -67,7 +68,16 @@ def _append_ledger(manifest, proposal_id, record):
                 raise ValueError("corrupt canonical ledger; refusing plan transaction") from exc
     if any(e.get("proposal_id") == proposal_id and e.get("type") == "plan_transaction" for e in events):
         return
-    entry = {"type": "plan_transaction", "proposal_id": proposal_id, **record}
+    details=dict(record)
+    event_type=details.pop("event","plan_transaction")
+    task=details.pop("task",details.pop("target_task",None))
+    if task is None:
+        assigned=details.get("assigned_ids") or []
+        task=assigned[0] if assigned else "-"
+    summary=details.pop("summary", "{} committed".format(event_type.replace("_"," ")))
+    entry = {"ts":datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z"),
+        "type":event_type,"task":str(task),"summary":summary,
+        "proposal_id":proposal_id,**details}
     with ledger.open("a", encoding="utf-8", newline="\n") as stream:
         stream.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n")
         stream.flush()

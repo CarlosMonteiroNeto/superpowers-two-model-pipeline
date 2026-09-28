@@ -31,12 +31,23 @@ def main(argv):
         print("usage: brief-scaffold WORKSPACE TASK", file=sys.stderr)
         return 2
     ws, task = argv
-    # Forward slashes and shell quoting keep absolute Windows paths with
-    # spaces or Unicode intact when pasted into Git Bash.
+    # Prefer a path relative to the worker checkout when the workspace is
+    # inside it. Besides being shorter, this keeps Windows sandbox writes
+    # anchored beneath the active worktree when the brief is run verbatim.
     ws_raw = ws.rstrip("/\\")
     ws_sh = (ws_raw if os.path.isabs(ws_raw) else os.path.abspath(ws_raw)).replace("\\", "/")
-    ws_arg = shlex.quote(ws_sh)
-    runner_arg = shlex.quote(SCOPED_RUN)
+    # Normalize 8.3 aliases (common in Git Bash -> native Python handoffs) on
+    # both sides before comparing; otherwise an in-worktree path appears to
+    # escape the checkout and falls back to a long absolute path.
+    cwd = os.path.realpath(os.getcwd())
+    canonical_ws = os.path.realpath(ws_sh)
+    relative_ws = os.path.relpath(canonical_ws, cwd).replace("\\", "/")
+    if relative_ws != ".." and not relative_ws.startswith("../") and not os.path.isabs(relative_ws):
+        ws_command = relative_ws
+    else:
+        ws_command = ws_sh
+    ws_arg = shlex.quote(ws_command)
+    runner_arg = "bash " + shlex.quote(SCOPED_RUN)
     plan_path = ws.rstrip("/\\") + "/plan.json"
     try:
         with open(plan_path, encoding="utf-8", errors="replace") as fh:
@@ -119,7 +130,7 @@ def main(argv):
         "1. Write BLACK-BOX tests encoding Acceptance "
         "(skills/test-driven-development/writing-good-tests.md).",
         "2. RUN those tests yourself with the shared scoped command and save "
-        "its machine-readable RED evidence to `%s/task-%s-red.txt`." % (ws_sh, wanted),
+        "its machine-readable RED evidence to `%s/task-%s-red.txt`." % (ws_command, wanted),
         "   red-form-check accepts only a loaded suite with an executed test "
         "that fails as an assertion or runtime error.",
         "",

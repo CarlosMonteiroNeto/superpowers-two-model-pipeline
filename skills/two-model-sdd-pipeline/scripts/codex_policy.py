@@ -129,10 +129,17 @@ def build_attempt_policy(request, runtime):
                 runner_commands[command.get("id","task")]= {"argv":command["argv"],"cwd":command.get("cwd",".")}
     if request["role"]!="operator": runner_commands={}
     caps=runtime.get("capabilities",{})
+    protected_paths=[str((worktree/".pipeline-identity.json").resolve())]
+    for protected in (plan_path, workspace/"ledger.jsonl"):
+        try:
+            protected.resolve().relative_to(worktree)
+        except ValueError:
+            continue
+        if protected.is_file(): protected_paths.append(str(protected.resolve()))
     return {"role":request["role"],"workspace_root":str(worktree),"task_id":request["task_id"],
         "attempt_id":request["dispatch_id"],"touches":list(task.get("touches",[])),
         "new_test_files":list(verification.get("new_test_files",[])),
-        "protected_paths":[str((worktree/".pipeline-identity.json").resolve())],
+        "protected_paths":protected_paths,
         "runner_commands":runner_commands,
         "read_only_commands":runtime.get("read_only_commands",[]),
         "supervisor_path_grants":runtime.get("supervisor_path_grants",[]),
@@ -366,3 +373,24 @@ def capture_protected_state(request):
         raise
     except Exception as exc:
         _fail("protected-state capture failed: " + str(exc))
+
+
+def compare_protected_state(before, after):
+    """Compare authoritative files while allowing declared task edits."""
+    identity_fields = ("workspace_root", "task_id", "attempt_id")
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        _fail("protected-state snapshots must be objects")
+    if any(before.get(key) != after.get(key) for key in identity_fields):
+        _fail("protected-state snapshots have mismatched identity")
+    before_files = before.get("protected_files")
+    after_files = after.get("protected_files")
+    if not isinstance(before_files, dict) or not isinstance(after_files, dict):
+        _fail("protected-state snapshots lack file hashes")
+    paths = sorted(set(before_files) | set(after_files))
+    changed = [path for path in paths if before_files.get(path) != after_files.get(path)]
+    head_changed = before.get("git_head") != after.get("git_head")
+    return {"version": 1, **{key: before[key] for key in identity_fields},
+            "git_head_changed": head_changed,
+            "git_status_changed": before.get("git_status_sha256") != after.get("git_status_sha256"),
+            "changed_protected_paths": changed,
+            "integrity_ok": not head_changed and not changed}

@@ -454,7 +454,10 @@ def _validate_arbitration_proposal(value):
     for key in changes:
         if key not in ALLOWED_ARBITRATION_FIELDS:
             _fail("arbitration field %r is not permitted" % key)
-    return {"field_changes": copy.deepcopy(changes)}
+    changes = {key: copy.deepcopy(item) for key, item in changes.items() if item is not None}
+    if not changes:
+        _fail("arbitration field_changes must change at least one field")
+    return {"field_changes": changes}
 
 
 def _validate_proposed_task(value):

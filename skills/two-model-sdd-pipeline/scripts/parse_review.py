@@ -246,7 +246,7 @@ def _cli():
     Codex: parse-review --backend codex RESULT.json REQUEST.json OUTFILE.
     """
     if len(sys.argv) == 6 and sys.argv[1:3] == ["--backend", "codex"]:
-        _, _, result_path, request_path, outfile = sys.argv
+        _, _, _, result_path, request_path, outfile = sys.argv
         try:
             result = json.loads(pathlib.Path(result_path).read_text(encoding="utf-8"))
             request = json.loads(pathlib.Path(request_path).read_text(encoding="utf-8"))

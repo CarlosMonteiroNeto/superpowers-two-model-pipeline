@@ -1,5 +1,6 @@
 """Controller-owned R3.3 validation for semantic director proposals."""
 import importlib.util
+import hashlib
 import pathlib
 import json
 import subprocess
@@ -29,6 +30,17 @@ def proposal():
 
 
 class DirectorProposalTests(unittest.TestCase):
+    def test_director_structured_output_enum_and_const_fields_declare_types(self):
+        schema=json.loads((ROOT / "skills" / "two-model-sdd-pipeline" / "schemas" / "director-result.schema.json").read_text(encoding="utf-8"))
+        arbitration=json.loads((ROOT / "skills" / "two-model-sdd-pipeline" / "schemas" / "director-arbitration.schema.json").read_text(encoding="utf-8"))
+        for schema in (schema, arbitration):
+            self.assertEqual(schema["type"], "object")
+            self.assertNotIn("oneOf", schema)
+            self.assertNotIn("anyOf", schema)
+            for name, prop in schema["properties"].items():
+                if "enum" in prop or "const" in prop:
+                    self.assertIn("type", prop, "{} must declare a JSON Schema type".format(name))
+
     def test_accepts_only_matching_proposal_and_target(self):
         validator = load(self)
         expected = {"mode": "correction", "source_plan_hash": "a" * 64, "target_task": 1}
@@ -52,6 +64,15 @@ class DirectorProposalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validator.validate_proposal(value,{"mode":"arbitration","source_plan_hash":"a"*64,"target_task":1})
 
+    def test_arbitration_strict_schema_null_slots_normalize_to_only_changed_fields(self):
+        validator=load(self)
+        value={"mode":"arbitration","decision":"amend","reason":"narrow scope",
+            "source_plan_hash":"a"*64,"target_task":1,
+            "proposal":{"field_changes":{"touches":None,"acceptance":None,
+                "summary":"Clarify the behavior","title":None}}}
+        result=validator.validate_proposal(value,{"mode":"arbitration","source_plan_hash":"a"*64,"target_task":1})
+        self.assertEqual(result["proposal"]["field_changes"],{"summary":"Clarify the behavior"})
+
     def test_request_materializes_latest_full_plan_and_target_for_each_attempt(self):
         validator=load(self)
         with tempfile.TemporaryDirectory() as temp:
@@ -67,11 +88,16 @@ class DirectorProposalTests(unittest.TestCase):
             (ws/"plan.json").write_text(json.dumps(plan),encoding="utf-8")
             (ws/".pipeline-identity.json").write_text(json.dumps({"repository_root":str(root),"repository_id":"repo-id","run_id":"run-id"}),encoding="utf-8")
             prompt=root/"selected.md"; prompt.write_text("Plan path points to an earlier worker snapshot",encoding="utf-8")
-            runtime=root/"runtime.json"; runtime.write_text(json.dumps({"manifest":{"backend":"codex","config_hash":"a"*64,"roles":{"director":{"model":"gpt-6-luna","settings":{"model_reasoning_effort":"medium"}}}}}),encoding="utf-8")
+            runtime=root/"runtime.json"; runtime.write_text(json.dumps({"attempt_root":str(root/".superpowers"/"attempts"),"manifest":{"backend":"codex","config_hash":"a"*64,"roles":{"director":{"model":"gpt-6-luna","settings":{"model_reasoning_effort":"medium"}}}}}),encoding="utf-8")
             request_path=ws/"request.json"
             with mock.patch.dict("os.environ",{"CODEX_RUNTIME_JSON":str(runtime)}):
                 request=validator.build_request(str(ws),1,"correction",str(prompt),str(request_path))
+            result_path=pathlib.Path(request["evidence_paths"]["result_path"])
+            self.assertLess(len(str(result_path)+"."+"a"*32+".tmp"),260,
+                            "published director results must fit Windows MAX_PATH")
+            self.assertIn("published",result_path.parts)
             materialized=pathlib.Path(request["evidence_paths"]["prompt_path"]).read_text(encoding="utf-8")
             self.assertIn("supersedes any earlier plan path",materialized)
             self.assertIn("Current canonical plan snapshot",materialized)
             self.assertIn("Root task",materialized)
+            self.assertEqual(request["prompt_hash"], hashlib.sha256(materialized.encode("utf-8")).hexdigest())

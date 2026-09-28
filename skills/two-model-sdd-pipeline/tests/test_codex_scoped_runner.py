@@ -12,6 +12,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
+sys.path.insert(0, str(SCRIPTS))
 if os.name == "nt":
     _git_bash = pathlib.Path(r"C:\Program Files\Git\bin\bash.exe")
     BASH = str(_git_bash) if _git_bash.exists() else "bash"
@@ -29,19 +30,32 @@ class ScopedRunnerTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp, ignore_errors=True)
 
-    def run_scoped(self, *args, env_extra=None):
+    def run_scoped(self, *args, env_extra=None, cwd=None):
         env = dict(os.environ)
         env["BASH_BIN"] = BASH
         env.update(env_extra or {})
         return subprocess.run(
             [BASH, str(SCRIPTS / "scoped-run"), str(self.workspace), *map(str, args)],
-            capture_output=True, text=True, env=env, cwd=str(self.temp),
+            capture_output=True, text=True, env=env, cwd=str(cwd or self.temp),
         )
 
     def test_runner_entrypoint_is_present(self):
         self.assertTrue(
             (SCRIPTS / "scoped-run").is_file(),
             "R2.1 requires scripts/scoped-run as the only worker test-command entrypoint",
+        )
+
+    def test_command_output_path_is_relative_when_it_is_inside_command_cwd(self):
+        project = self.temp / "project with space-ação"
+        workspace = project / ".superpowers" / "acceptance"
+        workspace.mkdir(parents=True)
+        output = workspace / "task-1-red-output.txt"
+
+        from scoped_runner import _command_output_argument
+
+        self.assertEqual(
+            _command_output_argument(output, project),
+            ".superpowers/acceptance/task-1-red-output.txt",
         )
 
     def test_rejects_undeclared_mode_and_never_runs_supplied_command(self):
@@ -89,6 +103,7 @@ class ScopedRunnerTests(unittest.TestCase):
             "import os, pathlib, unittest\n"
             "class RunnerContract(unittest.TestCase):\n"
             "    def test_declared_context_then_fail(self):\n"
+            "        self.assertEqual(os.environ.get('PYTHONDONTWRITEBYTECODE'), '1')\n"
             "        self.assertTrue(os.path.samefile(pathlib.Path.cwd(), os.environ['EXPECTED_CWD']))\n"
             "        pathlib.Path(os.environ['RUNNER_MARKER']).write_text('executed', encoding='utf-8')\n"
             "        self.assertEqual('before', 'after')\n",
@@ -124,7 +139,8 @@ class ScopedRunnerTests(unittest.TestCase):
         self.assertTrue(marker.is_file(), result.stdout + result.stderr)
         self.assertEqual(marker.read_text(encoding="utf-8"), "executed")
         raw_output = self.workspace / "task-1-red-output.txt"
-        self.assertIn("AssertionError", raw_output.read_text(encoding="utf-8"))
+        output_text = raw_output.read_text(encoding="utf-8")
+        self.assertIn("'before' != 'after'", output_text)
         evidence = json.loads((self.workspace / "task-1-red.txt").read_text(encoding="utf-8"))
         self.assertEqual(evidence["task_id"], 1)
         self.assertEqual(evidence["attempt_id"], "attempt-1")
@@ -136,6 +152,37 @@ class ScopedRunnerTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+
+    def test_structured_toolchain_root_rebinds_to_the_task_worktree(self):
+        original = self.temp / "original-checkout"
+        worktree = self.temp / "task-worktree"
+        original.mkdir()
+        worktree.mkdir()
+        for checkout in (original, worktree):
+            subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+        marker = worktree / "runner-cwd.txt"
+        command = [sys.executable, "-c",
+                   "import pathlib; pathlib.Path('runner-cwd.txt').write_text(str(pathlib.Path.cwd()))"]
+        descriptor = {
+            "toolchain_id": "python-unit-v1", "language": "python",
+            "executable": sys.executable, "project_root": str(original),
+            "red_adapter": "unittest", "commands": {
+                "red": {"argv": [sys.executable, "-c", "pass"], "cwd": str(original), "env": {}},
+                "test": {"argv": command, "cwd": str(original), "env": {}},
+            },
+        }
+        (self.workspace / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": "python-unit-v1"}],
+        }), encoding="utf-8")
+        (self.workspace / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate", "toolchain_id": "python-unit-v1", "toolchain_descriptor": descriptor,
+        }) + "\n", encoding="utf-8")
+
+        result = self.run_scoped("1", "test", cwd=worktree)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(marker.is_file(), "the scoped command must run in the task worktree")
+        self.assertTrue(os.path.samefile(marker.read_text(encoding="utf-8"), worktree))
 
     def test_explicitly_unavailable_descriptor_never_executes_scoped_command(self):
         project = self.temp / "unavailable-project"

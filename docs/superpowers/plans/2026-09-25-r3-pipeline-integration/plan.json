@@ -2,7 +2,7 @@
   "version": 1,
   "title": "R3: Shared pipeline integration and acceptance",
   "date": "2026-09-25",
-  "status": "planned_not_implemented",
+  "status": "implemented_with_documented_limitations",
   "round_id": "R3",
   "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
   "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
@@ -36,7 +36,7 @@
     }
   ],
   "execution_handoff": {
-    "implementation_authorized": false,
+    "implementation_authorized": true,
     "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
     "bootstrap": "Use an explicitly requested development workflow and pinned supervisor; the complete new pipeline is only available after R3 acceptance.",
     "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
@@ -484,5 +484,19 @@
     "scope": "All task acceptance is governed by the confirmed decisions; R6 is deferred."
   },
   "decision_record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
-  "active_task_count": 7
+  "active_task_count": 7,
+  "acceptance_record": {
+    "accepted_scope": "R3 Codex integration and distribution acceptance",
+    "accepted_date": "2026-09-27",
+    "full_generic_suite": "947 passed, 2 skipped",
+    "offline_codex_acceptance": "7 scenario groups, 213 test executions passed",
+    "live_codex": "Two-task local-only wave completed RED/GREEN, review, serialized integration, and director closing approval",
+    "distribution": "Extracted ZIP and TAR.GZ packages initialized successfully; both excluded node_modules",
+    "limitations": [
+      "Protected-path mutation was detected after dispatch; write-time denial was not demonstrated.",
+      "OpenCode Free-tier headless closing returned HTTP 403 outside the OpenCode UI; full live OpenCode lifecycle parity remains unproven.",
+      "Acceptance evidence was generated from the pre-commit candidate and must be rerun against the published revision."
+    ],
+    "evidence": "docs/testing/codex-pipeline-support-matrix.md"
+  }
 }

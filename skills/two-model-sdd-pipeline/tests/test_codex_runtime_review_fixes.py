@@ -64,7 +64,10 @@ class ReviewFixTests(unittest.TestCase):
             def started_callback(argv,cwd,stdin_text,timeout,env,on_start):
                 on_start({"pid":42,"start_identity":"verified"})
                 raise RuntimeError("capture failed")
-            with mock.patch.object(dispatch.codex_process,"run_owned",side_effect=started_callback):
+            protected={"workspace_root":d,"task_id":1,"attempt_id":"d","git_head":"a"*40,
+                       "git_status_sha256":"sha256:"+"b"*64,"protected_files":{}}
+            with mock.patch.object(dispatch.codex_policy,"capture_protected_state",return_value=protected), \
+                 mock.patch.object(dispatch.codex_process,"run_owned",side_effect=started_callback):
                 with self.assertRaisesRegex(RuntimeError,"capture failed"):
                     dispatch.run_dispatch(request,runtime)
             self.assertEqual(runtime["process_registry"],[{"pid":42,"start_identity":"verified"}])

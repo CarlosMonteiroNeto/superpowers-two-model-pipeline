@@ -3,6 +3,9 @@ import importlib.util
 import hashlib
 import json
 import pathlib
+import subprocess
+import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -57,6 +60,36 @@ def normalized_result(req, semantic, candidate=None):
 
 
 class ReviewRecoveryTests(unittest.TestCase):
+    def test_codex_review_parser_cli_accepts_normalized_result_and_request(self):
+        req = request()
+        result = normalized_result(req, {
+            "verdict": "APPROVED", "findings": [], "minors": [], "summary": "approved",
+        })
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            result_path = root / "result.json"
+            request_path = root / "request.json"
+            output_path = root / "review.json"
+            result_path.write_text(json.dumps(result), encoding="utf-8")
+            request_path.write_text(json.dumps(req), encoding="utf-8")
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPTS / "parse_review.py"), "--backend", "codex",
+                 str(result_path), str(request_path), str(output_path)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertEqual(json.loads(output_path.read_text(encoding="utf-8"))["verdict"], "APPROVED")
+
+    def test_reviewer_prompt_hash_matches_text_read_on_windows(self):
+        module = load(self)
+        prompt = pathlib.Path(__file__).with_name("review-prompt-crlf.tmp")
+        try:
+            prompt.write_bytes(b"line one\r\nline two\r\n")
+            expected = hashlib.sha256(b"line one\nline two\n").hexdigest()
+            self.assertEqual(module._prompt_sha(prompt), expected)
+        finally:
+            prompt.unlink(missing_ok=True)
+
     def test_failed_review_dispatch_stays_pending_and_retry_reuses_same_candidate(self):
         module = load(self)
         req = request()
@@ -72,6 +105,27 @@ class ReviewRecoveryTests(unittest.TestCase):
             self.assertEqual(dispatch.call_args_list[0].args[0]["base_commit"], "b" * 40)
             self.assertEqual(dispatch.call_args_list[1].args[0]["base_commit"], "b" * 40)
             self.assertEqual(dispatch.call_args_list[1].args[0]["dispatch_id"], req["dispatch_id"])
+
+    def test_failed_review_preserves_candidate_identity_for_resume(self):
+        module = load(self)
+        req = request()
+        with tempfile.TemporaryDirectory() as temp:
+            state_path = pathlib.Path(temp) / "review-state.json"
+            original = {"base_commit": req["base_commit"],
+                        "candidate_commit": req["candidate_commit"],
+                        "plan_hash": "plan", "context_hash": "context"}
+            state_path.write_text(json.dumps(original), encoding="utf-8")
+            req["review_state_path"] = str(state_path)
+            with mock.patch.object(module.codex_dispatch, "run_dispatch",
+                                   side_effect=OSError("review transport unavailable")):
+                result = module.ensure_review(req, runtime())
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["status"], "review_pending")
+            self.assertEqual(state["base_commit"], original["base_commit"])
+            self.assertEqual(state["candidate_commit"], original["candidate_commit"])
+            self.assertEqual(state["plan_hash"], "plan")
+            self.assertEqual(state["context_hash"], "context")
+            self.assertEqual(state["status"], "review_pending")
 
     def test_completed_verdict_for_old_candidate_is_not_reused(self):
         module = load(self)

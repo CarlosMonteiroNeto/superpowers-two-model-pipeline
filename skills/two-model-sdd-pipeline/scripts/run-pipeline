@@ -75,6 +75,14 @@ ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "RUN-PIPELINE: not i
 # relative PLAN would dangle afterwards.
 PLAN=$(python3 -c "import os,sys; print(os.path.abspath(sys.argv[1]))" "$PLAN")
 cd "$ROOT" || { echo "RUN-PIPELINE: cannot cd to $ROOT" >&2; exit 2; }
+integration_branch=$(git branch --show-current 2>/dev/null) || {
+  echo "RUN-PIPELINE: BLOCKED - cannot determine the current integration branch" >&2
+  exit 1
+}
+[ -n "$integration_branch" ] || {
+  echo "RUN-PIPELINE: BLOCKED - detached HEAD; select a named integration branch before starting" >&2
+  exit 1
+}
 # The tracked plan relative to the integration root. The wave path hands
 # task-run the WORKTREE's copy of this tracked plan (see wave_plan), so a
 # diretor corrective/arbitration edit lands in a tracked file instead of the

@@ -98,15 +98,19 @@ def validate_plan(plan: dict, repo_root: str) -> None:
             _fail("task {} verification metadata is invalid".format(tid))
         if "command" in task_verification and (not isinstance(task_verification["command"], str) or not task_verification["command"].strip()):
             _fail("task {} verification command is invalid".format(tid))
+        task_test_paths=set()
         for test_path in task_verification.get("new_test_files", []):
             test_path = _canonical_path(root, test_path, "task {} new_test_files".format(tid))
             _claim(test_path, seen_paths)
             all_paths.append(test_path)
+            task_test_paths.add(test_path)
         paths = task["touches"]
         if not isinstance(paths, list):
             _fail("task {} touches must be a list".format(tid))
         for path in paths:
             path = _canonical_path(root, path, "task {} touches".format(tid))
+            if path in task_test_paths:
+                _fail("task {} new test files belong in verification.new_test_files, not touches".format(tid))
             _claim(path, seen_paths)
             all_paths.append(path)
         for ref in task["spec_refs"]:

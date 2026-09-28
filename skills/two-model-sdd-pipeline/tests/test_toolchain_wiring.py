@@ -63,6 +63,47 @@ class ToolchainWiringBase(unittest.TestCase):
         (self.ws / "ledger.jsonl").write_text(
             "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
 
+    def test_structured_full_gate_rebinds_pre_worktree_cwd_into_task_checkout(self):
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "config", "user.name", "Pipeline Test"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "config", "user.email", "pipeline@example.invalid"], check=True)
+        (self.repo / "README.md").write_text("base\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "README.md"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-qm", "base"], check=True)
+        worktree = self._tmp / "task-worktree"
+        subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-qb", "task", str(worktree), "HEAD"], check=True)
+        workspace = worktree / ".superpowers" / "two-model" / "acceptance"
+        workspace.mkdir(parents=True)
+        marker = "gate-cwd.txt"
+        command = [sys.executable, "-c",
+                   "import os,pathlib; assert os.environ.get('PYTHONDONTWRITEBYTECODE') == '1'; "
+                   "pathlib.Path(%r).write_text(str(pathlib.Path.cwd()))" % marker]
+        descriptor = {
+            "toolchain_id": "python-unit-v1",
+            "language": "python",
+            "executable": sys.executable,
+            "red_adapter": "unittest",
+            "project_root": str(self.repo),
+            "commands": {
+                "test": {"argv": command, "cwd": str(self.repo), "env": {}},
+                "analyze": {"argv": [sys.executable, "-c", "pass"],
+                            "cwd": str(self.repo), "env": {}},
+            },
+        }
+        (workspace / "ledger.jsonl").write_text(json.dumps({
+            "type": "gate", "toolchain_id": "python-unit-v1",
+            "toolchain_descriptor": descriptor,
+        }) + "\n", encoding="utf-8")
+
+        result = run_script(
+            "run-gates", [str(workspace), "--toolchains", "python-unit-v1"],
+            cwd=worktree, env_extra={"RTK_ENABLED": "0"},
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((worktree / marker).is_file(), "full gates must run in the task worktree")
+        self.assertFalse((self.repo / marker).exists(), "full gates must not run in the integration checkout")
+
 
 class TestResolveToolchainAll(ToolchainWiringBase):
     def test_malformed_task_toolchain_identity_does_not_use_legacy_gate(self):

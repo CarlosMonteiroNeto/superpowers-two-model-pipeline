@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -112,6 +113,34 @@ def _read_gate(workspace: Path, toolchain_id: str) -> dict[str, Any]:
 
 
 def _project_root(task: dict[str, Any], plan: dict[str, Any], descriptor: dict[str, Any]) -> Path:
+    current = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True)
+    if current.returncode == 0 and current.stdout.strip():
+        checkout = Path(current.stdout.strip()).resolve()
+        # Gate descriptors are resolved before worktrees are allocated. Map
+        # their repository-relative project root into the worker's checkout.
+        candidates = (
+            os.environ.get("PIPELINE_PROJECT_ROOT"), descriptor.get("project_root"),
+            task.get("project_root"), plan.get("project_root"), plan.get("repository_root"),
+        )
+        for candidate in candidates:
+            if not candidate:
+                continue
+            configured = Path(str(candidate)).resolve()
+            source = subprocess.run(["git", "-C", str(configured), "rev-parse", "--show-toplevel"],
+                                    capture_output=True, text=True)
+            if source.returncode != 0 or not source.stdout.strip():
+                continue
+            source_root = Path(source.stdout.strip()).resolve()
+            try:
+                relative = configured.relative_to(source_root)
+            except ValueError:
+                continue
+            mapped = (checkout / relative).resolve()
+            if mapped.is_dir():
+                return mapped
+        return checkout
+
     candidates = (
         descriptor.get("project_root"), task.get("project_root"),
         plan.get("project_root"), plan.get("repository_root"),
@@ -129,6 +158,34 @@ def _project_root(task: dict[str, Any], plan: dict[str, Any], descriptor: dict[s
         if root.is_dir():
             return root
     raise RunnerError("cannot resolve the task project root")
+
+
+def _relocate_descriptor(descriptor: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    """Rebase pre-worktree absolute command cwd values into this checkout."""
+    relocated = copy.deepcopy(descriptor)
+    source_value = descriptor.get("project_root")
+    if not source_value:
+        relocated["project_root"] = str(project_root)
+        return relocated
+    source_root = Path(str(source_value)).resolve()
+    commands = relocated.get("commands")
+    if isinstance(commands, dict):
+        for command in commands.values():
+            if not isinstance(command, dict):
+                continue
+            cwd = command.get("cwd")
+            if not isinstance(cwd, str) or not cwd:
+                continue
+            configured = Path(cwd)
+            if not configured.is_absolute():
+                continue
+            try:
+                relative = configured.resolve().relative_to(source_root)
+            except ValueError:
+                continue
+            command["cwd"] = relative.as_posix() if relative.parts else "."
+    relocated["project_root"] = str(project_root)
+    return relocated
 
 
 def _source_snapshot(root: Path) -> str:
@@ -248,6 +305,15 @@ def _write_attempt(workspace: Path, task_id: str, identity: dict[str, Any]) -> N
     _atomic_json(workspace / ("task-%s-attempt.json" % task_id), identity)
 
 
+def _command_output_argument(full_output: Path, command_cwd: str) -> str:
+    output = full_output.resolve()
+    cwd = Path(command_cwd).resolve()
+    try:
+        return output.relative_to(cwd).as_posix()
+    except ValueError:
+        return str(full_output)
+
+
 def _run(argv: list[str], command: dict[str, Any], full_output: Path) -> int:
     bash = os.environ.get("BASH_BIN") or shutil.which("bash")
     if not bash:
@@ -256,9 +322,11 @@ def _run(argv: list[str], command: dict[str, Any], full_output: Path) -> int:
     env.update(command.get("env", command.get("environment", {})))
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     cmd_script = SCRIPT_DIR / "cmd"
     process = subprocess.run(
-        [bash, str(cmd_script), "--full-file", str(full_output), "--", *argv],
+        [bash, str(cmd_script), "--full-file",
+         _command_output_argument(full_output, command["cwd"]), "--", *argv],
         cwd=command["cwd"], env=env,
     )
     return process.returncode
@@ -280,6 +348,7 @@ def run_scoped(workspace_value: str, task_id: str, mode: str, raw_paths: list[st
         raise RunnerError("task %s has no explicit toolchain_id" % task_id)
     descriptor = _read_gate(workspace, toolchain_id)
     root = _project_root(task, plan, descriptor)
+    descriptor = _relocate_descriptor(descriptor, root)
     paths = _validated_test_paths(raw_paths, root)
     resolved = resolve_toolchain(
         {"toolchain_id": toolchain_id}, {"toolchains": {toolchain_id: descriptor}}, str(root)

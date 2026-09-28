@@ -204,6 +204,23 @@ class HarnessInstallBase(unittest.TestCase):
 
 
 class TestBundleStaging(HarnessInstallBase):
+    def test_bundle_inventory_excludes_nested_node_modules(self):
+        install_root = self.tmp / "install"
+        source = self.make_source()
+        expected = source / ".opencode" / "plugins" / "runner.js"
+        expected.parent.mkdir(parents=True, exist_ok=True)
+        expected.write_text("plugin source\n", encoding="utf-8")
+        dependency = source / ".opencode" / "node_modules" / "large" / "index.js"
+        dependency.parent.mkdir(parents=True, exist_ok=True)
+        dependency.write_text("local dependency\n", encoding="utf-8")
+
+        manifest = self.stage_ok(install_root, "bundle-one", source)
+
+        self.assertIn(".opencode/plugins/runner.js", manifest["files"])
+        self.assertNotIn(".opencode/node_modules/large/index.js", manifest["files"])
+        staged = install_root / ".harness" / "bundles" / "bundle-one"
+        self.assertFalse((staged / ".opencode" / "node_modules").exists())
+
     def test_stage_complete_bundle_records_manifest(self):
         install_root = self.tmp / "install"
         source = self.make_source()
@@ -800,6 +817,9 @@ class TestPortalPackaging(unittest.TestCase):
             json.dumps({"name": "superpowers", "version": "9.9.9-test",
                         "skills": "./skills/", "hooks": {}}),
             encoding="utf-8")
+        (repo / "codex-plugin-hooks").mkdir()
+        (repo / "codex-plugin-hooks" / "hooks.json").write_text(
+            '{"hooks": []}\n', encoding="utf-8")
         (repo / "skills" / "demo").mkdir(parents=True)
         (repo / "skills" / "demo" / "SKILL.md").write_text(
             "# demo\n", encoding="utf-8")

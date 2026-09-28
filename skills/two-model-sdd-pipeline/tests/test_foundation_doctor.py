@@ -183,13 +183,14 @@ class DoctorBase(unittest.TestCase):
         posix = ("#!/usr/bin/env bash\n"
                  "echo \"$*\" >> \"${FAKE_LOG:-/dev/null}\"\n"
                  "if [ \"$1\" = \"--version\" ]; then echo \"%s\"; exit 0; fi\n"
-                 "if [ \"$1\" = \"--help\" ]; then echo \"%s\"; exit 0; fi\n"
+                 "if [ \"$1\" = \"--help\" ] || [ \"$1\" = \"exec\" ]; then echo \"%s\"; exit 0; fi\n"
                  "exit 0\n" % (version_text, help_text))
         windows = ("@echo off\r\n"
                    "if defined FAKE_LOG echo %%*>>\"%%FAKE_LOG%%\"\r\n"
                    "if \"%%1\"==\"--version\" (echo %s& exit /b 0)\r\n"
                    "if \"%%1\"==\"--help\" (echo %s& exit /b 0)\r\n"
-                   "exit /b 0\r\n" % (version_text, help_text))
+                   "if \"%%1\"==\"exec\" (echo %s& exit /b 0)\r\n"
+                   "exit /b 0\r\n" % (version_text, help_text, help_text))
         return self.write_stub("codex", (posix, windows))
 
     def opencode_stub(self, log=None, help_text=None, version_text=None):
@@ -295,11 +296,34 @@ class TestCapabilityProbes(DoctorBase):
             "the native executable must win: %s"
             % report["executable"]["path"])
 
+    def test_windows_cmd_shim_is_probed_through_command_processor(self):
+        self.codex_stub()
+        if os.name == "nt":
+            (self.bindir / "codex").write_text(
+                "#!/bin/sh\necho this npm shim must be skipped\n",
+                encoding="utf-8")
+        report = self.inspect_ok("codex_capabilities", codex_config())
+        self.assertTrue(report["executable"]["available"])
+        self.assertTrue(report["executable"]["options_supported"])
+        self.assertIn("0.156.1", report["executable"]["version"])
+
     def test_powershell_wrapper_kind_is_distinguished(self):
         (self.bindir / "codex.ps1").write_text(
-            "Write-Host codex", encoding="utf-8")
-        report = self.inspect_ok("codex_capabilities", codex_config())
+            "if ($args[0] -eq '--version') { Write-Output 'codex-cli 0.156.1'; exit 0 }\n"
+            "if ($args[0] -eq '--help') { Write-Output 'usage: codex exec --json'; exit 0 }\n"
+            "if ($args[0] -eq 'exec') { Write-Output 'usage: codex exec --json'; exit 0 }\n"
+            "exit 0\n",
+            encoding="utf-8")
+        if not (shutil.which("powershell.exe") or shutil.which("pwsh.exe")):
+            self.skipTest("PowerShell is unavailable")
+        env = self.env_with_bin()
+        env["PATH"] = str(self.bindir) + os.pathsep + os.environ.get("PATH", "")
+        report = self.inspect_ok(
+            "codex_capabilities", codex_config(), env=env)
         self.assertEqual(report["executable"]["kind"], "powershell-wrapper")
+        self.assertIsNotNone(report["executable"]["version"])
+        self.assertIn("0.156.1", report["executable"]["version"])
+        self.assertTrue(report["executable"]["options_supported"])
 
     def test_backend_mismatch_never_falls_back(self):
         result = self.run_inspect("opencode_capabilities", codex_config())
@@ -497,9 +521,10 @@ class TestPipelineDoctorCli(DoctorBase):
                 extra={"FAKE_LOG": str(log)}))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         calls = log.read_text(encoding="utf-8")
-        self.assertNotIn("exec", calls)
+        self.assertNotIn("exec\n", calls)
         self.assertIn("--version", calls)
         self.assertIn("--help", calls)
+        self.assertIn("exec --help", calls)
 
     def test_doctor_report_hides_credentials(self):
         self.codex_stub()

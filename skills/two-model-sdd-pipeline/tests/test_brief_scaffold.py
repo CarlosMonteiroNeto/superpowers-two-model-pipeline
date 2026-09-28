@@ -6,15 +6,16 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import ctypes
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 
 
-def run_scaffold(ws, task):
+def run_scaffold(ws, task, cwd=None):
     env = dict(os.environ)
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "brief-scaffold"), str(ws), str(task)],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, env=env, cwd=cwd,
     )
 
 
@@ -51,6 +52,38 @@ class BriefScaffoldTestBase(unittest.TestCase):
 
 
 class TestBriefScaffold(BriefScaffoldTestBase):
+    def test_brief_uses_worktree_relative_workspace_for_runner_commands(self):
+        project = self._tmp / "project with spaces"
+        workspace = project / ".superpowers" / "two-model" / "acceptance"
+        workspace.mkdir(parents=True)
+        (workspace / "plan.json").write_text(json.dumps(plan_with(FULL_TASK)), encoding="utf-8")
+
+        result = run_scaffold(workspace, 3, cwd=project)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = (workspace / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("bash ", text)
+        self.assertIn("scoped-run .superpowers/two-model/acceptance 3 red", text)
+        self.assertNotIn(str(workspace).replace("\\", "/"), text)
+
+    @unittest.skipUnless(os.name == "nt", "Windows 8.3 path alias behavior")
+    def test_brief_normalizes_short_workspace_alias_before_relative_path_check(self):
+        project = self._tmp / "project with spaces"
+        workspace = project / ".superpowers" / "two-model" / "acceptance"
+        workspace.mkdir(parents=True)
+        (workspace / "plan.json").write_text(json.dumps(plan_with(FULL_TASK)), encoding="utf-8")
+        short = ctypes.create_unicode_buffer(32768)
+        length = ctypes.windll.kernel32.GetShortPathNameW(
+            str(workspace), short, len(short))
+        if not length or short.value == str(workspace):
+            self.skipTest("filesystem does not provide a distinct 8.3 alias")
+
+        result = run_scaffold(short.value, 3, cwd=project)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = (workspace / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("scoped-run .superpowers/two-model/acceptance 3 red", text)
+
     def test_task_without_expected_red_scaffolds(self):
         """brief-scaffold must not require expected_red."""
         self.write_plan(plan_with(FULL_TASK))

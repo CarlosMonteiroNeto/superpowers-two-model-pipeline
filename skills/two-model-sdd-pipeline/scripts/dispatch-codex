@@ -11,8 +11,8 @@ elif [ "$#" -ge 6 ] && [ "$1" = "--agent" ]; then
 else
   echo "usage: dispatch-codex --request REQUEST.json | --agent OPERATOR --task N --prompt-file FILE --log FILE [--continue SESSION]" >&2; exit 2
 fi
-PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 - "$mode" "${request:-}" "$runtime" "$@" <<'PY'
-import hashlib, json, os, pathlib, subprocess, sys
+PIPELINE_SCRIPTS_DIR="$SCRIPT_DIR" PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 - "$mode" "${request:-}" "$runtime" "$@" <<'PY'
+import hashlib, json, os, pathlib, subprocess, sys, tempfile
 import codex_dispatch
 import dispatch_contract
 
@@ -54,12 +54,19 @@ def build_operator_request(v, runtime):
         seen.add(parent); item=task_map[parent]
     family=int(item["id"]); run_id=identity.get("run_id"); repo_id=identity.get("repository_id")
     if not run_id or not repo_id: raise ValueError("canonical pipeline identity is incomplete")
+    if not runtime.get("attempt_root"):
+        runtime["attempt_root"]=str(pathlib.Path(tempfile.gettempdir())/"superpowers-codex-attempts"/run_id)
     root=pathlib.Path(subprocess.check_output(["git","rev-parse","--show-toplevel"],cwd=str(ws),text=True).strip()).resolve()
     base=subprocess.check_output(["git","rev-parse","HEAD"],cwd=str(root),text=True).strip()
     plan_hash=hashlib.sha256(plan_path.read_bytes()).hexdigest()
-    prompt_hash=hashlib.sha256(prompt.read_bytes()).hexdigest()
+    # Bind the text that codex_dispatch actually reads and sends. Text-mode
+    # reads normalize CRLF on Windows, so hashing raw bytes rejects every
+    # generated Windows brief before the provider is launched.
+    prompt_text=prompt.read_text(encoding="utf-8")
+    prompt_hash=hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
     dispatch_id=hashlib.sha256("\0".join((run_id,str(task),"operator",plan_hash,prompt_hash)).encode()).hexdigest()[:32]
-    evidence=root/".superpowers"/"dispatch"/str(family)/"operator"/dispatch_id
+    attempt_root=pathlib.Path(runtime["attempt_root"])
+    evidence=attempt_root/"published"/("operator-"+dispatch_id)
     req={"version":1,"backend":"codex","run_id":run_id,"dispatch_id":dispatch_id,
       "task_id":task,"task_family":family,"episode_id":"{}-family-{}".format(run_id,family),
       "role":"operator","repository_id":repo_id,"worktree":str(root),"plan_revision":plan_hash,
@@ -79,20 +86,34 @@ try:
         runtime["process_registry"] = []
     if mode == "request":
         with open(request_path, encoding="utf-8") as f: request=json.load(f)
-        codex_dispatch.run_dispatch(request, runtime)
+        result=codex_dispatch.run_dispatch(request, runtime)
+        codex_dispatch.publish_requested_result(request, result)
     else:
         values=parse_operator_args(args)
         request, workspace=build_operator_request(values,runtime)
         if values.get("--continue"):
             runtime["resume"]=True; runtime["resume_session_id"]=values["--continue"]
         result=codex_dispatch.run_dispatch(request,runtime)
+        codex_dispatch.publish_requested_result(request,result)
         status=result["final_output"]["status"]
-        cmd=[str(pathlib.Path(__file__).resolve().parent/"ledger-append"),str(workspace/"ledger.jsonl"),
+        ledger_script=codex_dispatch.ledger_append_script(os.environ["PIPELINE_SCRIPTS_DIR"])
+        attempt_root=pathlib.Path(runtime["attempt_root"])
+        attempts=sorted((path for path in attempt_root.glob("attempt-"+request["dispatch_id"]+"-*")
+                         if (path/"request.json").is_file()),key=lambda path:path.stat().st_mtime)
+        if not attempts: raise ValueError("operator attempt evidence directory is missing")
+        attempt_dir=attempts[-1]
+        protected=codex_dispatch._protected_artifacts(request,attempt_dir)
+        cmd=codex_dispatch.ledger_append_argv(ledger_script,[str(workspace/"ledger.jsonl"),
           "operator_result",str(request["task_id"]),status,
           "status="+status,
           "dispatch_id="+request["dispatch_id"],
           "candidate_commit="+result["candidate_commit"],
-          "final_output="+json.dumps(result["final_output"],ensure_ascii=False,separators=(",",":"))]
+          "result_path="+str(pathlib.Path(request["evidence_paths"]["result_path"])),
+          "attempt_evidence="+str(attempt_dir),
+          "protected_before="+str(protected["before"]),
+          "protected_after="+str(protected["after"]),
+          "protected_comparison="+str(protected["comparison"]),
+          "final_output="+json.dumps(result["final_output"],ensure_ascii=False,separators=(",",":"))])
         subprocess.run(cmd,check=True)
 except KeyboardInterrupt:
     raise SystemExit(130)

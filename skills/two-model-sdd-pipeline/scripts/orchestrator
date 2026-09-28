@@ -160,10 +160,13 @@ case "$action" in
       read -r saved_base saved_candidate < <(python3 - "$state" <<'PY'
 import json,sys
 try:
- d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""),d.get("candidate_commit", ""))
+ d=json.load(open(sys.argv[1],encoding="utf-8")); identity=d.get("identity", {})
+ print(d.get("base_commit", identity.get("base_commit", "")),d.get("candidate_commit", identity.get("candidate_commit", "")))
 except Exception: print("", "")
 PY
 )
+      saved_base=${saved_base%$'\r'}
+      saved_candidate=${saved_candidate%$'\r'}
       [ -n "$saved_base" ] && [ "$candidate" = "$saved_candidate" ] || { echo "ORCHESTRATOR: candidate/base binding changed; refusing Codex review" >&2; exit 1; }
       pkg="$ws/task-$task-review-package.diff"
       "$SCRIPT_DIR/review-package" "$ws" "$saved_base" "$candidate" "$pkg" "$task"
@@ -172,6 +175,9 @@ import hashlib,json,os,sys,tempfile
 state,plan,brief,package=sys.argv[1:]
 def digest(path): return hashlib.sha256(open(path,"rb").read()).hexdigest()
 d=json.load(open(state,encoding="utf-8"))
+identity=d.get("identity", {})
+d.setdefault("base_commit", identity.get("base_commit", ""))
+d.setdefault("candidate_commit", identity.get("candidate_commit", ""))
 plan_hash=digest(plan)
 d["plan_hash"]=plan_hash
 d["context_hash"]=hashlib.sha256((plan_hash+digest(brief)+digest(package)).encode()).hexdigest()

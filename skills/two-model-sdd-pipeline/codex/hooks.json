@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "python \"${PLUGIN_ROOT}/skills/two-model-sdd-pipeline/scripts/codex-policy\"",
-            "command_windows": "py -3 \"${PLUGIN_ROOT}\\skills\\two-model-sdd-pipeline\\scripts\\codex-policy\"",
+            "commandWindows": "py -3 \"${PLUGIN_ROOT}\\skills\\two-model-sdd-pipeline\\scripts\\codex-policy\"",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "python \"${PLUGIN_ROOT}/skills/two-model-sdd-pipeline/scripts/codex-policy\"",
-            "command_windows": "py -3 \"${PLUGIN_ROOT}\\skills\\two-model-sdd-pipeline\\scripts\\codex-policy\"",
+            "commandWindows": "py -3 \"${PLUGIN_ROOT}\\skills\\two-model-sdd-pipeline\\scripts\\codex-policy\"",
             "timeout": 10
           }
         ]

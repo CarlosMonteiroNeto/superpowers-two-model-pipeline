@@ -101,6 +101,33 @@ class TestReviewPackage(ReviewPackageTestBase):
         self.assertNotIn("## Task Brief", text)
         self.assertIn("## Commits", text)
 
+    def test_task_package_contains_raw_gate_operator_and_protected_state_evidence(self):
+        head = self._change_and_commit()
+        task = {"id": 3, "title": "Evidence task", "verification": {"new_test_files": ["tests/test_app.py"]}}
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [task]}), encoding="utf-8")
+        dispatch_id = "a" * 32
+        event = {"type": "operator_result", "task": "3", "dispatch_id": dispatch_id,
+                 "status": "DONE", "final_output": {"status": "DONE", "summary": "Operator self-review: scope and tests checked."}}
+        (self.ws / "ledger.jsonl").write_text(json.dumps(event) + "\n", encoding="utf-8")
+        (self.ws / "task-3-red.txt").write_text('{"tests_run":1,"failures":["test_missing_behavior"]}\n', encoding="utf-8")
+        (self.ws / "task-3-test.txt").write_text("1 passed in 0.01s\n", encoding="utf-8")
+        evidence = self.repo / ".superpowers" / "codex"
+        evidence.mkdir(parents=True)
+        (evidence / (dispatch_id + ".json")).write_text(json.dumps({"final_output": event["final_output"]}), encoding="utf-8")
+        (evidence / ("before-" + dispatch_id + ".json")).write_text('{"git_head":"a","protected_files":{"plan.json":{"exists":true}}}', encoding="utf-8")
+        (evidence / ("after-" + dispatch_id + ".json")).write_text('{"git_head":"a","protected_files":{"plan.json":{"exists":true}}}', encoding="utf-8")
+        (evidence / ("comparison-" + dispatch_id + ".json")).write_text('{"integrity_ok":true,"changed_protected_paths":[]}', encoding="utf-8")
+        out = self._tmp / "pkg.diff"
+        result = run_script("review-package", [str(self.ws), self.base, head, str(out), "3"],
+                            cwd=str(self.repo), env_extra={})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        package = out.read_text(encoding="utf-8")
+        for marker in ("Raw RED evidence", "test_missing_behavior", "Raw GREEN evidence",
+                       "1 passed in 0.01s", "Operator self-review", "scope and tests checked",
+                       "Protected state before", "Protected state after", "integrity_ok"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, package)
+
     def test_guidance_hook_failure_keeps_baseline_package_successful(self):
         head = self._change_and_commit()
         out = self._tmp / "pkg.diff"

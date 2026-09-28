@@ -196,12 +196,10 @@ class TestCanonicalContent(unittest.TestCase):
             self.assertIn(marker, text,
                           "README.md must document %r" % marker)
 
-    def test_readme_states_round_2_honesty(self):
+    def test_readme_states_current_codex_acceptance(self):
         text = " ".join(read("README.md").split())
-        self.assertIn(
-            "R2 adds", text)
-        self.assertIn(
-            "does not wire the R3 plan-driven Codex launcher", text)
+        self.assertIn("scripts/run-codex-pipeline PLAN --config FILE", text)
+        self.assertIn("Codex pipeline support matrix", text)
         self.assertIn("Backend selection has no silent fallback", text)
         self.assertIn("do not prove live model", text)
 
@@ -327,7 +325,8 @@ class TestStartupAndPipelineDocs(unittest.TestCase):
     def test_pipeline_skill_states_codex_honesty(self):
         text = read("skills/two-model-sdd-pipeline/SKILL.md")
         self.assertIn(
-            "Round 1 does not yet supply a working Codex pipeline", text)
+            "Codex package tests validate scripts, contracts and fake-runtime behavior", text)
+        self.assertIn("hook trust or policy behavior", text)
 
     def test_flutter_skill_states_codex_honesty(self):
         text = read("skills/flutter-app-pipeline/SKILL.md")

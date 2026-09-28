@@ -12,6 +12,20 @@ BASH = r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else "bash"
 
 
 class GateResultRoutingTests(unittest.TestCase):
+    def test_task_run_delegates_codex_review_to_orchestrator(self):
+        task_run=(SCRIPTS / "task-run").read_text(encoding="utf-8")
+        review_case=task_run.split("      REVIEW)",1)[1].split("      CORRECTIVE)",1)[0]
+        self.assertIn('PIPELINE_BACKEND:-opencode',review_case)
+        self.assertIn('continue',review_case)
+        codex_branch=review_case.split('if [ "${PIPELINE_BACKEND:-opencode}" = codex ]',1)[1].split('fi',1)[0]
+        self.assertNotIn('task-$n-reviewer.log',codex_branch)
+
+    def test_task_run_refreshes_canonical_plan_from_repository_root(self):
+        task_run=(SCRIPTS / "task-run").read_text(encoding="utf-8")
+        refresh=task_run.split("refresh_plan()",1)[1].split("refresh_plan_strict()",1)[0]
+        self.assertIn('cd "$repo_root"',refresh)
+        self.assertIn('pipeline-workspace" --refresh "$canonical"',refresh)
+
     def test_generic_and_flutter_red_gates_pass_explicit_codex_backend_to_operator_dispatch(self):
         for gate in (SCRIPTS / "red-gate", ROOT / "skills" / "flutter-app-pipeline" / "scripts" / "red-gate"):
             with self.subTest(gate=gate.name), tempfile.TemporaryDirectory() as temp:
@@ -80,7 +94,11 @@ class GateResultRoutingTests(unittest.TestCase):
             (ws / "plan.json").write_text(json.dumps({"tasks":[{"id":1}]}), encoding="utf-8")
             (ws / "task-1-brief.md").write_text("brief", encoding="utf-8")
             (ws / ".pipeline-identity.json").write_text(json.dumps({"run_id":"run-a","repository_id":"repo-a"}), encoding="utf-8")
-            (ws / "task-1-review-state.json").write_text(json.dumps({"base_commit":base,"candidate_commit":candidate}), encoding="utf-8")
+            (ws / "task-1-review-state.json").write_text(json.dumps({
+                "status": "review_pending", "identity": {
+                    "base_commit": base, "candidate_commit": candidate,
+                },
+            }), encoding="utf-8")
             (ws / "ledger.jsonl").write_text("\n".join(json.dumps(e) for e in [
                 {"type":"brief_ready","task":"1","summary":"ready"},
                 {"type":"red_check","task":"1","summary":"red"},
@@ -91,7 +109,7 @@ class GateResultRoutingTests(unittest.TestCase):
             result = subprocess.run([BASH, str(SCRIPTS / "orchestrator"), str(ws), "1", "1"],
                 cwd=root, env=env, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
-            self.assertTrue("candidate/base binding changed" in result.stderr or
-                "strict Codex review request" in result.stderr,
-                "state={} base={} candidate={} {}{}".format((ws / "task-1-review-state.json").read_text(encoding="utf-8"), base, candidate, result.stdout, result.stderr))
+            self.assertNotIn("candidate/base binding changed", result.stderr,
+                "matching candidate state must survive Windows stdout CRLF: " + result.stderr)
+            self.assertIn("strict Codex review request", result.stderr)
             self.assertNotIn("no verdict in task 1 reviewer log", result.stderr)

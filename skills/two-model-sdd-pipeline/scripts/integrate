@@ -363,6 +363,14 @@ merge_one() {
     if [ -n "$gated_tree" ] && [ "$gated_tree" = "$task_tree" ]; then
       suite_skip=1
     fi
+  # Tree-equivalent evidence is sufficient only for legacy gates. A
+  # structured toolchain must be resolved for this exact task before its gate
+  # can be skipped; otherwise a missing task identity could bypass the
+  # fail-closed routing below.
+  if python3 "$script_dir/toolchain_gate.py" task-toolchain "$ws" "$n" >/dev/null 2>&1 \
+     || ! python3 "$script_dir/toolchain_gate.py" legacy-lang "$ws" >/dev/null 2>&1; then
+    suite_skip=0
+  fi
   fi
 
   if ! git merge --no-commit --no-ff "$task_branch" >/dev/null 2>&1; then

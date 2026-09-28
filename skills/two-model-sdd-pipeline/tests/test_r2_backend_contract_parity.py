@@ -15,12 +15,12 @@ class BackendContractParityTests(unittest.TestCase):
         self.assertIn("session id", text)
         self.assertIn("not", text)
 
-    def test_readme_distinguishes_worker_backend_from_unfinished_r3_launcher(self):
+    def test_readme_documents_the_codex_launcher_after_r3(self):
         text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").casefold().split())
-        self.assertIn("codex worker", text)
-        self.assertIn("r3", text)
+        self.assertIn("codex task workers use the explicit codex adapter", text)
         self.assertIn("no silent fallback", text)
-        self.assertNotIn("r1 does not yet supply a working codex pipeline", text)
+        self.assertIn("plan-driven entry point and explicit codex adapter", text)
+        self.assertIn("codex runtime reference", text)
 
     def test_readme_scopes_continue_session_syntax_to_opencode(self):
         text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").casefold().split())

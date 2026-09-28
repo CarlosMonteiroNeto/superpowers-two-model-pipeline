@@ -19,6 +19,7 @@ never shared with the OpenCode adapter.
 """
 
 import os
+import shutil
 import subprocess
 
 import pipeline_config
@@ -82,6 +83,17 @@ def _discover(exe_name):
                     continue
             except OSError:
                 continue
+            if os.name == "nt" and candidate == exe_name:
+                # npm installs Codex as a POSIX shell shim named `codex`
+                # beside the native cmd launcher. CreateProcess can see that
+                # file but cannot execute its shebang, so don't misclassify
+                # it as a native binary; allow the .cmd candidate to win.
+                try:
+                    with open(full, "rb") as handle:
+                        if handle.read(2) == b"#!":
+                            continue
+                except OSError:
+                    continue
             lowered = candidate.lower()
             if lowered.endswith(".ps1"):
                 return full, "powershell-wrapper"
@@ -89,6 +101,28 @@ def _discover(exe_name):
                 return full, "shell-wrapper"
             return full, "native"
     return None, "missing"
+
+
+def executable_argv(executable):
+    """Return an argv prefix that starts a resolved Windows launcher safely."""
+    if not isinstance(executable, dict) or not executable.get("path"):
+        raise CapabilityError("resolved executable information is required")
+    path = executable["path"]
+    kind = executable.get("kind")
+    if os.name == "nt" and kind == "shell-wrapper":
+        if path.lower().endswith((".cmd", ".bat")):
+            return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", path]
+        if path.lower().endswith(".sh") or not os.path.splitext(path)[1]:
+            shell = shutil.which("bash")
+            if shell:
+                return [shell, path]
+        raise CapabilityError("Windows shell wrapper cannot be launched safely")
+    if os.name == "nt" and kind == "powershell-wrapper":
+        shell = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
+        if shell:
+            return [shell, "-NoProfile", "-NonInteractive", "-File", path]
+        raise CapabilityError("PowerShell wrapper requires PowerShell")
+    return [path]
 
 
 def _probe_output(argv):
@@ -153,18 +187,27 @@ def inspect_runtime(config, project):
 
     exe_path, kind = _discover(EXECUTABLE)
     version = None
-    help_text = None
+    root_help = None
+    exec_help = None
     if exe_path is not None:
-        out = _probe_output([exe_path, "--version"])
-        if out is not None:
-            first = out.strip().splitlines()
-            version = first[0].strip()[:200] if first else None
-            if not version:
-                version = None
-        help_text = _probe_output([exe_path, "--help"])
+        try:
+            probe_prefix = executable_argv({"path": exe_path, "kind": kind})
+        except CapabilityError:
+            probe_prefix = None
+        if probe_prefix is not None:
+            out = _probe_output([*probe_prefix, "--version"])
+            if out is not None:
+                first = out.strip().splitlines()
+                version = first[0].strip()[:200] if first else None
+                if not version:
+                    version = None
+            root_help = _probe_output([*probe_prefix, "--help"])
+            exec_help = _probe_output([*probe_prefix, "exec", "--help"])
     options_supported = (
-        help_text is not None
-        and all(option in help_text for option in REQUIRED_OPTIONS)
+        root_help is not None
+        and exec_help is not None
+        and "exec" in root_help
+        and "--json" in exec_help
     )
 
     confirmation = normalized.get("confirmation", {})

@@ -3,7 +3,12 @@ import importlib.util
 import hashlib
 import json
 import pathlib
+import json
 import unittest
+import os
+import tempfile
+import subprocess
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "skills" / "two-model-sdd-pipeline" / "scripts"
@@ -19,6 +24,14 @@ def load(test):
 
 
 class CodexClosingGateTests(unittest.TestCase):
+    def test_closing_schema_defines_items_for_every_array(self):
+        schema_path = ROOT / "skills" / "two-model-sdd-pipeline" / "schemas" / "closing-result.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        for name, descriptor in schema["properties"].items():
+            if descriptor.get("type") == "array":
+                with self.subTest(property=name):
+                    self.assertIn("items", descriptor)
+
     def normalized(self, closing, snapshot, payload=None):
         import sys
         sys.path.insert(0,str(SCRIPTS))
@@ -64,6 +77,29 @@ class CodexClosingGateTests(unittest.TestCase):
         self.assertIn("base_commit",source)
         self.assertIn("candidate_commit",source)
         self.assertNotIn("origin/main",source)
+
+    def test_closing_result_path_stays_below_windows_max_path(self):
+        closing=load(self)
+        with tempfile.TemporaryDirectory(prefix="closing-path-") as temp:
+            root=pathlib.Path(temp)/"repository with a long but realistic Windows path"
+            root.mkdir()
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","config","user.email","test@example.invalid"],cwd=root,check=True)
+            subprocess.run(["git","config","user.name","Test"],cwd=root,check=True)
+            (root/"tracked.txt").write_text("x",encoding="utf-8")
+            subprocess.run(["git","add","-A"],cwd=root,check=True)
+            subprocess.run(["git","commit","-qm","init"],cwd=root,check=True)
+            ws=root/".superpowers"/"two-model"/"acceptance"; ws.mkdir(parents=True)
+            (ws/".pipeline-identity.json").write_text(json.dumps({"run_id":"run-a","repository_id":"repo-a","repository_root":str(root)}),encoding="utf-8")
+            prompt=ws/"closing.md"; prompt.write_text("close",encoding="utf-8")
+            runtime=root/"runtime.json"; runtime.write_text(json.dumps({"attempt_root":str(root/".superpowers"/"attempts"),"manifest":{"backend":"codex","config_hash":"e"*64,"roles":{"director":{"model":"gpt-6-luna","settings":{"model_reasoning_effort":"medium"}}}}}),encoding="utf-8")
+            snapshot={"candidate_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip(),"plan_hash":"a"*64,"spec_hash":"b"*64,"ledger_revision":"c"*64}
+            request_path=ws/"closing-request.json"
+            with mock.patch.dict(os.environ,{"CODEX_RUNTIME_JSON":str(runtime)}):
+                request=closing.build_request(str(ws),str(prompt),snapshot,str(request_path))
+            result_path=pathlib.Path(request["evidence_paths"]["result_path"])
+            self.assertLess(len(str(result_path)+"."+"a"*32+".tmp"),260)
+            self.assertIn("published",result_path.parts)
 
 
 if __name__ == "__main__":

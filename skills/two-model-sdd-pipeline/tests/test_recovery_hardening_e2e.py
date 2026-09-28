@@ -92,6 +92,12 @@ class RecoveryHardeningE2E(unittest.TestCase):
 
     def write_gate(self):
         self.ws().mkdir(parents=True, exist_ok=True)
+        (self.ws() / "base-commit.txt").write_text(
+            git(self.repo, "rev-parse", "HEAD").stdout.strip() + "\n",
+            encoding="utf-8")
+        (self.ws() / "target-branch.txt").write_text(
+            git(self.repo, "branch", "--show-current").stdout.strip() + "\n",
+            encoding="utf-8")
         (self.ws() / "ledger.jsonl").write_text(json.dumps({
             "ts": "x", "type": "gate", "task": "-", "summary": "go",
             "lang": "go", "test_cmd": "true", "analyze_cmd": "true"}) + "\n",

@@ -12,7 +12,7 @@ class ProcessLaunchError(OSError):
 def _start_identity(pid):
     if os.name == "nt":
         query = "$p=Get-Process -Id %d -ErrorAction Stop; $p.StartTime.ToUniversalTime().Ticks" % pid
-        result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", query], capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", query], capture_output=True, text=True, timeout=15)
         return result.stdout.strip() if result.returncode == 0 else None
     stat = "/proc/%d/stat" % pid
     try:
@@ -22,6 +22,40 @@ def _start_identity(pid):
         # macOS/other POSIX: use ps start time as a best-effort stable identity.
         result = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=5)
         return result.stdout.strip() or None
+
+
+def _kill_unverified_child(proc):
+    """Stop the process tree created by this Popen before ownership is recorded."""
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            result = None
+        if result is None or result.returncode != 0:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        proc.wait(timeout=5)
 
 
 def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
@@ -38,10 +72,14 @@ def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
     except OSError as exc:
         raise ProcessLaunchError(str(exc)) from exc
     started = time.time()
-    start_identity = _start_identity(proc.pid)
+    try:
+        start_identity = _start_identity(proc.pid)
+    except (OSError, subprocess.SubprocessError) as exc:
+        _kill_unverified_child(proc)
+        raise RuntimeError("could not verify process start identity") from exc
     ownership = {"pid": proc.pid, "start_identity": start_identity}
     if not start_identity:
-        stop_owned_processes([ownership], 0)
+        _kill_unverified_child(proc)
         raise RuntimeError("could not verify process start identity")
     if on_start is not None:
         if not callable(on_start): raise ValueError("on_start must be callable")
@@ -73,7 +111,7 @@ def stop_owned_processes(records, grace_seconds):
     for record in records:
         if not isinstance(record, dict) or not isinstance(record.get("pid"), int) or not isinstance(record.get("start_identity"), str) or not record.get("start_identity"):
             raise ValueError("process ownership record requires pid and verified start identity")
-            pid = record["pid"]
+        pid = record["pid"]
         try:
             if _start_identity(pid) != record["start_identity"]:
                 continue

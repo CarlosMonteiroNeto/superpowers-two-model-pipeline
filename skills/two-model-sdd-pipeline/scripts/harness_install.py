@@ -269,7 +269,8 @@ def _bundle_inventory(directory):
             dirs[:] = sorted(
                 name for name in dirs
                 if name not in ("__pycache__", ".pytest_cache",
-                                ".mypy_cache", ".ruff_cache"))
+                                ".mypy_cache", ".ruff_cache",
+                                "node_modules"))
             for name in list(dirs):
                 path = os.path.join(current, name)
                 if os.path.islink(path):

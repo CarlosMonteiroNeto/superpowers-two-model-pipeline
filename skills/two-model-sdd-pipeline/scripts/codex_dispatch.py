@@ -16,6 +16,22 @@ import codex_policy
 import run_control
 
 
+def ledger_append_argv(script, args, platform=None):
+    """Build a native argv for the Bash-owned ledger writer."""
+    if not isinstance(script, str) or not script or not isinstance(args, (list, tuple)):
+        raise ValueError("ledger script and argument list are required")
+    if not all(isinstance(value, str) for value in args):
+        raise ValueError("ledger arguments must be strings")
+    runtime_platform = os.name if platform is None else platform
+    prefix = ["bash", script] if runtime_platform == "nt" else [script]
+    return prefix + list(args)
+
+
+def ledger_append_script(script_dir):
+    """Return the packaged ledger writer path independent of caller cwd."""
+    return str(pathlib.Path(script_dir).resolve() / "ledger-append")
+
+
 def _atomic(path, content):
     p = pathlib.Path(path); p.parent.mkdir(parents=True, exist_ok=True)
     t = p.with_name(p.name + "." + uuid.uuid4().hex + ".tmp")
@@ -25,6 +41,32 @@ def _atomic(path, content):
 
 
 def _json(path, value): _atomic(path, json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
+
+
+def _protected_artifacts(request, attempt_dir):
+    folder=pathlib.Path(attempt_dir)
+    return {"before":folder/"protected-before.json",
+            "after":folder/"protected-after.json",
+            "comparison":folder/"protected-comparison.json"}
+
+
+def _record_protected_after(request, policy, artifacts, before):
+    protected_request={"workspace_root":policy["workspace_root"],
+        "task_id":request["task_id"],"attempt_id":request["dispatch_id"],
+        "protected_paths":policy["protected_paths"]}
+    after=codex_policy.capture_protected_state(protected_request)
+    comparison=codex_policy.compare_protected_state(before,after)
+    _json(str(artifacts["after"]),after)
+    _json(str(artifacts["comparison"]),comparison)
+    return comparison
+
+
+def publish_requested_result(request, result):
+    """Publish normalized output at the result path bound into the request."""
+    path = request.get("evidence_paths", {}).get("result_path")
+    if not isinstance(path, str) or not path:
+        raise ValueError("requested result path is missing")
+    _json(path, result)
 
 
 def _event_stream(raw):
@@ -45,6 +87,31 @@ def _output_schema(request, runtime):
     if request["role"] == "director" and "-closing-" in request.get("episode_id", ""):
         return "closing-result-v1"
     return runtime.get("output_schema") or {"operator":"operator-result-v1", "reviewer":"reviewer-result-v1", "director":"director-result-v1"}[request["role"]]
+
+
+def _structured_schema_path(request, runtime):
+    configured = runtime.get("schema_path")
+    if configured:
+        return configured
+    schemas = pathlib.Path(__file__).resolve().parent.parent / "schemas"
+    if request["role"] == "director":
+        episode = request.get("episode_id", "")
+        if "-closing-" in episode:
+            name = "closing-result.schema.json"
+        elif "-arbitration" in episode:
+            name = "director-arbitration.schema.json"
+        else:
+            name = "director-result.schema.json"
+        return str(schemas / name)
+    schema_name = {"operator-result-v1":"operator-result.schema.json",
+                   "reviewer-result-v1":"reviewer-result.schema.json"}[_output_schema(request, runtime)]
+    return str(schemas / schema_name)
+
+
+def normalized_output_and_hash(role, payload, output_schema):
+    normalized=dispatch_contract._validate_semantic(role,payload,output_schema)
+    digest=hashlib.sha256(json.dumps(normalized,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode("utf-8")).hexdigest()
+    return normalized,digest
 
 
 def run_dispatch(request, runtime):
@@ -99,11 +166,21 @@ def run_dispatch(request, runtime):
     # Evidence for each execution attempt is immutable and disjoint. Preserve
     # the caller's prompt source while placing generated artifacts together.
     requested_root = pathlib.Path(runtime.get("attempt_root") or pathlib.Path(ep["request_path"]).parent)
+    requested_root.mkdir(parents=True, exist_ok=True)
     attempt_dir = requested_root / ("attempt-" + req["dispatch_id"] + "-" + uuid.uuid4().hex)
     attempt_dir.mkdir(parents=True, exist_ok=False)
     policy_path=attempt_dir/"policy.json"
     policy=codex_policy.build_attempt_policy(req,runtime)
     _json(str(policy_path),policy)
+    protected_artifacts=None
+    protected_before=None
+    if req["role"]=="operator":
+        protected_artifacts=_protected_artifacts(req,attempt_dir)
+        protected_request={"workspace_root":policy["workspace_root"],
+            "task_id":req["task_id"],"attempt_id":req["dispatch_id"],
+            "protected_paths":policy["protected_paths"]}
+        protected_before=codex_policy.capture_protected_state(protected_request)
+        _json(str(protected_artifacts["before"]),protected_before)
     for key, name in (("request_path", "request.json"), ("events_path", "events.jsonl"),
                       ("stderr_path", "stderr.log"), ("final_path", "final.json"),
                       ("result_path", "result.json")):
@@ -113,10 +190,7 @@ def run_dispatch(request, runtime):
     if out_path.exists(): out_path.unlink()
     args = list(executable) + overrides + ["exec"]
     if resume_id: args += ["resume", resume_id]
-    schema_path = runtime.get("schema_path")
-    if not schema_path:
-        schema_name = {"operator-result-v1":"operator-result.schema.json", "reviewer-result-v1":"reviewer-result.schema.json", "director-result-v1":"director-result.schema.json", "closing-result-v1":"closing-result.schema.json"}[ _output_schema(req, runtime) ]
-        schema_path = str(pathlib.Path(__file__).resolve().parent.parent / "schemas" / schema_name)
+    schema_path = _structured_schema_path(req, runtime)
     args += ["--json", "--output-schema", str(schema_path), "--output-last-message", str(out_path), "-"]
     args = [a for a in args if a != ""]
     cwd = str(pathlib.Path(req["worktree"]).resolve())
@@ -151,6 +225,9 @@ def run_dispatch(request, runtime):
         codex_sessions.store_session(identity, lifecycle)
         raise
     except Exception:
+        if protected_artifacts is not None:
+            try: _record_protected_after(req,policy,protected_artifacts,protected_before)
+            except Exception: pass
         if active_process and runtime.get("process_registry_path"):
             try: run_control.mark_process(runtime["process_registry_path"],req["run_id"],active_process[0],"interrupted")
             except Exception: pass
@@ -160,6 +237,12 @@ def run_dispatch(request, runtime):
     _atomic(ep["events_path"], captured["stdout"])
     _atomic(ep["stderr_path"], captured["stderr"])
     _json(ep["request_path"], req)
+    if protected_artifacts is not None:
+        comparison=_record_protected_after(req,policy,protected_artifacts,protected_before)
+        if not comparison["integrity_ok"]:
+            changed=", ".join(comparison["changed_protected_paths"])
+            if comparison["git_head_changed"]: changed=(changed+", " if changed else "")+"HEAD"
+            raise ValueError("operator changed protected state: " + changed)
     if captured.get("timed_out"):
         lifecycle.update(status="unresolved", process_exit=124)
         codex_sessions.store_session(identity, lifecycle)
@@ -179,7 +262,7 @@ def run_dispatch(request, runtime):
     if not out_path.is_file(): raise ValueError("Codex final output missing")
     final = json.loads(out_path.read_text(encoding="utf-8"))
     schema = _output_schema(req, runtime)
-    payload_hash = hashlib.sha256(json.dumps(final, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+    final,payload_hash = normalized_output_and_hash(req["role"],final,schema)
     git = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True, text=True, check=True)
     usage_event = completions[-1].get("usage", {})
     result = {k:req[k] for k in ("version","backend","run_id","dispatch_id","task_id","task_family","role","episode_id","repository_id","worktree","plan_revision","base_commit","requested_model","requested_effort","config_hash")}

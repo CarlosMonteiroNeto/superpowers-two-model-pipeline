@@ -17,6 +17,29 @@ def _sha(path):
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
+def _prompt_sha(path):
+    """Hash the same normalized UTF-8 text Codex dispatch reads on Windows."""
+    text = pathlib.Path(path).read_text(encoding="utf-8")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _write_review_pending(state_path, request, error):
+    path = pathlib.Path(state_path)
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    if not isinstance(state, dict):
+        state = {}
+    state.update(status="review_pending", error=str(error))
+    for key in ("run_id", "task_id", "task_family", "base_commit", "candidate_commit"):
+        value = request.get(key)
+        if value is not None:
+            state.setdefault(key, value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def _family(plan, task_id):
     tasks = {str(item.get("id")): item for item in plan.get("tasks", [])}
     item = tasks.get(str(task_id))
@@ -87,7 +110,7 @@ def build_request(workspace, task_id, output):
         "attempt_base": base, "context_hash": context_hash,
         "requested_model": role["model"],
         "requested_effort": role.get("settings", {}).get("model_reasoning_effort"),
-        "config_hash": config_hash, "prompt_hash": _sha(package_path),
+        "config_hash": config_hash, "prompt_hash": _prompt_sha(package_path),
         "evidence_paths": {
             "request_path": str(evidence_root / "request.json"),
             "prompt_path": str(package_path),
@@ -189,8 +212,5 @@ def ensure_review(request, runtime):
         return semantic
     except Exception as exc:
         if state_path:
-            pathlib.Path(state_path).parent.mkdir(parents=True, exist_ok=True)
-            pathlib.Path(state_path).write_text(json.dumps({"status": "review_pending", "identity": {
-                k: req.get(k) for k in ("run_id", "task_id", "task_family", "base_commit", "candidate_commit")
-            }, "error": str(exc)}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            _write_review_pending(state_path, req, exc)
         return {"status": "review_pending", "candidate_commit": req.get("candidate_commit"), "error": str(exc)}

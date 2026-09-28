@@ -81,7 +81,9 @@ def build_request(workspace, prompt_path, snapshot, output_path):
     config_hash = manifest.get("config_hash") or runtime.get("config_hash")
     if not config_hash:
         raise ValueError("Codex runtime config hash is missing")
-    evidence = ws / "attempts" / "closing" / dispatch_id
+    # Caller-published results must stay below Windows MAX_PATH; the full
+    # immutable process evidence remains under the run's attempt_root.
+    evidence = pathlib.Path(runtime.get("attempt_root",str(root/".superpowers"/"codex"))) / "published" / ("closing-"+dispatch_id)
     request = {"version":1,"backend":"codex","run_id":run_id,"dispatch_id":dispatch_id,
         "task_id":1,"task_family":1,"episode_id":run_id+"-closing-"+snapshot_hash[:16],
         "role":"director","repository_id":identity["repository_id"],"worktree":str(root),

@@ -85,13 +85,53 @@ print("## Verification and Evidence Metadata\n")
 print("Resolved toolchains: "+json.dumps(plan.get("verification",{}).get("toolchains",[]),ensure_ascii=False))
 print("Task verification: "+json.dumps(task.get("verification",{}),ensure_ascii=False))
 ledger=plan_path.parent/"ledger.jsonl"
+events=[]
 if ledger.is_file():
  print("\nRelevant gate and evidence ledger entries:\n")
  for raw in ledger.read_text(encoding="utf-8",errors="replace").splitlines():
   try: event=json.loads(raw)
   except Exception: continue
-  if str(event.get("task"))==sys.argv[2] and event.get("type") in {"gate","toolchain","red_check","coder_round","commit","review_pending"}:
-   print(json.dumps(event,ensure_ascii=False,sort_keys=True))
+  if str(event.get("task"))==sys.argv[2]:
+   events.append(event)
+   if event.get("type") in {"gate","toolchain","red_check","coder_round","commit","review_pending","operator_result"}:
+    print(json.dumps(event,ensure_ascii=False,sort_keys=True))
+print("\n## Raw verification evidence\n")
+for name,label in (("task-"+sys.argv[2]+"-red.txt","Raw RED evidence"),
+                   ("task-"+sys.argv[2]+"-test.txt","Raw GREEN evidence"),
+                   ("task-"+sys.argv[2]+"-analyze.txt","Raw analysis evidence"),
+                   ("task-"+sys.argv[2]+"-gate.txt","Gate report"),
+                   ("task-"+sys.argv[2]+"-attempt.json","RED attempt identity"),
+                   ("run-gates-test.txt","Shared test gate evidence"),
+                   ("run-gates-analyze.txt","Shared analysis gate evidence")):
+ path=plan_path.parent/name
+ if path.is_file():
+  print("### "+label+" (`"+name+"`)\n")
+  print("```text")
+  print(path.read_text(encoding="utf-8",errors="replace").rstrip())
+  print("```\n")
+print("## Operator self-review and protected-state evidence\n")
+for event in events:
+ if event.get("type")!="operator_result": continue
+ dispatch=event.get("dispatch_id")
+ print("### Operator self-review (dispatch %s)\n" % (dispatch or "unrecorded"))
+ print(json.dumps(event.get("final_output",{}),ensure_ascii=False,sort_keys=True,indent=2))
+ if not dispatch: continue
+ evidence=root/".superpowers"/"codex"
+ for field,prefix,label in (("protected_before","before-","Protected state before"),
+                           ("protected_after","after-","Protected state after"),
+                           ("protected_comparison","comparison-","Protected-state comparison")):
+  path=pathlib.Path(event.get(field) or (evidence/(prefix+dispatch+".json")))
+  if path.is_file():
+   print("\n#### "+label+"\n")
+   print("```json")
+   print(path.read_text(encoding="utf-8",errors="replace").rstrip())
+   print("```\n")
+ result_path=pathlib.Path(event.get("result_path") or (evidence/(dispatch+".json")))
+ if result_path.is_file():
+  print("\n#### Normalized operator result\n")
+  print("```json")
+  print(result_path.read_text(encoding="utf-8",errors="replace").rstrip())
+  print("```\n")
 PY
   fi
   echo "## Commits"

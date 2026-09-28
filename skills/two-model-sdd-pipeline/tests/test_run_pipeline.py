@@ -74,12 +74,32 @@ class RunPipelineTestBase(unittest.TestCase):
     def write_gate(self, *extra):
         ws = self.ws()
         ws.mkdir(parents=True, exist_ok=True)
+        (ws / "base-commit.txt").write_text(
+            subprocess.check_output(["git", "rev-parse", "HEAD"],
+                                    cwd=str(self.repo), text=True).strip() + "\n",
+            encoding="utf-8")
+        (ws / "target-branch.txt").write_text(
+            subprocess.check_output(["git", "branch", "--show-current"],
+                                    cwd=str(self.repo), text=True).strip() + "\n",
+            encoding="utf-8")
         entries = [{"ts": "x", "type": "gate", "task": "-",
                     "summary": "go", "lang": "go",
                     "test_cmd": "true", "analyze_cmd": "true"}]
         entries.extend(extra)
         (ws / "ledger.jsonl").write_text(
             "".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8")
+
+    def test_existing_ledger_without_recorded_base_commit_blocks(self):
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate()
+        (self.ws() / "base-commit.txt").unlink()
+        result = self.run_pipeline(
+            "--no-push", DISPATCH_BIN=self.fake_dispatch(),
+            STUB_DISPATCH_LOG=str(self.dispatch_log),
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("existing ledger but no recorded base commit",
+                      result.stdout + result.stderr)
 
     def fake_dispatch(self):
         return write_stub(
@@ -256,6 +276,26 @@ exit 0
 
 
 class TestRunPipelineFlow(RunPipelineTestBase):
+    def test_detached_head_blocks_before_any_agent_dispatch(self):
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate()
+        task_run = write_stub(
+            self.stub_dir, "task-run-stub",
+            'echo called >> "${TASK_RUN_LOG:?}"\nexit 7\n',
+        )
+        subprocess.run(["git", "checkout", "--detach", "HEAD"],
+                       cwd=str(self.repo), check=True, capture_output=True)
+
+        result = self.run_pipeline(
+            "--no-push", "--max-parallel", "1", TASK_RUN_BIN=task_run,
+            TASK_RUN_LOG=str(self.dispatch_log),
+        )
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("detached HEAD", result.stdout + result.stderr)
+        self.assertFalse(self.dispatch_log.exists(),
+                         "detached HEAD must be rejected before dispatch")
+
     def test_full_branch_to_closing_no_push(self):
         """Acceptance: a complete plan without expected_red runs with no
         expand dispatch, and closing builds the curated package and
@@ -297,7 +337,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_plan([dict(FULL_TASK), corrective])
         self.write_gate()
         (self.ws() / "task-1-review.json").write_text(
-            json.dumps({"verdict": "SEND_BACK", "findings": ["weak tests"],
+            json.dumps({"verdict": "SEND_BACK", "findings": [{"summary": "weak tests"}],
                         "minors": [], "summary": "x"}),
             encoding="utf-8")
         self.write_reviewer_log(2, "APPROVED")
@@ -439,7 +479,7 @@ class TestRunPipelineFlow(RunPipelineTestBase):
              "summary": "SEND_BACK", "findings": "1"},
         )
         (self.ws() / "task-1-review.json").write_text(
-            json.dumps({"verdict": "SEND_BACK", "findings": ["weak"]}),
+            json.dumps({"verdict": "SEND_BACK", "findings": [{"summary": "weak"}], "minors": []}),
             encoding="utf-8")
         (self.ws() / "task-1-session.txt").write_text(
             "GENERIC-REVIEWER-SESSION\n", encoding="utf-8")

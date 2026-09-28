@@ -848,17 +848,25 @@ class TestNoDispatchSideEffects(ContractBase):
                          "validation must not create attempt directories")
         self.assertTrue(after.issuperset(before))
 
-    def test_existing_consumers_do_not_import_unfinished_contracts(self):
-        consumers = ["dispatch", "dispatch-retry", "route-next",
-                     "coder-gate", "run-gates", "review-package"]
-        for name in consumers:
+    def test_normalized_contract_is_limited_to_codex_aware_consumers(self):
+        # R3 completed the Codex migration in route-next and coder-gate.
+        # Legacy OpenCode entry points remain on their explicit old contract.
+        legacy_consumers = ["dispatch", "dispatch-retry", "run-gates",
+                            "review-package"]
+        codex_consumers = ["route-next", "coder-gate"]
+        for name in legacy_consumers:
             path = SCRIPTS / name
             if not path.is_file():
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
             self.assertNotIn("dispatch_contract", text,
-                             "%s must not switch to unfinished contracts"
+                             "%s must retain the legacy OpenCode contract"
                              % name)
+        for name in codex_consumers:
+            path = SCRIPTS / name
+            self.assertIn("dispatch_contract",
+                          path.read_text(encoding="utf-8", errors="replace"),
+                          "%s must validate normalized Codex results" % name)
 
 
 if __name__ == "__main__":

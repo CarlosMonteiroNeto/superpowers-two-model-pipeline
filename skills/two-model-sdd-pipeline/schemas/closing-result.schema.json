@@ -6,9 +6,55 @@
   "properties": {
     "verdict": {"enum": ["APPROVED", "REOPEN", "BLOCKED"]},
     "summary": {"type": "string", "minLength": 1},
-    "findings": {"type": "array"},
-    "parked_minors": {"type": "array"},
-    "proposed_tasks": {"type": "array"}
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "file", "line", "issue", "fix", "correction_scope", "affected_paths", "affected_contracts"],
+        "properties": {
+          "severity": {"enum": ["Critical", "Important", "Minor"]},
+          "file": {"type": "string", "minLength": 1},
+          "line": {"type": "integer", "minimum": 0},
+          "issue": {"type": "string", "minLength": 1},
+          "fix": {"type": "string", "minLength": 1},
+          "correction_scope": {"enum": ["in_scope", "structural", "uncertain"]},
+          "affected_paths": {"type": "array", "items": {"type": "string"}},
+          "affected_contracts": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "parked_minors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "file", "line", "issue", "fix", "correction_scope", "affected_paths", "affected_contracts"],
+        "properties": {
+          "severity": {"enum": ["Critical", "Important", "Minor"]},
+          "file": {"type": "string", "minLength": 1},
+          "line": {"type": "integer", "minimum": 0},
+          "issue": {"type": "string", "minLength": 1},
+          "fix": {"type": "string", "minLength": 1},
+          "correction_scope": {"enum": ["in_scope", "structural", "uncertain"]},
+          "affected_paths": {"type": "array", "items": {"type": "string"}},
+          "affected_contracts": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "proposed_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "summary", "acceptance"],
+        "properties": {
+          "title": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1},
+          "acceptance": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+        },
+        "additionalProperties": false
+      }
+    }
   },
   "additionalProperties": false
 }

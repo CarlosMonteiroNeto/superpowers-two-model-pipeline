@@ -46,5 +46,7 @@ explicit for new calls; invalid or unavailable Codex configuration never
 falls back to OpenCode. Fake CLI fixtures verify argument construction and
 contract handling, but do not prove live provider permission behavior.
 
-The full plan-driven Codex pipeline is not wired yet; that orchestration work
-belongs to R3. Do not treat launching one worker as running the pipeline.
+The plan-driven Codex pipeline is wired through the packaged
+`run-codex-pipeline` launcher and the shared deterministic orchestrator. Use
+the Codex acceptance matrix for the exact live and offline evidence boundary;
+launching one worker alone is not evidence that the full pipeline passed.

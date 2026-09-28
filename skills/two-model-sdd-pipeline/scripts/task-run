@@ -126,10 +126,11 @@ validate_corrective_family() {
 # so an arbitration ruling is only recorded once the snapshot is valid.
 refresh_plan() {
   if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
-    local canonical
+    local canonical repo_root
+    repo_root=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["repository_root"])' "$WS/.pipeline-identity.json") || return 1
     canonical=$(python3 -c 'import json,sys,pathlib; i=json.load(open(pathlib.Path(sys.argv[1])/".pipeline-identity.json",encoding="utf-8")); print(pathlib.Path(i["repository_root"])/i["plan_path"])' "$WS") || return 1
     [ -f "$canonical" ] || return 1
-    "$SCRIPT_DIR/pipeline-workspace" --refresh "$canonical" >/dev/null || return 1
+    ( cd "$repo_root" && "$SCRIPT_DIR/pipeline-workspace" --refresh "$canonical" ) >/dev/null || return 1
     cp -f "$canonical" "$WS/plan.json"
     return $?
   fi
@@ -235,6 +236,11 @@ main() {
       # table) before it reports the re-routed OUTCOME back here.
       REVIEW)
         n=$2
+        if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+          # Codex review dispatch and normalization are owned by the next
+          # orchestrator pass; there is no legacy reviewer log to parse.
+          continue
+        fi
         "$SCRIPT_DIR/parse-review" "$WS/task-$n-reviewer.log" "$WS/task-$n-review.json" \
           || block "no verdict in task $n reviewer log"
         verdict=$(python3 - "$WS/task-$n-review.json" <<'PY'

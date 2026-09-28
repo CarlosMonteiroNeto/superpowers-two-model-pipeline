@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Director arbitration result",
+  "type": "object",
+  "required": ["mode", "decision", "reason", "source_plan_hash", "target_task", "proposal"],
+  "properties": {
+    "mode": {"type": "string", "enum": ["arbitration"]},
+    "decision": {"type": "string", "enum": ["propose", "amend"]},
+    "reason": {"type": "string"},
+    "source_plan_hash": {"type": "string"},
+    "target_task": {"type": "integer"},
+    "proposal": {
+      "type": "object",
+      "required": ["field_changes"],
+      "properties": {
+        "field_changes": {
+          "type": "object",
+          "required": ["touches", "acceptance", "summary", "title"],
+          "properties": {
+            "touches": {"type": ["array", "null"], "items": {"type": "string"}},
+            "acceptance": {"type": ["array", "null"], "items": {"type": "string"}},
+            "summary": {"type": ["string", "null"]},
+            "title": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

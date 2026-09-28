@@ -5,6 +5,10 @@ import tempfile
 import unittest
 import json
 import threading
+import os
+import shutil
+import subprocess
+import sys
 from unittest import mock
 
 ROOT=pathlib.Path(__file__).resolve().parents[3]
@@ -37,6 +41,33 @@ class RunControlTests(unittest.TestCase):
                     result=control.execute_owned(path,"run-a",["fake-task"])
             self.assertEqual(result,7); register.assert_called_once()
             self.assertEqual(mark.call_args.args[3],"failed")
+
+    def test_short_task_that_exits_before_identity_probe_preserves_exit_code(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=pathlib.Path(temp)/"run.json"; control.initialize(path,"run-a")
+            child=mock.Mock(pid=456, returncode=2)
+            child.poll.return_value=2
+            with mock.patch.object(control.subprocess,"Popen",return_value=child) as popen:
+                with mock.patch.object(control.codex_process,"_start_identity",return_value=None):
+                    with mock.patch.object(control.codex_process,"_kill_unverified_child") as kill:
+                        with mock.patch.object(control,"register_process") as register:
+                            result=control.execute_owned(path,"run-a",["fast-task"])
+            self.assertEqual(result,2)
+            kill.assert_not_called()
+            register.assert_not_called()
+
+    @unittest.skipUnless(os.name == "nt", "Windows child standard-handle integration")
+    def test_hidden_managed_child_preserves_stdout_and_stderr(self):
+        bash=shutil.which("bash")
+        if not bash: self.skipTest("Bash is required")
+        with tempfile.TemporaryDirectory() as temp:
+            path=pathlib.Path(temp)/"run.json"; control.initialize(path,"run-a")
+            command=[sys.executable,str(SCRIPT),"exec","--manifest",str(path),"--run-id","run-a",
+                "--",bash,"-c","sleep 1; echo CONTROL-STDOUT; echo CONTROL-STDERR >&2"]
+            result=subprocess.run(command,capture_output=True,text=True,timeout=20)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn("CONTROL-STDOUT",result.stdout)
+        self.assertIn("CONTROL-STDERR",result.stderr)
 
     def test_parallel_process_registration_is_serialized_without_lost_records(self):
         with tempfile.TemporaryDirectory() as temp:

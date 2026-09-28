@@ -15,22 +15,25 @@ class DirectorRoutingInvariantTests(unittest.TestCase):
         self.assertIn('"$DIRECTOR_PROMPT_BIN" --mode "$mode"', self.text)
         self.assertIn('prepare_director_prompt CORRECTIVE', self.text)
         self.assertIn('prepare_director_prompt ARBITRATE', self.text)
-        self.assertGreaterEqual(self.text.count('dispatch_task_generator "$selected"'), 2)
+        corrective_dispatch = 'dispatch_task_generator correction "$n" "$selected"'
+        arbitration_dispatch = 'dispatch_task_generator arbitration "$n" "$selected"'
+        self.assertEqual(self.text.count(corrective_dispatch), 1)
+        self.assertEqual(self.text.count(arbitration_dispatch), 1)
         self.assertEqual(self.text.count("prepare_director_prompt CORRECTIVE"), 1)
         self.assertEqual(self.text.count("prepare_director_prompt ARBITRATE"), 1)
         for mode, dispatch_marker in (
-            ("CORRECTIVE", 'dispatch_task_generator "$selected"'),
-            ("ARBITRATE", 'dispatch_task_generator "$selected"'),
+            ("CORRECTIVE", corrective_dispatch),
+            ("ARBITRATE", arbitration_dispatch),
         ):
             hook = self.text.index(f"prepare_director_prompt {mode}")
             dispatch = self.text.index(dispatch_marker, hook)
             self.assertLess(hook, dispatch)
         self.assertLess(
-            self.text.index('dispatch_task_generator "$selected"'),
+            self.text.index(corrective_dispatch),
             self.text.index('ledger corrective "$m"'),
         )
         self.assertLess(
-            self.text.rindex('dispatch_task_generator "$selected"'),
+            self.text.index(arbitration_dispatch),
             self.text.index('ledger arbitrate_resolved "$n"'),
         )
 

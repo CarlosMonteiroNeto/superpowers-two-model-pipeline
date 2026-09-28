@@ -164,6 +164,21 @@ class CodexWorkerInstructionTests(unittest.TestCase):
         changed = dict(base, attempt_id="attempt-3")
         self.assertNotEqual(original["fingerprint"], module.capture_protected_state(changed)["fingerprint"])
 
+    def test_protected_state_comparison_allows_task_edits_but_blocks_protected_drift(self):
+        module = load_module(self, "codex_policy.py", "codex_policy", "capture_protected_state")
+        before = {"version": 1, "workspace_root": str(self.root), "task_id": 7,
+                  "attempt_id": "attempt-2", "git_head": "base",
+                  "git_status_sha256": "before-status", "protected_files": {
+                      "plan.json": {"exists": True, "sha256": "sha256:plan"}}, "fingerprint": "before"}
+        after = dict(before, git_status_sha256="expected-task-edit-status", fingerprint="after")
+        comparison = module.compare_protected_state(before, after)
+        self.assertTrue(comparison["integrity_ok"])
+        self.assertTrue(comparison["git_status_changed"])
+        corrupted = dict(after, protected_files={"plan.json": {"exists": True, "sha256": "sha256:changed"}})
+        comparison = module.compare_protected_state(before, corrupted)
+        self.assertFalse(comparison["integrity_ok"])
+        self.assertEqual(comparison["changed_protected_paths"], ["plan.json"])
+
 
 if __name__ == "__main__":
     unittest.main()
