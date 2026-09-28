@@ -495,7 +495,7 @@
     "limitations": [
       "Protected-path mutation was detected after dispatch; write-time denial was not demonstrated.",
       "OpenCode Free-tier headless closing returned HTTP 403 outside the OpenCode UI; full live OpenCode lifecycle parity remains unproven.",
-      "Acceptance evidence was generated from the pre-commit candidate and must be rerun against the published revision."
+      "The committed offline acceptance report is bound to source commit 6cddf38ce55f2a2a590656ee34278891b0afcb45; this evidence covers offline scenarios and does not certify OpenCode live parity."
     ],
     "evidence": "docs/testing/codex-pipeline-support-matrix.md"
   }

@@ -8,7 +8,7 @@ parity and broad platform certification remain unproven.
 
 | Backend/runtime | Platform and versions | Evidence | Result and boundary |
 |---|---|---|---|
-| Codex adapter, offline fixtures | Windows 10.0.19045; Python 3.12.10; Git 2.55.0.windows.3; Codex CLI 0.156.1; OpenCode 1.18.32 detected | `.work/r3-codex-acceptance-final/codex-acceptance-20260927T234543Z-45807719/report.json` | 7 scenario groups passed, 213 test executions. Source SHA-256 `30c4bcad7860bd4bff9e2ea7ce346de807589ca3f06dad13f85d4d80cb562184`; run was on the pre-commit working tree. |
+| Codex adapter, offline fixtures | Windows 10.0.19045; Python 3.12.10; Git 2.55.0.windows.3; Codex CLI 0.156.1; OpenCode 1.18.32 detected | `.work/r3-postcommit-acceptance/codex-acceptance-20260928T002035Z-2e1bff9b/report.json` | 7 scenario groups passed, 213 test executions. Candidate commit `6cddf38ce55f2a2a590656ee34278891b0afcb45`; source SHA-256 `084db38f47cb467a26ee0d2148eb48b54b70d270dd7b105cd92088f2a5f32b2f`. |
 | Codex adapter, live two-task pipeline | Windows 10.0.19045; `gpt-6-luna`, reasoning `medium`; local-only disposable project | `C:\r3live-continued\.superpowers\two-model\ebbbce2823bbd1966b26\ledger.jsonl` and gate reports in the same run directory | Two tasks completed RED/GREEN, reviewer APPROVED, serialized integration and fresh director closing approval. Final candidate `4b1b92630b1d1d80af51f39a9bd0782b125fada5`; tests `2 passed`, analysis clean. Local-only; no push. The reviewer router's optional classifier lacked `TYPESAFE_API_KEY` and used standard review fallback. |
 | Codex protected-path challenge | Disposable fixture; Codex CLI 0.156.1 | `.work/r3-protected-path-challenge/` | Integrity comparison detected `.pipeline-identity.json` deleted by a live Codex worker and blocked acceptance after dispatch (`integrity_ok=false`). This demonstrates detection and fail-closed closing, not write-time denial. Hook-trust prompts also marked modified hooks untrusted; they are not a write guard. |
 | Extracted harness ZIP and TAR.GZ | Windows 10.0.19045; Python 3.12.10 | `.work/r3-extracted-package-final.log` | Both extracted packages contained 460 files, excluded `node_modules`, initialized Codex pinning, and reported doctor `ready` for director/operator/reviewer; orientation and doctor exited 0. Includes Unicode and spaces in project paths. |
@@ -25,9 +25,6 @@ parity and broad platform certification remain unproven.
   OpenCode UI. The UI review does not substitute for that lifecycle check.
 - The protected-path test detected an after-dispatch mutation; it did not deny
   the write at the moment it occurred. Do not describe this as a write guard.
-- Evidence reports were generated from the dirty pre-commit candidate. Rerun
-  the offline acceptance harness against the committed source to bind its
-  report to the published revision.
 - ShellCheck is unavailable on this host. Seven affected Bash scripts passed
   `bash -n`; Flutter suite passed 150 tests.
 
