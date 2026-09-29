@@ -72,6 +72,19 @@ class TestImpactFallbackTests(unittest.TestCase):
         self.assertEqual(result["mode"], "full_suite")
         self.assertTrue(any("configuration" in item["reason"].lower() for item in result["reasons_detail"]))
 
+    def test_setup_py_build_configuration_change_expands_even_with_a_test_mapping(self):
+        selector = load_selector(self)
+        diff, graph, toolchains, policy = fixture()
+        diff["files"] = [{"status": "modified", "path": "setup.py"}]
+        diff["task_scope"] = ["setup.py"]
+        graph["reverse_edges"]["setup.py"] = ["tests/test_service.py"]
+
+        result = selector.select(diff, graph, toolchains, policy)
+
+        self.assertEqual(result["mode"], "full_suite")
+        self.assertEqual(result["commands"][0]["argv"], ["pytest", "-q"])
+        self.assertTrue(any("configuration" in item["reason"].lower() for item in result["reasons_detail"]))
+
     def test_shared_infrastructure_and_generated_contract_changes_expand_to_full_suite(self):
         selector = load_selector(self)
         for path in ("skills/two-model-sdd-pipeline/scripts/cmd", "schemas/api.schema.json"):
@@ -95,6 +108,18 @@ class TestImpactFallbackTests(unittest.TestCase):
         self.assertEqual(result["mode"], "full_suite")
         self.assertEqual(result["gaps"], ["src/service.py"])
         self.assertTrue(any("no test" in item["reason"].lower() for item in result["reasons_detail"]))
+
+    def test_source_unclassified_by_every_toolchain_is_a_gap_and_falls_back(self):
+        selector = load_selector(self)
+        diff, graph, toolchains, policy = fixture()
+        diff["files"] = [{"status": "modified", "path": "frontend/runtime.js"}]
+        diff["task_scope"] = ["frontend/runtime.js"]
+
+        result = selector.select(diff, graph, toolchains, policy)
+
+        self.assertEqual(result["mode"], "full_suite")
+        self.assertEqual(result["gaps"], ["frontend/runtime.js"])
+        self.assertEqual(result["commands"][0]["argv"], ["pytest", "-q"])
 
     def test_deleted_test_and_deleted_test_target_broaden_verification(self):
         selector = load_selector(self)

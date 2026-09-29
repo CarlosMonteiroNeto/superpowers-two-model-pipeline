@@ -39,6 +39,8 @@
       "configuration_globs": [
         "pyproject.toml",
         "**/pyproject.toml",
+        "setup.py",
+        "**/setup.py",
         "pytest.ini",
         "**/pytest.ini",
         "setup.cfg",

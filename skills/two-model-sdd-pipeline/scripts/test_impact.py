@@ -184,24 +184,65 @@ def _rule_for(language: str, policy: dict[str, Any]) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _full_suite_reason(changes: list[dict[str, str]], policy: dict[str, Any], rule: dict[str, Any]) -> str | None:
+def _fallback_glob_groups(policy: dict[str, Any], rule: dict[str, Any] | None = None) -> dict[str, list[str]]:
     globals_ = policy.get("fallback_globs", {})
     if not isinstance(globals_, dict):
         _fail("policy.fallback_globs must be an object")
     config_globs = list(_globs(globals_.get("configuration", []), "policy.fallback_globs.configuration"))
-    config_globs.extend(_globs(rule.get("configuration_globs", []), "language.configuration_globs"))
-    shared_globs = _globs(globals_.get("shared_infrastructure", []), "policy.fallback_globs.shared_infrastructure")
-    contract_globs = _globs(globals_.get("generated_contracts", []), "policy.fallback_globs.generated_contracts")
+    if rule is not None:
+        config_globs.extend(_globs(rule.get("configuration_globs", []), "language.configuration_globs"))
+    return {
+        "configuration": config_globs,
+        "shared_infrastructure": _globs(globals_.get("shared_infrastructure", []), "policy.fallback_globs.shared_infrastructure"),
+        "generated_contracts": _globs(globals_.get("generated_contracts", []), "policy.fallback_globs.generated_contracts"),
+    }
+
+
+def _full_suite_reason(changes: list[dict[str, str]], policy: dict[str, Any], rule: dict[str, Any]) -> str | None:
+    groups = _fallback_glob_groups(policy, rule)
     for change in changes:
         paths = [change.get("old_path", change.get("path")), change.get("new_path")]
         paths = [path for path in paths if path]
-        if any(_matches(path, shared_globs) for path in paths):
+        if any(_matches(path, groups["shared_infrastructure"]) for path in paths):
             return "changed shared infrastructure requires complete suite"
-        if any(_matches(path, contract_globs) for path in paths):
+        if any(_matches(path, groups["generated_contracts"]) for path in paths):
             return "changed generated contract requires complete suite"
-        if any(_matches(path, config_globs) for path in paths):
+        if any(_matches(path, groups["configuration"]) for path in paths):
             return "changed dependency, build, or test configuration requires complete suite"
     return None
+
+
+def _unclassified_changes(changed: list[tuple[str, str]], declared_tests: list[str],
+                          descriptors: list[tuple[str, str, str | None, list[str], str, dict[str, str]]],
+                          policy: dict[str, Any]) -> list[str]:
+    """Find changed paths no configured toolchain rule can classify safely."""
+    global_groups = _fallback_glob_groups(policy)
+    unclassified: list[str] = []
+    for path, _kind in changed:
+        if any(_matches(path, patterns) for patterns in global_groups.values()):
+            continue
+        classified = False
+        for identifier, language, adapter, _argv, _cwd, _env in descriptors:
+            rule = _rule_for(language, policy)
+            if rule is None or rule.get("supported") is not True or adapter not in rule.get("adapters", []):
+                continue
+            test_globs = _globs(rule.get("test_globs", []), "policy language %s test_globs" % language)
+            source_globs = _globs(rule.get("source_globs", []), "policy language %s source_globs" % language)
+            config_globs = _globs(rule.get("configuration_globs", []), "language.configuration_globs")
+            extensions = rule.get("test_extensions", [])
+            if not isinstance(extensions, list) or not all(
+                isinstance(item, str) and item.startswith(".") and "/" not in item and "\\" not in item
+                for item in extensions
+            ):
+                _fail("policy language %s has invalid test_extensions" % language)
+            declared_for_language = path in declared_tests and any(path.endswith(ext) for ext in extensions)
+            if (_matches(path, test_globs) or _matches(path, source_globs)
+                    or _matches(path, config_globs) or declared_for_language):
+                classified = True
+                break
+        if not classified:
+            unclassified.append(path)
+    return sorted(set(unclassified))
 
 
 def _changed_paths(files: list[dict[str, str]]) -> list[tuple[str, str]]:
@@ -291,16 +332,21 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
               or (graph.get("base_tree_hash") or "").lower() != normalized["base_tree_hash"]):
             graph_error = "dependency graph is stale for the selected base commit/tree"
 
+    parsed_toolchains = [
+        (raw, _command(raw, index)) for index, raw in enumerate(toolchains)
+    ]
+    changed = _changed_paths(files)
+    unclassified = _unclassified_changes(changed, declared_tests,
+                                         [item[1] for item in parsed_toolchains], policy)
     commands: list[dict[str, Any]] = []
     details: list[dict[str, str]] = []
     selected_tests: set[str] = set()
-    gaps: set[str] = set()
+    gaps: set[str] = set(unclassified)
     seen_ids: set[str] = set()
-    changed = _changed_paths(files)
     toolchain_evidence: list[dict[str, Any]] = []
 
-    for index, raw in enumerate(toolchains):
-        identifier, language, adapter, full_argv, cwd, env = _command(raw, index)
+    for raw, descriptor in parsed_toolchains:
+        identifier, language, adapter, full_argv, cwd, env = descriptor
         if identifier in seen_ids:
             _fail("duplicate toolchain id: %s" % identifier)
         seen_ids.add(identifier)
@@ -318,6 +364,11 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
         impacted: set[str] = set()
         local_gaps: set[str] = set()
         local_details: list[dict[str, str]] = []
+        for path in unclassified:
+            local_details.append({"toolchain_id": identifier, "path": path,
+                                  "reason": "change is outside every configured toolchain source/test/configuration rule"})
+        if unclassified and full_reason is None:
+            full_reason = "unclassified changes require complete suite"
         if full_reason is None and rule is not None and edges is not None:
             test_globs = _globs(rule.get("test_globs", []), "policy language %s test_globs" % language)
             source_globs = _globs(rule.get("source_globs", []), "policy language %s source_globs" % language)
