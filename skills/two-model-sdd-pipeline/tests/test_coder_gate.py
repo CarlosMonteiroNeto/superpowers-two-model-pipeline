@@ -160,6 +160,73 @@ class TestResolveToolchain(CoderGateTestBase):
 
 
 class TestCoderGate(CoderGateTestBase):
+    def test_send_back_direct_fix_reaches_new_candidate_gate(self):
+        self._assert_send_back_direct_fix_reaches_new_candidate_gate("opencode")
+
+    def test_send_back_direct_fix_reaches_new_candidate_gate_codex(self):
+        self._assert_send_back_direct_fix_reaches_new_candidate_gate("codex")
+
+    def _assert_send_back_direct_fix_reaches_new_candidate_gate(self, backend):
+        self.brief()
+        self.write_red_evidence()
+        base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        (self.repo / "file.txt").write_text("first candidate\n", encoding="utf-8")
+        subprocess.run(["git", "add", "file.txt"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "first candidate"], cwd=self.repo, check=True)
+        candidate = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [{"id": 1,
+            "title": "Correct file", "summary": "Fix result", "touches": ["file.txt"],
+            "acceptance": ["file is correct"], "depends_on": []}]}), encoding="utf-8")
+        (self.ws / "task-1-review-state.json").write_text(json.dumps({
+            "base_commit": base, "candidate_commit": candidate, "status": "review_pending"}), encoding="utf-8")
+        (self.ws / "task-1-review-package.diff").write_text("old candidate package", encoding="utf-8")
+        (self.ws / "task-1-review.json").write_text(json.dumps({"verdict": "SEND_BACK",
+            "findings": [{"severity": "Important", "file": "file.txt", "line": 1,
+                "issue": "wrong value", "fix": "correct it", "correction_scope": "in_scope",
+                "affected_paths": ["file.txt"], "affected_contracts": ["file is correct"]}],
+            "minors": [], "summary": "correct value"}), encoding="utf-8")
+        with self.ledger_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"type": "commit", "task": "1", "summary": "first candidate",
+                                     "commits": candidate}) + "\n")
+            handle.write(json.dumps({"type": "review_outcome", "task": "1",
+                                     "summary": "SEND_BACK", "findings": "1"}) + "\n")
+        gate_marker = self._tmp / "gate-ran.txt"
+        dispatch_log = self._tmp / "dispatch-r4.log"
+        gate = write_stub(self.stub_dir, "gate-r4", 'echo gate >> "$GATE_MARKER"\nexit 0\n')
+        gate_wrapper = write_stub(self.stub_dir, "coder-gate-r4", '"$REAL_CODER_GATE" "$@" || exit $?\nexit 41\n')
+        dispatch = write_stub(self.stub_dir, "dispatch-r4", r'''
+echo "$*" >> "$STUB_DISPATCH_LOG"
+agent=""; previous=""
+for value in "$@"; do
+  if [ "$previous" = --agent ]; then agent=$value; fi
+  previous=$value
+done
+if [[ "$agent" == two-model-coder* ]]; then
+  printf 'corrected\n' > "$FIX_FILE"
+elif [ "$agent" = two-model-reviewer ]; then
+  printf '%s\n' '{"type":"text","part":{"type":"text","text":"{\"verdict\":\"APPROVED\",\"findings\":[],\"minors\":[],\"summary\":\"approved\"}"}}' > "$REVIEW_LOG"
+fi
+exit 0
+''')
+        env = {"PLAN": str(self.ws / "plan.json"), "PIPELINE_BACKEND": backend,
+                       "RUN_GATES_BIN": gate, "GATE_MARKER": str(gate_marker),
+                       "CODER_GATE_BIN": gate_wrapper, "REAL_CODER_GATE": str(SCRIPTS / "coder-gate"),
+                       "DISPATCH_BIN": dispatch, "STUB_DISPATCH_LOG": str(dispatch_log),
+                       "FIX_FILE": str(self.repo / "file.txt"),
+                       "REVIEW_LOG": str(self.ws / "task-1-reviewer.log"), "RTK_ENABLED": "0"}
+        if backend == "codex":
+            env["DISPATCH_RETRY_BIN"] = dispatch
+        result = run_script("task-run", [str(self.ws), "1", "1"], cwd=self.repo,
+                            env_extra=env)
+        self.assertTrue(gate_marker.exists(), result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("coder-gate exit 41", result.stderr)
+        self.assertNotEqual(subprocess.check_output(["git", "rev-parse", "HEAD"],
+                          cwd=self.repo, text=True).strip(), candidate)
+        new_state = json.loads((self.ws / "task-1-review-state.json").read_text(encoding="utf-8"))
+        self.assertEqual(new_state["base_commit"], candidate)
+        self.assertEqual(new_state["status"], "review_pending")
+
     def _stubs(self, gate_log, dispatch_log):
         # run-gates stub: controllable exit via STUB_GATE_EXIT - or, when
         # STUB_COUNT_FILE is set, fail until the Nth invocation

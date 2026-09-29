@@ -241,6 +241,8 @@ try:
 except Exception: print("", "")
 PY
 )
+      saved_base=${saved_base%$'\r'}
+      saved_candidate=${saved_candidate%$'\r'}
       [ "$candidate" = "$saved_candidate" ] || { echo "ORCHESTRATOR: pending review candidate changed; refusing retry" >&2; exit 1; }
       pkg="$ws/task-$task-review-package.diff"
       [ -n "$saved_base" ] || { echo "ORCHESTRATOR: pending review base missing" >&2; exit 1; }

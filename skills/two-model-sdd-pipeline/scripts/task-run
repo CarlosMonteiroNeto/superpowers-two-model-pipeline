@@ -384,6 +384,31 @@ report with the operator status contract.
 EOF
         intent_id=$(python3 "$SCRIPT_DIR/direct_fix_reconcile.py" intent "$WS" "$n" "$fix_prompt" "$(git rev-parse HEAD)") \
           || block "cannot record direct correction intent"
+        # Keep the reviewed candidate identity for scope grants, but retire its
+        # pending reviewer claim before the operator can change the worktree.
+        # A crash here is safe to replay: no worker has started yet.
+        python3 - "$WS/task-$n-review-state.json" "$(git rev-parse HEAD)" "$intent_id" <<'PY' \
+          || block "cannot advance review state for direct correction"
+import json,os,sys,tempfile
+path,candidate,attempt=sys.argv[1:]
+if os.path.isfile(path):
+    state=json.load(open(path,encoding="utf-8"))
+    expected=state.get("candidate_commit",state.get("identity",{}).get("candidate_commit"))
+    if expected != candidate:
+        raise ValueError("reviewed candidate differs from direct correction base")
+    state["status"]="correction_started"
+    state["correction_attempt_id"]=attempt
+    fd,tmp=tempfile.mkstemp(prefix="review-state-",dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as handle:
+            json.dump(state,handle)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp,path)
+    finally:
+        if os.path.exists(tmp): os.unlink(tmp)
+PY
         "$SCRIPT_DIR/ledger-append" "$LEDGER" direct_correction_started "$n" \
             "in-scope findings return to operator" "attempt_id=$intent_id" || block "cannot record direct correction intent"
         DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"

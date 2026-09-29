@@ -92,15 +92,18 @@ base=$("$GIT_BIN" rev-parse HEAD)
 review_state="$ws/task-$task-review-state.json"
 review_pkg="$ws/task-$task-review-package.diff"
 if [ -f "$review_state" ]; then
-  read -r saved_base saved_candidate < <(python3 - "$review_state" <<'PY'
+  read -r saved_base saved_candidate saved_status < <(python3 - "$review_state" <<'PY'
 import json,sys
 try:
- d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""), d.get("candidate_commit", ""))
-except Exception: print("", "")
+ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""), d.get("candidate_commit", ""), d.get("status", "review_pending"))
+except Exception: print("", "", "")
 PY
 )
+  saved_base=${saved_base%$'\r'}
+  saved_candidate=${saved_candidate%$'\r'}
   current=$("$GIT_BIN" rev-parse HEAD)
-  if [ -n "$saved_base" ] && [ "$saved_candidate" = "$current" ] && [ -s "$review_pkg" ]; then
+  saved_status=${saved_status%$'\r'}
+  if [ "$saved_status" != correction_started ] && [ -n "$saved_base" ] && [ "$saved_candidate" = "$current" ] && [ -s "$review_pkg" ]; then
     if [ "$pipeline_backend" = "codex" ]; then
       echo "CODER-GATE: candidate $saved_candidate awaits normalized Codex review" >&2
       exit 0
