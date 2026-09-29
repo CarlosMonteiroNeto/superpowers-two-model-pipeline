@@ -834,7 +834,7 @@ class TestGenericRedGate(CoderGateTestBase):
         dispatch_stub = write_stub(
             self.stub_dir, "dispatch",
             'n=$(cat "%s" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "%s"\n'
-            'if [ "$n" -eq 1 ]; then exit 5; fi\n'
+            'if [ "$n" -eq 1 ]; then : > "$DISPATCH_PRESTART_MARKER"; exit 5; fi\n'
             'exit 0\n' % (str(count).replace("\\", "/"),
                           str(count).replace("\\", "/")))
         coder_gate_stub = write_stub(

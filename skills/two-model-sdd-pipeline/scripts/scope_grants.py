@@ -94,7 +94,12 @@ def _reserve_registry(path, relative, owner):
         identity = (owner.get("run_id"), str(owner.get("family_id")))
         if existing and (existing.get("run_id"), str(existing.get("family_id"))) != identity:
             raise RuntimeError("path is already owned by another task family: {}".format(relative))
-        records[key] = {"path": relative, "run_id": identity[0], "family_id": identity[1]}
+        record = {"path": relative, "run_id": identity[0], "family_id": identity[1]}
+        if all(owner.get(field) for field in ("task_id", "attempt_id", "grant_id")):
+            record.update(task_id=owner["task_id"], attempt_id=owner["attempt_id"],
+                          grant_id=owner["grant_id"], issuer="supervisor",
+                          contracts=owner.get("contracts", []))
+        records[key] = record
         fd, temp = tempfile.mkstemp(prefix="scope-", dir=os.path.dirname(path))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:

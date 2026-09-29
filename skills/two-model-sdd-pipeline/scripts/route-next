@@ -159,7 +159,7 @@ review_action() {
   [ -f "$ws/task-$task-review.json" ] && [ -f "$ws/plan.json" ] || {
     echo "ROUTE-NEXT: review or plan missing for correction" >&2; exit 1;
   }
-  answer=$(python3 "$SCRIPT_DIR/correction_policy.py" "$ws/task-$task-review.json" "$ws/plan.json" "$task")
+  answer=$(python3 "$SCRIPT_DIR/correction_policy.py" "$ws/task-$task-review.json" "$ws/plan.json" "$task" "$ws")
   case "$answer" in
     coder)
       budget_state=$(python3 - "$SCRIPT_DIR" "$ws" "$task" <<'PY'
@@ -283,7 +283,7 @@ if [ "$res_last" -ge 0 ]; then
   esac
   if [ "$direct_last" -eq "$res_last" ] && [ "$cur_verdict" = - ] && [ "$cur_commit" -eq 0 ]; then
     if [ "$direct_dispatched_last" -lt "$direct_last" ]; then
-      echo "DIRECT_FIX_RESUME $task"
+      echo "DIRECT_FIX_RECONCILE $task"
     else
       echo "CODER $task"
     fi

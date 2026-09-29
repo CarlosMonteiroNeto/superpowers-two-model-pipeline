@@ -24,3 +24,22 @@ pre-start failure releases its reservation and increments transport attempts.
 Ambiguous post-start failures retain their reservation for reconciliation.
 The registry is keyed by run and task family, so corrective children and scope
 revisions do not reset counts.
+
+An interrupted direct correction remains at `DIRECT_FIX_RECONCILE`; task-run
+does not start another operator. The controller can recover a completed result
+by writing a supervisor disposition with the exact fields from
+`task-N-direct-fix-intent.json`, plus `issuer=supervisor`, a `decision_id`,
+`outcome=completed`, and an `evidence_path`/`evidence_sha256` pair. It then runs
+`python3 scripts/direct_fix_reconcile.py reconcile WORKSPACE TASK DISPOSITION.json`.
+The command verifies identity and evidence and appends the dispatch boundary
+once; the next route enters the coder gate without a new operator invocation.
+An uncertain result stays blocked until the supervisor can establish its
+outcome. The operator reservation is retained throughout.
+
+Legacy OpenCode review uses a candidate/package-bound claim before launch. An
+ambiguous claim blocks duplicate review. To recover a completed reviewer
+result, the supervisor supplies the fields from the claim plus the same
+issuer, decision, outcome, and evidence fields to
+`python3 scripts/legacy_review_claim.py reconcile WORKSPACE TASK CANDIDATE DISPOSITION.json`.
+The next `review-dispatch --legacy` call records completion without launching
+another reviewer.

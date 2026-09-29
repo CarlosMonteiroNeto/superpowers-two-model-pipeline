@@ -25,7 +25,7 @@ def _contracts(values):
     return set(values)
 
 
-def decide(review: dict, task: dict) -> dict:
+def decide(review: dict, task: dict, *, issued_grants=None, identity=None) -> dict:
     """Return coder, director, or block; fail closed on malformed metadata."""
     if not isinstance(review, dict) or not isinstance(task, dict):
         return {"action": "block", "reason": "review or task is malformed"}
@@ -39,14 +39,23 @@ def decide(review: dict, task: dict) -> dict:
     try:
         approved_paths = _paths(task["touches"])
         approved_contracts = _contracts(task["acceptance"])
-        grants = task.get("scope_grants", [])
-        if not isinstance(grants, list):
-            raise ValueError("scope grants are malformed")
-        for grant in grants:
-            if not isinstance(grant, dict):
-                raise ValueError("scope grant is malformed")
-            approved_paths.update(_paths(grant["paths"]))
-            approved_contracts.update(_contracts(grant["contracts"]))
+        # Plan fields are worker-readable and cannot issue new scope. Only a
+        # supervisor record matching this run, family, task, and attempt may
+        # extend it. A missing authoritative record grants nothing.
+        if issued_grants is not None:
+            if not isinstance(issued_grants, list) or not isinstance(identity, dict):
+                raise ValueError("issued grants require an identity")
+            for grant in issued_grants:
+                if not isinstance(grant, dict):
+                    raise ValueError("issued grant is malformed")
+                if (grant.get("issuer") != "supervisor" or not grant.get("grant_id") or
+                        any(str(grant.get(key)) != str(identity.get(key)) for key in
+                            ("run_id", "family_id", "task_id", "attempt_id")) or
+                        not all(identity.get(key) for key in
+                            ("run_id", "family_id", "task_id", "attempt_id"))):
+                    continue
+                approved_paths.update(_paths([grant["path"]]))
+                approved_contracts.update(_contracts(grant["contracts"]))
         checked = []
         for finding in review["findings"]:
             if not isinstance(finding, dict) or finding.get("correction_scope") not in ("in_scope", "structural", "uncertain"):
@@ -65,15 +74,38 @@ def decide(review: dict, task: dict) -> dict:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        raise SystemExit("usage: correction_policy.py REVIEW.json PLAN.json TASK")
+    if len(sys.argv) not in (4, 5):
+        raise SystemExit("usage: correction_policy.py REVIEW.json PLAN.json TASK [WORKSPACE]")
     try:
         with open(sys.argv[1], encoding="utf-8") as handle:
             review = json.load(handle)
         with open(sys.argv[2], encoding="utf-8") as handle:
             plan = json.load(handle)
         task = next(t for t in plan["tasks"] if str(t["id"]) == sys.argv[3])
-        result = decide(review, task)
+        grants = None
+        grant_identity = None
+        if len(sys.argv) == 5:
+            ws = pathlib.Path(sys.argv[4])
+            registry = ws / "scope-grants.json"
+            if registry.is_file():
+                records = json.loads(registry.read_text(encoding="utf-8"))
+                if not isinstance(records, dict):
+                    raise ValueError("scope grant registry is malformed")
+                grants = list(records.values())
+                run = json.loads((ws / ".pipeline-identity.json").read_text(encoding="utf-8"))
+                state = json.loads((ws / ("task-{}-review-state.json".format(sys.argv[3]))).read_text(encoding="utf-8"))
+                items = {str(t["id"]): t for t in plan["tasks"]}
+                family = task
+                seen = set()
+                while family.get("corrects") is not None:
+                    parent = str(family["corrects"])
+                    if parent in seen or parent not in items:
+                        raise ValueError("invalid task family")
+                    seen.add(parent)
+                    family = items[parent]
+                grant_identity = {"run_id": run["run_id"], "family_id": family["id"],
+                                  "task_id": task["id"], "attempt_id": state["candidate_commit"]}
+        result = decide(review, task, issued_grants=grants, identity=grant_identity)
     except (OSError, ValueError, KeyError, StopIteration, TypeError) as exc:
         result = {"action": "block", "reason": str(exc)}
     print(result["action"])

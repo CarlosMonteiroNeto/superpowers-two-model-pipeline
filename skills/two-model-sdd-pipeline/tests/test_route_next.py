@@ -172,10 +172,10 @@ class TestRouteNextFixAndEscalation(RouteNextTestBase):
                      entry("scope_violation", 3, "outside approved scope")])
         self.assert_action(run_route(self.ws, 3), "ARBITRATE 3")
 
-    def test_interrupted_direct_fix_replays_same_dispatch_intent(self):
+    def test_interrupted_direct_fix_requires_reconciliation_before_dispatch(self):
         self.ledger([entry("review_outcome", 3, "SEND_BACK"),
                      entry("direct_correction_started", 3, "direct fix")])
-        self.assert_action(run_route(self.ws, 3), "DIRECT_FIX_RESUME 3")
+        self.assert_action(run_route(self.ws, 3), "DIRECT_FIX_RECONCILE 3")
 
     def test_dispatched_direct_fix_resumes_coder_without_new_director(self):
         self.ledger([entry("review_outcome", 3, "SEND_BACK"),

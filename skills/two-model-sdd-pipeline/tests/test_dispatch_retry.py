@@ -54,15 +54,19 @@ class DispatchRetryTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def dispatch_stub(self, fails=0, fail_exit="1", ok_exit="0"):
+    def dispatch_stub(self, fails=0, fail_exit="1", ok_exit="0", prestart=False):
         count = str(self.count_file).replace("\\", "/")
         return write_stub(self.stub_dir, "dispatch", """
 echo "$*" >> "{out}"
 n=$(cat "{count}" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "{count}"
-if [ "$n" -le {fails} ]; then exit {fail_exit}; fi
+if [ "$n" -le {fails} ]; then
+  {mark}
+  exit {fail_exit}
+fi
 exit {ok_exit}
 """.format(out=str(self.out_log).replace("\\", "/"), count=count,
-           fails=fails, fail_exit=fail_exit, ok_exit=ok_exit))
+           fails=fails, fail_exit=fail_exit, ok_exit=ok_exit,
+           mark='[ -n "${DISPATCH_PRESTART_MARKER:-}" ] && : > "$DISPATCH_PRESTART_MARKER"' if prestart else ':'))
 
     def calls(self):
         return int(self.count_file.read_text(encoding="utf-8"))
@@ -74,9 +78,9 @@ exit {ok_exit}
                 self.ledger.read_text(encoding="utf-8").splitlines()
                 if '"type":' in line]
 
-    def run_it(self, *args, fails=0, fail_exit="1", ok_exit="0", **env_extra):
+    def run_it(self, *args, fails=0, fail_exit="1", ok_exit="0", prestart=False, **env_extra):
         env = {"DISPATCH_BIN": self.dispatch_stub(
-            fails=fails, fail_exit=fail_exit, ok_exit=ok_exit)}
+            fails=fails, fail_exit=fail_exit, ok_exit=ok_exit, prestart=prestart)}
         env.update(env_extra)
         return run_script("dispatch-retry", list(args), env)
 
@@ -90,7 +94,7 @@ exit {ok_exit}
     def test_transient_failure_retries_until_success_and_ledgers(self):
         r = self.run_it("--task", "7", "--log",
                         str(self.ws / "task-7-coder.log"),
-                        fails=2, fail_exit="5", ok_exit="0")
+                        fails=2, fail_exit="5", ok_exit="0", prestart=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 3)
         self.assertEqual(
@@ -130,10 +134,17 @@ exit {ok_exit}
         self.assertEqual(r.returncode, 124, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 1)
 
+    def test_opencode_started_worker_exit_five_is_not_prestart(self):
+        r = self.run_it("--backend", "opencode", "--task", "2", "--log",
+                        str(self.ws / "task-2-coder.log"),
+                        fails=1, fail_exit="5", ok_exit="0")
+        self.assertEqual(r.returncode, 5)
+        self.assertEqual(self.calls(), 1)
+
     def test_gives_up_after_max_tries_preserving_last_code(self):
         r = self.run_it("--task", "1", "--log",
                         str(self.ws / "task-1-coder.log"),
-                        fails=99, fail_exit="5", ok_exit="0")
+                        fails=99, fail_exit="5", ok_exit="0", prestart=True)
         self.assertEqual(r.returncode, 5, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 3)
         self.assertEqual(self.ledger_types().count("dispatch_retry"), 2)
@@ -141,7 +152,7 @@ exit {ok_exit}
     def test_max_tries_override_is_respected(self):
         r = self.run_it("--task", "1", "--log",
                         str(self.ws / "task-1-coder.log"),
-                        fails=99, fail_exit="5", ok_exit="0",
+                        fails=99, fail_exit="5", ok_exit="0", prestart=True,
                         DISPATCH_MAX_TRIES="2")
         self.assertEqual(r.returncode, 5, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 2)
@@ -164,7 +175,7 @@ exit {ok_exit}
         without --task/--log still retries but records nothing."""
         r = self.run_it("--agent", "two-model-coder-go",
                         "--prompt-file", str(self.ws / "brief.md"),
-                        fails=1, fail_exit="5", ok_exit="0")
+                        fails=1, fail_exit="5", ok_exit="0", prestart=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 2)
         self.assertEqual(self.ledger_types(), [])

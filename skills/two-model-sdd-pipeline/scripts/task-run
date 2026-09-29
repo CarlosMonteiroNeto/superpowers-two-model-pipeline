@@ -364,7 +364,10 @@ print(max(cands) if cands else '')
         # stays on the parent and re-emits CORRECTIVE forever.
         task=$m
         ;;
-      DIRECT_FIX|DIRECT_FIX_RESUME)
+      DIRECT_FIX_RECONCILE)
+        block "direct correction may have started before interruption; reconcile its reservation and worker result before another dispatch"
+        ;;
+      DIRECT_FIX)
         n=$2
         findings="$WS/task-$n-review.json"
         [ -f "$findings" ] || block "no review findings for task $n"
@@ -373,18 +376,16 @@ print(max(cands) if cands else '')
         coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$("$SCRIPT_DIR/task-lang" "$WS" "$n")")
         session=$(cat "$WS/task-$n-$coder_agent-session.txt" 2>/dev/null || true)
         fix_prompt="$WS/task-$n-direct-fix.md"
-        if [ "$act" = DIRECT_FIX ]; then
-          cat > "$fix_prompt" <<EOF
+        cat > "$fix_prompt" <<EOF
 Correct the in-scope findings for task $n. Read the complete current review
 at $findings and the approved task brief at $WS/task-$n-brief.md. Preserve
 the approved paths and contracts. Re-run the relevant RED/GREEN checks and
 report with the operator status contract.
 EOF
-          "$SCRIPT_DIR/ledger-append" "$LEDGER" direct_correction_started "$n" \
-            "in-scope findings return to operator" || block "cannot record direct correction intent"
-        else
-          [ -s "$fix_prompt" ] || block "pending direct correction prompt is missing"
-        fi
+        intent_id=$(python3 "$SCRIPT_DIR/direct_fix_reconcile.py" intent "$WS" "$n" "$fix_prompt" "$(git rev-parse HEAD)") \
+          || block "cannot record direct correction intent"
+        "$SCRIPT_DIR/ledger-append" "$LEDGER" direct_correction_started "$n" \
+            "in-scope findings return to operator" "attempt_id=$intent_id" || block "cannot record direct correction intent"
         DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
         if [ -n "$session" ]; then
           "$DISPATCH_RETRY_BIN" --backend "${PIPELINE_BACKEND:-opencode}" --agent "$coder_agent" --task "$n" \
@@ -396,7 +397,7 @@ EOF
             || block "operator dispatch failed for direct correction task $n"
         fi
         "$SCRIPT_DIR/ledger-append" "$LEDGER" direct_correction_dispatched "$n" \
-          "operator returned from direct correction" || block "cannot record direct correction dispatch"
+          "operator returned from direct correction" "attempt_id=$intent_id" || block "cannot record direct correction dispatch"
         "$SCRIPT_DIR/ledger-append" "$LEDGER" red_check "$n" \
           "retaining operator-owned RED for in-scope correction" || block "cannot record RED continuation"
         rc=0
