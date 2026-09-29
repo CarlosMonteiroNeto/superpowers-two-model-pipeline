@@ -1,6 +1,6 @@
 # R4: Bounded dispatch and affected verification
 
-**Status:** Complete planning artifact; implementation has not started.
+**Status:** In progress; execution authorized for the isolated R4 run recorded in `plan.json`.
 **Spec:** [transition contract](../../specs/2026-09-25-codex-pipeline-design.md).
 **Decisions:** [confirmed record](../../specs/2026-09-25-confirmed-pipeline-decisions.md).
 **Roadmap:** [round sequence](../../../../roadmap.md).
@@ -10,7 +10,7 @@
 
 - [R1](../2026-09-25-codex-pipeline/plan.json) accepted with commit and verification evidence.
 - [R2](../2026-09-25-r2-worker-runtime/plan.json) accepted with commit and verification evidence.
-- [R3](../2026-09-25-r3-pipeline-integration/plan.json) accepted with commit and verification evidence.
+- [R3](../2026-09-25-r3-pipeline-integration/plan.json) accepted at `6cddf38`, acceptance bound at `abe4bc5`; see [support matrix](../../../testing/codex-pipeline-support-matrix.md).
 
 Recheck paths/interfaces against accepted predecessor commits before execution;
 refresh implementation drift without reopening the user's confirmed choices.

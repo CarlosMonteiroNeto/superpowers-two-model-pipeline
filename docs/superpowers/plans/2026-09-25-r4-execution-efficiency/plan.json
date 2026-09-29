@@ -2,7 +2,7 @@
   "version": 1,
   "title": "R4: Bounded dispatch and affected verification",
   "date": "2026-09-25",
-  "status": "planned_not_implemented",
+  "status": "in_progress",
   "round_id": "R4",
   "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
   "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
@@ -27,25 +27,33 @@
     {
       "round": "R1",
       "plan": "docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "58810ac",
+      "evidence": "Git history: R1 closure commit 58810ac (Complete R1 immutable harness foundation)."
     },
     {
       "round": "R2",
       "plan": "docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "4383bba",
+      "evidence": "Git history: R2 closure commit 4383bba (close r2 worker runtime round)."
     },
     {
       "round": "R3",
       "plan": "docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "6cddf38",
+      "acceptance_commit": "abe4bc5",
+      "evidence": "docs/testing/codex-pipeline-support-matrix.md; committed offline acceptance bound to 6cddf38."
     }
   ],
   "execution_handoff": {
-    "implementation_authorized": false,
-    "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
+    "implementation_authorized": true,
+    "model_selection": "Confirmed by the user for this run: Codex; operator/reviewer gpt-6-luna at medium reasoning; director follows reviewer.",
     "bootstrap": "Use the accepted R3 shared runner from a pinned bundle outside worker edits.",
-    "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
-    "drift_check": "Before execution compare exact paths, schemas, interface signatures and prerequisites with accepted predecessor commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
+    "publication": "Confirmed local-only; do not push or create a pull request.",
+    "drift_check": "Verified R1/R2 closure commits and R3 committed source/acceptance evidence; R4 file paths and interfaces match the current source tree at abe4bc5.",
+    "concurrency": "Confirmed serial execution (max_parallel=1)."
   },
   "scheduling": {
     "task_ids": "Local to this round; depends_on never names another round's task ID.",
