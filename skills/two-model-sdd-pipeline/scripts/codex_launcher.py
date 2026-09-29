@@ -61,7 +61,8 @@ def _doctor(config_path,root,workspace):
 def _compose_runtime(config,report,root,workspace,manifest_path,run_id,hooks_confirmed,base,target_branch):
     manifest=dict(report["manifest"])
     manifest.update(backend="codex",roles=report["roles"],plan_path=config.get("plan_path"),run_id=run_id,
-        initial_base_commit=base,target_branch=target_branch,publication=config["publication"],max_parallel=config["max_parallel"])
+        initial_base_commit=base,target_branch=target_branch,publication=config["publication"],max_parallel=config["max_parallel"],
+        coder_cycle_limits=config.get("coder_cycle_limits",pipeline_config.DEFAULT_CODER_CYCLE_LIMITS))
     executable=codex_capabilities.executable_argv(report.get("executable",{}))
     hooks=json.loads((SKILL/"codex"/"hooks.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
     covered={item.get("matcher") for item in hooks}
@@ -134,6 +135,7 @@ def main(argv=None):
             "role_hashes":report["manifest"]["role_hashes"],"executable_path":report["manifest"]["executable_path"],
             "executable_version":report["manifest"]["executable_version"],"initial_base_commit":base,"target_branch":target_branch,
             "publication":config["publication"],"max_parallel":config["max_parallel"],
+            "coder_cycle_limits":config["coder_cycle_limits"],
             "hooks_trusted_confirmed":hooks_confirmed,"policy_clean_confirmed":policy_confirmed}
         if manifest_path.exists() and json.loads(manifest_path.read_text(encoding="utf-8"))!=run_manifest:
             raise ValueError("existing run manifest is immutable and does not match this selection")

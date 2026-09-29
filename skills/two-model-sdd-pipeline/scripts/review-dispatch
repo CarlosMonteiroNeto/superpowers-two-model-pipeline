@@ -4,6 +4,24 @@
 # operator or changes the committed candidate.
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ "${1:-}" = "--legacy" ] && [ "$#" -eq 4 ]; then
+  ws=$2 task=$3 pkg=$4
+  state="$ws/task-$task-review-state.json"
+  [ -s "$pkg" ] && [ -f "$state" ] || { echo "review-dispatch: candidate package/state missing" >&2; exit 4; }
+  candidate=$(git rev-parse HEAD)
+  saved=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("candidate_commit",""))' "$state")
+  [ "$candidate" = "$saved" ] || { echo "review-dispatch: stale candidate" >&2; exit 4; }
+  if ! "$SCRIPT_DIR/dispatch-retry" --agent two-model-reviewer --task "$task" \
+      --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
+    "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_pending "$task" \
+      "reviewer dispatch failed; candidate $candidate remains pending" candidate="$candidate" || true
+    exit 5
+  fi
+  "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" \
+    "review dispatched for candidate $candidate" candidate="$candidate" || true
+  rm -f "$state"
+  exit 0
+fi
 if [ "${1:-}" = "--build-request" ] && [ "$#" -eq 4 ]; then
   python3 - "$SCRIPT_DIR" "$2" "$3" "$4" <<'PY'
 import sys

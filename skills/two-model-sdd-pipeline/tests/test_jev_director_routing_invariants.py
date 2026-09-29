@@ -48,7 +48,8 @@ class DirectorRoutingInvariantTests(unittest.TestCase):
         self.assertIn('ledger arbitrate_resolved "$n"', self.text)
         self.assertIn("reconcile_parents \"$n\"", self.text)
         self.assertNotIn("ledger jev", self.text.lower())
-        self.assertNotIn("operator dispatch", self.text.lower().replace("operador dispatch", ""))
+        self.assertIn('budget_cycle_assessed "$n"', self.text)
+        self.assertIn('direct_correction_started "$n"', self.text)
 
 
 if __name__ == "__main__":

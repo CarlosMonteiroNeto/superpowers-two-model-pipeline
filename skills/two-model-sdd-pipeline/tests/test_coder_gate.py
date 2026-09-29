@@ -825,7 +825,7 @@ class TestGenericRedGate(CoderGateTestBase):
         self.assertNotIn("CODER-GATE", r.stderr + r.stdout)
 
     def test_interrupted_dispatch_retries_then_chains_coder_gate(self):
-        """D11: a transient dispatch failure (rc=124) is retried by
+        """A confirmed pre-start dispatch failure (rc=5) is retried by
         dispatch-retry before red-gate decides anything; when a later attempt
         succeeds the task proceeds to coder-gate with no interruption."""
         (self.ws / "task-1-brief.md").write_text("# Task 1 Brief\n", encoding="utf-8")
@@ -834,7 +834,7 @@ class TestGenericRedGate(CoderGateTestBase):
         dispatch_stub = write_stub(
             self.stub_dir, "dispatch",
             'n=$(cat "%s" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "%s"\n'
-            'if [ "$n" -eq 1 ]; then exit 124; fi\n'
+            'if [ "$n" -eq 1 ]; then exit 5; fi\n'
             'exit 0\n' % (str(count).replace("\\", "/"),
                           str(count).replace("\\", "/")))
         coder_gate_stub = write_stub(

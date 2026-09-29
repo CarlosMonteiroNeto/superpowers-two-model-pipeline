@@ -174,8 +174,18 @@ def apply_director_proposal(proposal: dict, manifest: dict) -> dict:
         if clean["source_plan_hash"] != old_hash:
             raise ValueError("stale source plan hash; director must re-evaluate current plan")
         plan = json.loads(old_bytes.decode("utf-8"))
+        original_plan = json.loads(old_bytes.decode("utf-8"))
         assigned = _apply(plan, clean, old_hash, manifest)
         plan_validation.validate_plan(plan, str(root))
+        if plan == original_plan:
+            # A director may assess an exhausted cycle and conclude that the
+            # approved task is still viable. Record the validated ruling
+            # without fabricating a plan edit or an empty Git commit.
+            record = {"old_plan_hash": old_hash, "new_plan_hash": old_hash,
+                      "assigned_ids": assigned, "commit": head_before,
+                      "recovered": False, "noop": True}
+            _append_ledger(manifest, proposal_id, record)
+            return {**record, "parent_commit": head_before}
         new_bytes = (json.dumps(plan, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
         new_hash = _sha(new_bytes)
         _write_atomic(plan_path, new_bytes)

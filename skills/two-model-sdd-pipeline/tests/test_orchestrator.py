@@ -80,6 +80,11 @@ class TestOrchestratorHandoff(OrchestratorTestBase):
                       (self.ws / "ledger.jsonl").read_text(encoding="utf-8"))
 
     def test_send_back_hands_off_corrective(self):
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [{"id": 3, "touches": ["lib/a.go"],
+            "acceptance": ["works"]}]}), encoding="utf-8")
+        (self.ws / "task-3-review.json").write_text(json.dumps({"verdict": "SEND_BACK", "findings": [{
+            "correction_scope": "structural", "affected_paths": ["lib/a.go"],
+            "affected_contracts": ["works"]}]}), encoding="utf-8")
         self.ledger([
             self.entry("brief_ready", 3, "task"),
             self.entry("red_check", 3, "RED"),

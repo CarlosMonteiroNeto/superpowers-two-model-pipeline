@@ -50,6 +50,10 @@ done
 
 [ -n "$agent" ] && [ -n "$task" ] && [ -n "$prompt_file" ] && [ -n "$log" ] || usage
 [ -f "$prompt_file" ] || { echo "DISPATCH: no prompt file: $prompt_file" >&2; exit 2; }
+command -v "$OPENCODE_BIN" >/dev/null 2>&1 || {
+  echo "DISPATCH: OpenCode executable unavailable before worker start" >&2
+  exit 5
+}
 
 mkdir -p "$(dirname "$log")"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
