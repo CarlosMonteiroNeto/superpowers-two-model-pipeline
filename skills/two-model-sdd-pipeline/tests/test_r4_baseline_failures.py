@@ -21,7 +21,8 @@ def evidence(failures, *, source="a" * 64, environment="b" * 64, command="c" * 6
         "source_hash": source,
         "environment_hash": environment,
         "command_hash": command,
-        "suites": [{"id": "unit", "failures": failures, "raw_result": {"exit_code": 1}}],
+        "suites": [{"id": "unit", "tests": [item["test"] for item in failures],
+                    "failures": failures, "raw_result": {"status": "completed", "exit_code": 1}}],
     }
 
 
@@ -42,7 +43,8 @@ class BaselineComparisonTests(unittest.TestCase):
     def test_new_failure_blocks_affected_suite_but_healthy_suite_remains_unaffected(self):
         baseline = evidence([failure()])
         current = evidence([failure(), failure("package.Case.test_two", "ValueError: new")], source="d" * 64)
-        current["suites"].append({"id": "integration", "failures": [], "raw_result": {"exit_code": 0}})
+        current["suites"].append({"id": "integration", "tests": ["integration.Case.test_ok"],
+                                  "failures": [], "raw_result": {"status": "completed", "exit_code": 0}})
         result = subject().compare(baseline, current)
         self.assertEqual(result["status"], "blocked")
         self.assertEqual([item["test"] for item in result["new"]], ["package.Case.test_two"])
@@ -56,8 +58,10 @@ class BaselineComparisonTests(unittest.TestCase):
             with self.subTest(changed=changed):
                 result = subject().compare(baseline, evidence([changed], source="d" * 64))
                 self.assertEqual(result["status"], "blocked")
-                self.assertEqual(len(result["ambiguous"]), 1)
+                self.assertIn("changed_error_signature" if changed["test"] == "package.Case.test_one"
+                              else "possible_renamed_test", [item["reason"] for item in result["ambiguous"]])
                 self.assertEqual(result["inherited"], [])
+                self.assertEqual(result["resolved"], [])
 
     def test_environment_or_command_drift_cannot_prove_inherited_failure(self):
         baseline = evidence([failure()])
@@ -71,7 +75,7 @@ class BaselineComparisonTests(unittest.TestCase):
 
     def test_unexplained_failing_result_is_never_silent_baseline(self):
         current = evidence([])
-        current["suites"][0]["raw_result"] = {"exit_code": 1, "stderr": "collection failed"}
+        current["suites"][0]["raw_result"] = {"status": "completed", "exit_code": 1, "stderr": "collection failed"}
         result = subject().compare(evidence([]), current)
         self.assertEqual(result["status"], "blocked")
         self.assertTrue(result["ambiguous"])
@@ -88,6 +92,36 @@ class BaselineComparisonTests(unittest.TestCase):
         baseline = evidence([star])
         current = evidence([star], source="d" * 64)
         self.assertEqual(subject().compare(baseline, current)["status"], "baseline_only")
+
+    def test_missing_baseline_test_inventory_blocks_false_resolution(self):
+        baseline = evidence([failure()])
+        current = evidence([], source="d" * 64)
+        current["suites"][0]["raw_result"] = {"status": "completed", "exit_code": 0}
+        result = subject().compare(baseline, current)
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["ambiguous"][0]["reason"], "test_not_rerun")
+        self.assertEqual(result["resolved"], [])
+
+    def test_interrupted_result_blocks_even_when_failure_text_matches(self):
+        baseline = evidence([failure()])
+        current = evidence([failure()], source="d" * 64)
+        for status in ("interrupted", "completed"):
+            current["suites"][0]["raw_result"] = {"status": status, "exit_code": 137}
+            with self.subTest(status=status):
+                result = subject().compare(baseline, current)
+                self.assertEqual(result["status"], "blocked")
+                self.assertEqual(result["inherited"], [])
+                self.assertEqual(result["ambiguous"][0]["reason"], "runner_not_completed")
+
+    def test_interrupted_baseline_cannot_prove_a_failure_was_resolved(self):
+        baseline = evidence([failure()])
+        baseline["suites"][0]["raw_result"] = {"status": "interrupted", "exit_code": 137}
+        current = evidence([], source="d" * 64)
+        current["suites"][0]["tests"] = [failure()["test"]]
+        current["suites"][0]["raw_result"] = {"status": "completed", "exit_code": 0}
+        result = subject().compare(baseline, current)
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["resolved"], [])
 
 
 if __name__ == "__main__":
