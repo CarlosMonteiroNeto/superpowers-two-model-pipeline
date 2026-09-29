@@ -13,7 +13,6 @@ if [ "${1:-}" = "--legacy" ] && [ "$#" -eq 4 ]; then
   if [ "$claim" = completed ]; then
     "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" \
       "reconciled completed review dispatch for candidate $candidate" candidate="$candidate" || true
-    rm -f "$state"
     exit 0
   fi
   [ "$claim" = claimed ] || { echo "review-dispatch: candidate review requires reconciliation" >&2; exit 5; }
@@ -26,7 +25,6 @@ if [ "${1:-}" = "--legacy" ] && [ "$#" -eq 4 ]; then
   python3 "$SCRIPT_DIR/legacy_review_claim.py" complete "$ws" "$task" "$candidate" || exit 5
   "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" \
     "review dispatched for candidate $candidate" candidate="$candidate" || true
-  rm -f "$state"
   exit 0
 fi
 if [ "${1:-}" = "--build-request" ] && [ "$#" -eq 4 ]; then

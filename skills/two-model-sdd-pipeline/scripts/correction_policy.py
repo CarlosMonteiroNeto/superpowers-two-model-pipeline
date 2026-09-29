@@ -3,6 +3,13 @@
 import pathlib
 import json
 import sys
+import os
+import importlib.util
+
+
+_grant_spec = importlib.util.spec_from_file_location("scope_grants", pathlib.Path(__file__).with_name("scope_grants.py"))
+scope_grants = importlib.util.module_from_spec(_grant_spec)
+_grant_spec.loader.exec_module(scope_grants)
 
 
 def _paths(values):
@@ -25,7 +32,7 @@ def _contracts(values):
     return set(values)
 
 
-def decide(review: dict, task: dict, *, issued_grants=None, identity=None) -> dict:
+def decide(review: dict, task: dict, *, issued_grants=None, identity=None, grant_key=None) -> dict:
     """Return coder, director, or block; fail closed on malformed metadata."""
     if not isinstance(review, dict) or not isinstance(task, dict):
         return {"action": "block", "reason": "review or task is malformed"}
@@ -48,7 +55,7 @@ def decide(review: dict, task: dict, *, issued_grants=None, identity=None) -> di
             for grant in issued_grants:
                 if not isinstance(grant, dict):
                     raise ValueError("issued grant is malformed")
-                if (grant.get("issuer") != "supervisor" or not grant.get("grant_id") or
+                if (not scope_grants.verify_issued(grant, grant_key) or
                         any(str(grant.get(key)) != str(identity.get(key)) for key in
                             ("run_id", "family_id", "task_id", "attempt_id")) or
                         not all(identity.get(key) for key in
@@ -105,7 +112,8 @@ if __name__ == "__main__":
                     family = items[parent]
                 grant_identity = {"run_id": run["run_id"], "family_id": family["id"],
                                   "task_id": task["id"], "attempt_id": state["candidate_commit"]}
-        result = decide(review, task, issued_grants=grants, identity=grant_identity)
+        result = decide(review, task, issued_grants=grants, identity=grant_identity,
+                        grant_key=os.environ.get("PIPELINE_SCOPE_GRANT_KEY"))
     except (OSError, ValueError, KeyError, StopIteration, TypeError) as exc:
         result = {"action": "block", "reason": str(exc)}
     print(result["action"])

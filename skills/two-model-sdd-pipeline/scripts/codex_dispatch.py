@@ -214,6 +214,7 @@ def run_dispatch(request, runtime):
     try:
         env=dict(os.environ)
         if isinstance(runtime.get("env"),dict): env.update(runtime["env"])
+        env.pop("PIPELINE_SCOPE_GRANT_KEY", None)
         env["PIPELINE_ROLE_POLICY"]=str(policy_path)
         env["CODEX_SKILL_ROOT"]=str(pathlib.Path(__file__).resolve().parent.parent)
         captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), env, on_start=register_process)

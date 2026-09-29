@@ -7,6 +7,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -61,9 +62,15 @@ class CorrectionRoutingTests(unittest.TestCase):
         issued = [{"path": "src/extra.py", "contracts": ["returns the expected value"],
                    "run_id": "run", "family_id": 1, "task_id": 1,
                    "attempt_id": "attempt", "issuer": "supervisor", "grant_id": "g1"}]
+        grants = load_module(self, "scope_grants")
+        key = "ab" * 32
+        issued[0]["signature"] = grants.sign_issued(issued[0], key)
         self.assertEqual(policy.decide(self.review(finding), task, issued_grants=issued,
                           identity={"run_id": "run", "family_id": 1, "task_id": 1,
-                                    "attempt_id": "attempt"}).get("action"), "coder")
+                                    "attempt_id": "attempt"}, grant_key=key).get("action"), "coder")
+        self.assertEqual(policy.decide(self.review(finding), task, issued_grants=issued,
+                          identity={"run_id": "run", "family_id": 1, "task_id": 1,
+                                    "attempt_id": "attempt"}).get("action"), "director")
         malformed = self.review(finding)
         del malformed["findings"][0]["affected_paths"]
         self.assertEqual(policy.decide(malformed, task).get("action"), "block")
@@ -83,6 +90,27 @@ class CorrectionRoutingTests(unittest.TestCase):
         self.assertIn("ensure_review", (SCRIPTS / "review_dispatch.py").read_text(encoding="utf-8"))
         self.assertNotIn('DISPATCH_BIN"', gate)
         self.assertIn("ensure_review", shared)
+
+    def test_worker_adapters_remove_supervisor_grant_capability(self):
+        opencode = (SCRIPTS / "dispatch-opencode").read_text(encoding="utf-8")
+        codex = (SCRIPTS / "codex_dispatch.py").read_text(encoding="utf-8")
+        self.assertIn("unset PIPELINE_SCOPE_GRANT_KEY", opencode)
+        self.assertIn('env.pop("PIPELINE_SCOPE_GRANT_KEY", None)', codex)
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            worker = root / "worker.sh"
+            worker.write_text('#!/usr/bin/env bash\n'
+                              'if [ -n "${PIPELINE_SCOPE_GRANT_KEY:-}" ]; then exit 77; fi\n'
+                              'echo \'{"type":"step_start","sessionID":"session"}\'\n', encoding="utf-8")
+            os.chmod(worker, 0o755)
+            prompt = root / "prompt.md"
+            prompt.write_text("review", encoding="utf-8")
+            result = subprocess.run(["bash", str(SCRIPTS / "dispatch-opencode"),
+                "--agent", "two-model-reviewer", "--task", "1", "--prompt-file", str(prompt),
+                "--log", str(root / "review.log")],
+                env=dict(os.environ, PIPELINE_SCOPE_GRANT_KEY="ab" * 32, OPENCODE_BIN=str(worker)),
+                capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 77, result.stdout + result.stderr)
 
     def test_reviewer_schema_rejects_missing_structured_scope(self):
         schema = json.loads((ROOT / "skills" / "two-model-sdd-pipeline" / "schemas" / "reviewer-result.schema.json").read_text(encoding="utf-8"))
@@ -107,13 +135,31 @@ class CorrectionRoutingTests(unittest.TestCase):
                      "attempt_id": "candidate", "grant_id": "issued-1",
                      "contracts": ["returns the expected value"], "allowed_roots": ["src"],
                      "registry_path": str(ws / "scope-grants.json")}
-            self.assertEqual(grants.reserve({"path": "src/extra.py", "kind": "new_file"}, owner)["decision"], "grant")
-            self.assertEqual(subprocess.check_output(command, text=True).strip(), "coder")
-            owner["attempt_id"] = "old-candidate"
-            records = json.loads((ws / "scope-grants.json").read_text(encoding="utf-8"))
-            next(iter(records.values()))["attempt_id"] = "old-candidate"
+            with self.assertRaises(ValueError):
+                grants.reserve({"path": "src/extra.py", "kind": "new_file"}, owner)
+            records = {"src/extra.py": dict(owner, path="src/extra.py", issuer="supervisor")}
             (ws / "scope-grants.json").write_text(json.dumps(records), encoding="utf-8")
             self.assertEqual(subprocess.check_output(command, text=True).strip(), "director")
+            key = "ab" * 32
+            with mock.patch.dict(os.environ, {"PIPELINE_SCOPE_GRANT_KEY": key}):
+                self.assertEqual(grants.reserve({"path": "src/extra.py", "kind": "new_file"}, owner)["decision"], "grant")
+            env = dict(os.environ, PIPELINE_SCOPE_GRANT_KEY=key)
+            self.assertEqual(subprocess.check_output(command, text=True, env=env).strip(), "coder")
+            self.assertEqual(subprocess.check_output(command, text=True).strip(), "director")
+            records = json.loads((ws / "scope-grants.json").read_text(encoding="utf-8"))
+            signed = next(record for record in records.values() if record.get("signature"))
+            original_signature = signed["signature"]
+            signed["signature"] = grants.sign_issued(signed, "cd" * 32)
+            (ws / "scope-grants.json").write_text(json.dumps(records), encoding="utf-8")
+            self.assertEqual(subprocess.check_output(command, text=True, env=env).strip(), "director")
+            signed["signature"] = original_signature
+            (ws / "scope-grants.json").write_text(json.dumps(records), encoding="utf-8")
+            owner["attempt_id"] = "old-candidate"
+            records = json.loads((ws / "scope-grants.json").read_text(encoding="utf-8"))
+            for record in records.values():
+                record["attempt_id"] = "old-candidate"
+            (ws / "scope-grants.json").write_text(json.dumps(records), encoding="utf-8")
+            self.assertEqual(subprocess.check_output(command, text=True, env=env).strip(), "director")
 
     def test_legacy_review_entrypoint_reconciles_ambiguous_launch_without_duplicate(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -166,8 +212,28 @@ class CorrectionRoutingTests(unittest.TestCase):
             success = ["bash", str(SCRIPTS / "review-dispatch"), "--legacy", str(ws), "2", str(package2)]
             self.assertEqual(subprocess.run(success, cwd=root, env=env).returncode, 0)
             self.assertEqual(subprocess.run(success, cwd=root, env=env).returncode, 0)
-            self.assertFalse(state2.exists())
+            self.assertTrue(state2.exists())
             self.assertEqual(count.read_text(encoding="utf-8").splitlines(), ["call", "call"])
+            (ws / "plan.json").write_text(json.dumps({"tasks": [{"id": 2,
+                "touches": ["src/a.py"], "acceptance": ["returns the expected value"]}]}), encoding="utf-8")
+            (ws / ".pipeline-identity.json").write_text(json.dumps({"run_id": "run"}), encoding="utf-8")
+            (ws / "task-2-review.json").write_text(json.dumps(self.review(
+                self.finding(paths=["src/extra.py"]))), encoding="utf-8")
+            subprocess.run(["bash", str(SCRIPTS / "ledger-append"), str(ws / "ledger.jsonl"),
+                            "review_outcome", "2", "SEND_BACK"], cwd=root, check=True, capture_output=True)
+            grants = load_module(self, "scope_grants")
+            key = "ab" * 32
+            owner = {"run_id": "run", "family_id": 2, "task_id": 2,
+                     "attempt_id": candidate, "grant_id": "issued-after-review",
+                     "contracts": ["returns the expected value"], "allowed_roots": ["src"],
+                     "registry_path": str(ws / "scope-grants.json")}
+            with mock.patch.dict(os.environ, {"PIPELINE_SCOPE_GRANT_KEY": key}):
+                grants.reserve({"path": "src/extra.py", "kind": "new_file"}, owner)
+            routed = subprocess.run(["bash", str(SCRIPTS / "route-next"), str(ws), "2", "2"],
+                                    cwd=root, env=dict(env, PIPELINE_SCOPE_GRANT_KEY=key),
+                                    capture_output=True, text=True)
+            self.assertEqual(routed.returncode, 0, routed.stderr)
+            self.assertIn("DIRECT_FIX 2", routed.stdout)
 
 
 if __name__ == "__main__":

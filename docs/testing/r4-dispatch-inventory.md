@@ -25,6 +25,14 @@ Ambiguous post-start failures retain their reservation for reconciliation.
 The registry is keyed by run and task family, so corrective children and scope
 revisions do not reset counts.
 
+Scope extensions require a supervisor-issued registry record signed with the
+controller-only `PIPELINE_SCOPE_GRANT_KEY` (at least 32 random bytes encoded as
+hex). The key is supplied to controller scripts before grant issuance and
+routing; neither worker adapter passes it to its model process. Without the
+key, or with an unsigned, altered, stale, or wrong-attempt record, the router
+does not extend the task scope. The legacy candidate state remains durable
+after review dispatch so routing can bind the grant to the reviewed commit.
+
 An interrupted direct correction remains at `DIRECT_FIX_RECONCILE`; task-run
 does not start another operator. The controller can recover a completed result
 by writing a supervisor disposition with the exact fields from
