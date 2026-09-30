@@ -182,7 +182,8 @@ def _python_enclosing_loops(source, line_no):
         if not isinstance(node, ast.Call) or node.lineno != line_no:
             continue
         function = node.func
-        semantic = (isinstance(function, ast.Name) and function.id in semantic_names)
+        semantic = ((isinstance(function, ast.Name) and function.id in semantic_names)
+                    or (isinstance(function, ast.Attribute) and function.attr in semantic_names))
         semantic = semantic or (isinstance(function, ast.Call)
                                 and isinstance(function.func, ast.Name)
                                 and function.func.id == "getattr")

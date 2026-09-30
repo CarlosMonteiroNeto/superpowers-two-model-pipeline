@@ -21,11 +21,11 @@
 
 - RED: new metrics/acceptance checks failed because the API, audit and ADR did not exist. Additional focused REDs exposed unbounded `for` loops, role-keyed model lookup, a call added inside a pre-existing open loop, broad scanning of test fixtures, malformed comparison data, and fractional latency rejection. Independent review later reproduced non-progressing `while`, nested-break masking, unknown inventory bounds, savings claims despite worsening dimensions, infinite-valued loop counters, and a one-line loop bypass; each regression failed before its fix.
 - GREEN: each case passed after its focused implementation change. The static audit rejects traversal and malformed identity input; it ignores prose/comments and test fixtures; `while attempt < 3` remains accepted, while open `while True` and `itertools.count()` call loops are rejected.
-- `python skills/two-model-sdd-pipeline/tests/test_r4_efficiency_acceptance.py -v` — 18/18 passed.
+- `python skills/two-model-sdd-pipeline/tests/test_r4_efficiency_acceptance.py -v` — 19/19 passed.
 - `python skills/two-model-sdd-pipeline/tests/test_r4_dispatch_metrics.py -v` — 6/6 passed.
-- `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v` — 89/89 passed after adding positive/negative infinity and one-line loop fixtures.
+- `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v` — 90/90 passed after adding positive/negative infinity, one-line loop and method-dispatch fixtures.
 - Dispatch audit against the actual script diff `473c4e8..411a1db` — passed with no findings or observed new semantic call sites.
-- Scoped re-review identified infinite counter initialization as a remaining boundness hole. Both positive and negative infinity fixtures failed before the fix; one-line suites then exposed a second loop-discovery bypass. Their regressions now pass; Task 5 acceptance 18/18, R4 discovery 89/89. Scoped re-review pending.
+- Scoped re-review identified infinite counter initialization as a remaining boundness hole. Both positive and negative infinity fixtures failed before the fix; one-line suites and method calls added to pre-existing loops then exposed two more loop-discovery bypasses. All regressions now pass; Task 5 acceptance 19/19, R4 discovery 90/90. Scoped re-review pending.
 - `python3 skills/two-model-sdd-pipeline/scripts/dispatch-audit --help` — passed.
 - Ran the new audit against the actual `473c4e8..6df8d72` source diff with empty call-site inventory — status `passed`, no findings; this also guards against self-matching its regex literals.
 - Python `compile()` check for both implementation files — passed.

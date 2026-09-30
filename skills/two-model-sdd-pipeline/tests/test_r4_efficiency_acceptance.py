@@ -105,6 +105,31 @@ class DispatchAuditAcceptanceTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_rejects_method_dispatch_inside_unbounded_loop(self):
+        temporary = tempfile.TemporaryDirectory()
+        root = pathlib.Path(temporary.name)
+        git(root, "init", "-q")
+        git(root, "config", "user.email", "audit@example.invalid")
+        git(root, "config", "user.name", "Audit Fixture")
+        (root / "worker.py").write_text("while True:\n    pass\n", encoding="utf-8")
+        git(root, "add", "worker.py")
+        git(root, "commit", "-qm", "base")
+        base = git(root, "rev-parse", "HEAD")
+        (root / "worker.py").write_text("while True:\n    worker.dispatch()\n", encoding="utf-8")
+        git(root, "add", "worker.py")
+        git(root, "commit", "-qm", "candidate")
+        head = git(root, "rev-parse", "HEAD")
+        try:
+            declared = [{"file": "worker.py", "line": 2, "role": "operator",
+                         "trigger": "task start", "frequency": "each iteration",
+                         "budget": 3, "termination": "bounded by cycle limit",
+                         "decision": "keep", "justification": "semantic work"}]
+            result, report = self._run_audit(root, base, head, declared)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unbounded_dispatch_loop", [x["code"] for x in report["findings"]])
+        finally:
+            temporary.cleanup()
+
     def test_dynamic_call_is_inventoryable_and_explicitly_bounded_loop_passes(self):
         temporary, root, base, head = self._repo(
             "attempt = 0\nmethod = 'dispatch'\nwhile attempt < 3:\n    getattr(worker, method)()\n    attempt += 1\n")
