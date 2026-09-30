@@ -72,12 +72,18 @@ class ToolchainWiringBase(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-qm", "base"], check=True)
         worktree = self._tmp / "task-worktree"
         subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-qb", "task", str(worktree), "HEAD"], check=True)
-        workspace = worktree / ".superpowers" / "two-model" / "acceptance"
+        git_dir = pathlib.Path(subprocess.check_output(
+            ["git", "-C", str(worktree), "rev-parse", "--absolute-git-dir"], text=True,
+        ).strip())
+        workspace = git_dir / "acceptance"
         workspace.mkdir(parents=True)
-        marker = "gate-cwd.txt"
+        (workspace / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": "python-unit-v1", "touches": ["tests/test_gate.py"]}],
+        }), encoding="utf-8")
+        marker = str(git_dir / "gate-cwd.txt")
         command = [sys.executable, "-c",
                    "import os,pathlib; assert os.environ.get('PYTHONDONTWRITEBYTECODE') == '1'; "
-                   "pathlib.Path(%r).write_text(str(pathlib.Path.cwd()))" % marker]
+                   "pathlib.Path(os.environ['GATE_MARKER']).write_text(str(pathlib.Path.cwd()))"]
         descriptor = {
             "toolchain_id": "python-unit-v1",
             "language": "python",
@@ -85,7 +91,7 @@ class ToolchainWiringBase(unittest.TestCase):
             "red_adapter": "unittest",
             "project_root": str(self.repo),
             "commands": {
-                "test": {"argv": command, "cwd": str(self.repo), "env": {}},
+                "test": {"argv": command, "cwd": str(self.repo), "env": {"GATE_MARKER": marker}},
                 "analyze": {"argv": [sys.executable, "-c", "pass"],
                             "cwd": str(self.repo), "env": {}},
             },
@@ -101,8 +107,9 @@ class ToolchainWiringBase(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertTrue((worktree / marker).is_file(), "full gates must run in the task worktree")
-        self.assertFalse((self.repo / marker).exists(), "full gates must not run in the integration checkout")
+        self.assertTrue(pathlib.Path(marker).is_file(), "full gates must run in the task worktree")
+        self.assertFalse((self.repo / ".git" / "gate-cwd.txt").exists(),
+                         "full gates must not run in the integration checkout")
 
 
 class TestResolveToolchainAll(ToolchainWiringBase):
@@ -174,9 +181,17 @@ class TestResolveToolchainAll(ToolchainWiringBase):
         self.assertEqual(resolved.returncode, 0, resolved.stdout + resolved.stderr)
         entries = [json.loads(line) for line in self.ledger_path().read_text(encoding="utf-8").splitlines()]
         self.assertEqual([entry["toolchain_id"] for entry in entries], ["python-shared-v1"])
+        (self.ws / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": "python-shared-v1", "touches": ["tests/test_shared.py"]}],
+        }), encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "config", "user.name", "Pipeline Test"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "config", "user.email", "pipeline@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "add", "README.md", "pyproject.toml", "requirements.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-qm", "candidate"], check=True)
         selected = run_script(
-            "run-gates", [str(self.ws), "--toolchains", "python-shared-v1"],
-            cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
+            "run-gates", [str(self.ws), "--tasks", "1"],
+            cwd=self.repo, env_extra={"RTK_ENABLED": "0"},
         )
         self.assertEqual(selected.returncode, 0, selected.stdout + selected.stderr)
 

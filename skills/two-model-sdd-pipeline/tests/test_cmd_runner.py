@@ -162,6 +162,15 @@ echo "rtk exploded" >&2; exit 9
 
 
 class TestRunGates(CmdTestBase):
+    def _init_candidate_repo(self):
+        subprocess.run(["git", "init", "-q", self._tmp], check=True)
+        subprocess.run(["git", "-C", self._tmp, "config", "user.name", "Pipeline Test"], check=True)
+        subprocess.run(["git", "-C", self._tmp, "config", "user.email", "pipeline@example.invalid"], check=True)
+        anchor = pathlib.Path(self._tmp) / "README.md"
+        anchor.write_text("candidate\n", encoding="utf-8")
+        subprocess.run(["git", "-C", self._tmp, "add", "README.md"], check=True)
+        subprocess.run(["git", "-C", self._tmp, "commit", "-qm", "candidate"], check=True)
+
     def write_legacy_gate(self, ws, test_cmd, analyze_cmd):
         (ws / "ledger.jsonl").write_text(json.dumps({
             "type": "gate",
@@ -258,8 +267,12 @@ class TestRunGates(CmdTestBase):
         self.assertFalse(marker.exists(), "a structured descriptor needs exact task/toolchain identity")
 
     def test_exact_toolchain_selection_is_not_misrouted_to_legacy_ledger_mode(self):
-        ws = pathlib.Path(self._tmp) / "multi-structured-ws"
+        self._init_candidate_repo()
+        ws = pathlib.Path(self._tmp) / ".git" / "multi-structured-ws"
         ws.mkdir()
+        (ws / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": "python-selected-v1", "touches": ["tests/test_selected.py"]}],
+        }), encoding="utf-8")
         entries = []
         for identity in ("python-first-v1", "python-selected-v1"):
             entries.append({
@@ -278,7 +291,7 @@ class TestRunGates(CmdTestBase):
         )
 
         result = run_script(
-            "run-gates", [str(ws), "--toolchains", "python-selected-v1"],
+            "run-gates", [str(ws), "--tasks", "1"],
             cwd=self._tmp, env_extra={"RTK_ENABLED": "0"},
         )
 

@@ -41,7 +41,13 @@ def write_stub(path, body):
 class Task1PipelineCompatibilityTests(unittest.TestCase):
     def setUp(self):
         self.temp = pathlib.Path(tempfile.mkdtemp(prefix="r2-task1-callsites-"))
-        self.workspace = self.temp / "workspace"
+        subprocess.run(["git", "init", "-q", str(self.temp)], check=True)
+        subprocess.run(["git", "-C", str(self.temp), "config", "user.name", "Pipeline Test"], check=True)
+        subprocess.run(["git", "-C", str(self.temp), "config", "user.email", "pipeline@example.invalid"], check=True)
+        (self.temp / "README.md").write_text("candidate\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.temp), "add", "README.md"], check=True)
+        subprocess.run(["git", "-C", str(self.temp), "commit", "-qm", "candidate"], check=True)
+        self.workspace = self.temp / ".git" / "workspace"
         self.workspace.mkdir()
 
     def tearDown(self):
@@ -51,7 +57,7 @@ class Task1PipelineCompatibilityTests(unittest.TestCase):
         project = self.temp / "project with space"
         project.mkdir()
         (project / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
-        marker = project / "command ran.txt"
+        marker = self.temp / ".git" / "command-ran.txt"
         command = [
             sys.executable, "-c",
             "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text('ran', encoding='utf-8')",
@@ -80,9 +86,12 @@ class Task1PipelineCompatibilityTests(unittest.TestCase):
         entries = [json.loads(line) for line in
                    (self.workspace / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
         gate = next(entry for entry in entries if entry.get("type") == "gate")
+        (self.workspace / "plan.json").write_text(json.dumps({
+            "tasks": [{"id": 1, "toolchain_id": gate["toolchain_id"], "touches": ["tests/test_x.py"]}],
+        }), encoding="utf-8")
 
         result = run_script(
-            "run-gates", [self.workspace, "--toolchains", gate["toolchain_id"]], self.temp,
+            "run-gates", [self.workspace, "--tasks", "1"], self.temp,
             {"RTK_ENABLED": "0"},
         )
 
@@ -178,7 +187,7 @@ class Task1PipelineCompatibilityTests(unittest.TestCase):
         self.assertTrue(invoked.exists(), result.stdout + result.stderr)
 
     def test_final_gate_runs_every_exact_toolchain_used_by_the_plan(self):
-        markers = [self.temp / "python gate one.txt", self.temp / "python gate two.txt"]
+        markers = [self.temp / ".git" / "python-gate-one.txt", self.temp / ".git" / "python-gate-two.txt"]
         tasks = []
         entries = []
         for task_id, marker in enumerate(markers, start=1):
