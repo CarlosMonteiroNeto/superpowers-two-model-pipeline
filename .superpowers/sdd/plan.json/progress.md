@@ -1,6 +1,6 @@
 # SDD ledger — plan: docs/superpowers/plans/2026-09-25-r4-execution-efficiency/plan.json
 
-Setup: worktree C:\Users\Carlos_Neto\.codex\worktrees\r4-execution-efficiency\superpowers-two-model-pipeline; branch codex/r4-execution-efficiency; execution serial with original Superpowers SDD; no Two Model Pipeline runner/orchestrator will be used.
+Setup: worktree C:\Users\Carlos_Neto\.codex\worktrees\r4-execution-efficiency\superpowers-two-model-pipeline; branch codex/r4-execution-efficiency; execution follows original Superpowers SDD; parallelism is available where dependencies allow; no Two Model Pipeline runner/orchestrator will be used.
 
 Pre-flight interface scan:
 | Pair | Producer vs consumer | Finding |
