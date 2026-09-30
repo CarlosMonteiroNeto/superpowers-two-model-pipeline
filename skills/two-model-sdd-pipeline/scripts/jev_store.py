@@ -79,7 +79,11 @@ def _locked(directory):
             fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.close(fd)
             break
-        except FileExistsError:
+        except OSError as exc:
+            # Windows may report a sharing violation while another process
+            # creates the lock. Retry only when the lock is actually present.
+            if not isinstance(exc, FileExistsError) and not (isinstance(exc, PermissionError) and lock.exists()):
+                raise
             if time.monotonic() >= deadline:
                 raise RuntimeError("timed out waiting for Jev persistence lock")
             time.sleep(.02)

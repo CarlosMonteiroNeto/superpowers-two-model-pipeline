@@ -4,6 +4,7 @@ import sys
 import tempfile
 import concurrent.futures
 import unittest
+from unittest import mock
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -60,6 +61,27 @@ class PolicyAndStoreTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             list(pool.map(lambda _: jev_store.record_failure(self.tmp.name, "site1"), range(16)))
         self.assertEqual(jev_store.circuit_state(self.tmp.name, "site1")["failures"], 16)
+
+    def test_windows_permission_race_retries_when_lock_exists(self):
+        directory = self.path / ".jev" / "site1"
+        directory.mkdir(parents=True)
+        lock = directory / "circuit.lock"
+        lock.write_text("held", encoding="utf-8")
+        real_open = jev_store.os.open
+        calls = [0]
+
+        def transient_open(path, flags, mode=0o777):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise PermissionError(13, "temporary sharing violation", path)
+            return real_open(path, flags, mode)
+
+        with mock.patch.object(jev_store.os, "open", side_effect=transient_open), \
+             mock.patch.object(jev_store.time, "sleep", side_effect=lambda _: lock.unlink()):
+            with jev_store._locked(directory):
+                pass
+        self.assertGreaterEqual(calls[0], 2)
+        self.assertFalse(lock.exists())
 
 
 if __name__ == "__main__":
