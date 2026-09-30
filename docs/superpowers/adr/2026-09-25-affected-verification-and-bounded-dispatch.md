@@ -35,8 +35,9 @@ call. Unknown observations must stay unknown.
   `dispatch-audit` checks added script lines for missing inventory,
   mechanical model routing, and call-bearing loops without a bounded exit.
   Unknown frequency, budget or termination fields are rejected. Python counted
-  loops require a finite literal range or a matching monotonic counter update
-  on every iteration; breaks and nested-loop exits alone do not prove a bound.
+  loops require a finite literal range or a finite integer counter initialization
+  with a matching monotonic update on every iteration; breaks and nested-loop
+  exits alone do not prove a bound.
 - Cost reports keep semantic invocations, backend turns, transport retries,
   Jev calls, input/output/cached tokens, latency and escaped-defect
   observations separate. Metrics are aggregated only from observed records;

@@ -197,6 +197,26 @@ class DispatchAuditAcceptanceTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_rejects_while_counters_initialized_to_infinity(self):
+        examples = (
+            "attempt = float('inf')\nwhile attempt > 3:\n    dispatch()\n    attempt -= 1\n",
+            "attempt = float('-inf')\nwhile attempt < 3:\n    dispatch()\n    attempt += 1\n",
+        )
+        for source in examples:
+            with self.subTest(source=source):
+                temporary, root, base, head = self._repo(source)
+                try:
+                    declared = [{"file": "worker.py", "line": 3, "role": "operator",
+                                 "trigger": "task start", "frequency": "bounded attempts",
+                                 "budget": 3, "termination": "counter reaches bound",
+                                 "decision": "keep", "justification": "semantic work"}]
+                    result, report = self._run_audit(root, base, head, declared)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("unbounded_dispatch_loop",
+                                  [x["code"] for x in report["findings"]])
+                finally:
+                    temporary.cleanup()
+
     def test_nested_break_does_not_bound_outer_dispatch_loop(self):
         temporary, root, base, head = self._repo(
             "while True:\n    for item in items:\n        break\n    dispatch(item)\n")

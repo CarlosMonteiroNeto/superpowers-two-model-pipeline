@@ -567,7 +567,8 @@ version-1 inventory containing `repo`,
 or `merge`) and `justification`. The audit examines newly added script lines,
 rejecting mechanical model routing, semantic calls absent from the inventory,
 and call-bearing loops without a bounded exit. For Python, a `while` bound
-needs a matching monotonic counter update on every iteration; `break` and
+needs a finite integer counter initialization and a matching monotonic update
+on every iteration; `break` and
 nested-loop exits do not establish a bound. Unknown frequency, budget or
 termination is rejected. The audit recognizes finite literal ranges and
 simple counted loops, and fails closed when it cannot prove a bound. Its report

@@ -14,7 +14,6 @@ import sys
 import tempfile
 import io
 import tokenize
-import textwrap
 
 
 CALL = re.compile(r"\b(?:dispatch|invoke|run_dispatch|delegate_worker|dispatch_worker)\s*\(")
@@ -180,14 +179,25 @@ def _loop_body(source, line_no, indent):
     return "\n".join(body)
 
 
-def _python_loop_is_bounded(header, body):
+def _integer_literal(node):
+    if isinstance(node, ast.Constant) and type(node.value) is int:
+        return node.value
+    if (isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub))
+            and isinstance(node.operand, ast.Constant)
+            and type(node.operand.value) is int):
+        return node.operand.value if isinstance(node.op, ast.UAdd) else -node.operand.value
+    return None
+
+
+def _python_loop_is_bounded(source, line_no):
     try:
-        module = ast.parse(textwrap.dedent(header.lstrip() + "\n" + body))
+        module = ast.parse("\n".join(source))
     except SyntaxError:
         return False
-    if not module.body or not isinstance(module.body[0], (ast.For, ast.While)):
+    loop = next((node for node in ast.walk(module)
+                 if isinstance(node, (ast.For, ast.While)) and node.lineno == line_no), None)
+    if loop is None:
         return False
-    loop = module.body[0]
     if isinstance(loop, ast.For):
         iterator = loop.iter
         if (isinstance(iterator, ast.Call) and isinstance(iterator.func, ast.Name)
@@ -206,6 +216,34 @@ def _python_loop_is_bounded(header, body):
             or type(test.comparators[0].value) is not int):
         return False
     variable = test.left.id
+    parent = next((node for node in ast.walk(module)
+                   if any(child is loop for child in ast.iter_child_nodes(node))), None)
+    if parent is None:
+        return False
+    block = next((value for _, value in ast.iter_fields(parent)
+                  if isinstance(value, list) and any(item is loop for item in value)), None)
+    if block is None:
+        return False
+    loop_index = next(index for index, item in enumerate(block) if item is loop)
+    initial_value = None
+    for statement in block[:loop_index]:
+        writes = [node for node in ast.walk(statement)
+                  if isinstance(node, ast.Name) and node.id == variable
+                  and isinstance(node.ctx, ast.Store)]
+        if not writes:
+            continue
+        if (isinstance(statement, ast.Assign) and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+                and statement.targets[0].id == variable):
+            initial_value = _integer_literal(statement.value)
+        elif (isinstance(statement, ast.AnnAssign)
+              and isinstance(statement.target, ast.Name)
+              and statement.target.id == variable):
+            initial_value = _integer_literal(statement.value) if statement.value else None
+        else:
+            initial_value = None
+    if initial_value is None:
+        return False
     operator = test.ops[0]
     expected = (ast.Lt, ast.LtE) if isinstance(operator, (ast.Lt, ast.LtE)) else (
         ast.Gt, ast.GtE) if isinstance(operator, (ast.Gt, ast.GtE)) else ()
@@ -230,12 +268,13 @@ def _python_loop_is_bounded(header, body):
     return (isinstance(update.op, ast.Add) if increasing else isinstance(update.op, ast.Sub))
 
 
-def _unbounded_dispatch_loop(header, body, python_source=False):
+def _unbounded_dispatch_loop(header, body, python_source=False, source=None, line_no=None):
     has_call = CALL.search(body) or DYNAMIC_CALL.search(body)
     if not has_call:
         return False
     if python_source:
-        return not _python_loop_is_bounded(header, body)
+        return not (source is not None and line_no is not None
+                    and _python_loop_is_bounded(source, line_no))
     bounded_condition = re.search(
         r"while\s+[\w.]+\s*(?:<|<=|>|>=)\s*(?:\d+|max_[\w]+|[A-Z][A-Z0-9_]*)", header, re.I)
     bounded_for = re.search(
@@ -286,7 +325,7 @@ def audit(inventory, policy):
                                      "line": line_no, "message": "semantic call justification is empty"})
                 for header_line, header, indent in _enclosing_loops(code_lines, line_no):
                     if _unbounded_dispatch_loop(header, _loop_body(code_lines, header_line, indent),
-                                                python_source):
+                                                python_source, source, header_line):
                         findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                          "line": header_line, "message": "dispatch loop has no visible bounded exit"})
             if (MECHANICAL_ROUTE.search(code + "\n" + "\n".join(code_lines[line_no:line_no + 4]))
@@ -296,7 +335,7 @@ def audit(inventory, policy):
             if LOOP.match(code):
                 indent = len(code_lines[line_no - 1]) - len(code_lines[line_no - 1].lstrip())
                 body = _loop_body(code_lines, line_no, indent)
-                if _unbounded_dispatch_loop(code, body, python_source):
+                if _unbounded_dispatch_loop(code, body, python_source, source, line_no):
                     findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                      "line": line_no, "message": "dispatch loop has no visible bounded exit"})
     unique = {(item["code"], item["file"], item["line"]): item for item in findings}

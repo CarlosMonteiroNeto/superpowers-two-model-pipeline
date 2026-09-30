@@ -4,8 +4,8 @@
 - Task: 5, “Add dispatch-cost audits, documentation and acceptance”
 - Worktree: `C:\Users\Carlos_Neto\.codex\worktrees\r4-task5-audit-docs\superpowers-two-model-pipeline`
 - Base: `473c4e8`
-- Commits: `aa01cff`, `6df8d72`
-- Final candidate: `6df8d72`
+- Commits: `aa01cff`, `6df8d72`, `a1b3b2c`
+- Final candidate: `a1b3b2c`
 - Scope: Task 5 only; no Two Model Pipeline runner/orchestrator was used.
 
 ## Changes
@@ -13,17 +13,19 @@
 - `skills/skill-scripter/SKILL.md`: inventory every semantic call site, including dynamic calls and worker delegation, with role, trigger, frequency, budget, termination, keep/remove/merge and justification.
 - `skills/write-script/SKILL.md`: require `dispatch-audit` and report only observed cost evidence.
 - `skills/two-model-sdd-pipeline/scripts/dispatch_metrics.py`: `summarize(records)` separates semantic invocations, backend turns, transport retries, Jev calls, input/output/cached tokens, latency and escaped defects. Missing values remain `null`; malformed data and duplicate dispatch identities fail. `compare_cost` rejects incomplete evidence, identifies worsened dimensions as a usage tradeoff, and never authorizes a monetary savings claim without a pricing model.
-- `skills/two-model-sdd-pipeline/scripts/dispatch-audit`: accepts versioned inventory/policy/output files, validates shape, paths, commit identities and known inventory bounds, scans only newly added production script lines, and rejects uninventoried semantic calls, mechanical model routing, and unbounded call loops. Python `while` bounds require a numeric comparator and a monotonic counter update with no alternate counter writes; only finite literal `range`/collection loops are accepted. It returns a stable JSON report and distinct pass/findings/input-error exit codes.
+- `skills/two-model-sdd-pipeline/scripts/dispatch-audit`: accepts versioned inventory/policy/output files, validates shape, paths, commit identities and known inventory bounds, scans only newly added production script lines, and rejects uninventoried semantic calls, mechanical model routing, and unbounded call loops. Python `while` bounds require a finite integer initialization, a numeric comparator and a monotonic counter update with no alternate counter writes; only finite literal `range`/collection loops are accepted. It returns a stable JSON report and distinct pass/findings/input-error exit codes.
 - Added the R4 policy ADR and documented it in `README.md`; ADR-0007 retry history and ADR-0012 per-merge full-suite history are preserved and their supersession scoped explicitly.
 - Added `test_r4_dispatch_metrics.py` and `test_r4_efficiency_acceptance.py` with offline Codex/OpenCode fixtures.
 
 ## TDD and verification
 
-- RED: new metrics/acceptance checks failed because the API, audit and ADR did not exist. Additional focused REDs exposed unbounded `for` loops, role-keyed model lookup, a call added inside a pre-existing open loop, broad scanning of test fixtures, malformed comparison data, and fractional latency rejection. Independent review later reproduced non-progressing `while`, nested-break masking, unknown inventory bounds, and savings claims despite worsening dimensions; each regression failed before its fix.
+- RED: new metrics/acceptance checks failed because the API, audit and ADR did not exist. Additional focused REDs exposed unbounded `for` loops, role-keyed model lookup, a call added inside a pre-existing open loop, broad scanning of test fixtures, malformed comparison data, and fractional latency rejection. Independent review later reproduced non-progressing `while`, nested-break masking, unknown inventory bounds, savings claims despite worsening dimensions, and infinite-valued loop counters; each regression failed before its fix.
 - GREEN: each case passed after its focused implementation change. The static audit rejects traversal and malformed identity input; it ignores prose/comments and test fixtures; `while attempt < 3` remains accepted, while open `while True` and `itertools.count()` call loops are rejected.
-- `python skills/two-model-sdd-pipeline/tests/test_r4_efficiency_acceptance.py -v` — 16/16 passed.
+- `python skills/two-model-sdd-pipeline/tests/test_r4_efficiency_acceptance.py -v` — 17/17 passed.
 - `python skills/two-model-sdd-pipeline/tests/test_r4_dispatch_metrics.py -v` — 6/6 passed.
-- `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v` — 87/87 passed.
+- `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v` — 88/88 passed after adding positive/negative infinity counter fixtures.
+- Re-review-fix audit against `473c4e8..a1b3b2c` — passed with no findings or observed new semantic call sites.
+- Scoped re-review identified infinite counter initialization as a remaining boundness hole. Both positive and negative infinity fixtures failed before the fix; Task 5 focused acceptance then passed 17/17 and R4 discovery passed 88/88. Infinity-counter re-review pending.
 - `python3 skills/two-model-sdd-pipeline/scripts/dispatch-audit --help` — passed.
 - Ran the new audit against the actual `473c4e8..6df8d72` source diff with empty call-site inventory — status `passed`, no findings; this also guards against self-matching its regex literals.
 - Python `compile()` check for both implementation files — passed.
