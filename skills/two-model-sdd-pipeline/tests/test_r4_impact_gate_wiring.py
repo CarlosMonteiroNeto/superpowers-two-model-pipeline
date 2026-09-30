@@ -29,8 +29,9 @@ class ImpactGateEvidenceTests(unittest.TestCase):
                          "base_commit": "a" * 40, "base_tree_hash": "f" * 64,
                          "config_hash": "d" * 64, "environment_hash": "e" * 64,
                          "policy_version": "r4-impact-1"},
-            "evidence": {field: "1" * 64 for field in
+            "evidence": {**{field: "1" * 64 for field in
                          ("diff_hash", "graph_hash", "toolchains_hash", "policy_hash")},
+                         "graph_provenance": {"complete": False, "diagnostics": ["no graph"]}},
         }
         manifest["selection_hash"] = hashlib.sha256(json.dumps(
             manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()

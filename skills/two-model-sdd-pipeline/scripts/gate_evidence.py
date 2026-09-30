@@ -9,6 +9,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 
@@ -53,6 +54,22 @@ def validate_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     for field in ("diff_hash", "graph_hash", "toolchains_hash", "policy_hash"):
         if not isinstance(evidence.get(field), str) or not _HASH.fullmatch(evidence[field]):
             raise ValueError("impact manifest has invalid %s" % field)
+    provenance = evidence.get("graph_provenance")
+    if not isinstance(provenance, dict) or not isinstance(provenance.get("complete"), bool):
+        raise ValueError("impact manifest graph provenance is missing")
+    if provenance["complete"]:
+        if (provenance.get("base_commit") != identity.get("base_commit")
+                or provenance.get("candidate_commit") != identity.get("head_commit")
+                or provenance.get("candidate_tree_hash") != identity.get("tree_hash")
+                or not isinstance(provenance.get("graphify_version"), str)):
+            raise ValueError("impact manifest graph provenance does not match its candidate")
+        for side in ("base", "candidate"):
+            item = provenance.get(side)
+            if (not isinstance(item, dict) or item.get("complete") is not True
+                    or not isinstance(item.get("graph_digest"), str) or not _HASH.fullmatch(item["graph_digest"])
+                    or not isinstance(item.get("source_inventory_hash"), str)
+                    or not _HASH.fullmatch(item["source_inventory_hash"])):
+                raise ValueError("impact manifest has incomplete %s graph provenance" % side)
     for field in ("scope_paths", "tests", "commands", "reasons", "reasons_detail", "gaps"):
         if not isinstance(manifest.get(field), list):
             raise ValueError("impact manifest %s must be an array" % field)
@@ -96,12 +113,163 @@ def _git(root: pathlib.Path, *args: str, binary: bool = False):
     return result.stdout if binary else result.stdout.decode("utf-8", "replace").strip()
 
 
+def _safe_repo_path(value: str) -> pathlib.PurePosixPath:
+    path = pathlib.PurePosixPath(value)
+    if (path.is_absolute() or not value or "\\" in value
+            or re.match(r"^[A-Za-z]:", value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise ValueError("unsafe path in Git snapshot: " + repr(value))
+    return path
+
+
+def _git_tree_files(root: pathlib.Path, commit: str) -> list[tuple[str, str, str]]:
+    raw = _git(root, "ls-tree", "-rz", "--full-tree", commit, binary=True)
+    records = []
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        metadata, name = record.split(b"\t", 1)
+        mode, kind, blob = metadata.decode("ascii").split(" ")
+        path = name.decode("utf-8", "strict")
+        _safe_repo_path(path)
+        if kind != "blob" or mode not in ("100644", "100755"):
+            raise ValueError("Git snapshot contains a non-regular source path")
+        records.append((mode, blob, path))
+    return records
+
+
+def _write_snapshot_file(root: pathlib.Path, relative: str, content: bytes) -> None:
+    rel = _safe_repo_path(relative)
+    target = root.joinpath(*rel.parts)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+
+
+def _git_blob_map(root: pathlib.Path, object_ids: list[str]) -> dict[str, bytes]:
+    if not object_ids:
+        return {}
+    result = subprocess.run(["git", "-C", str(root), "cat-file", "--batch"],
+                            input=("\n".join(object_ids) + "\n").encode("ascii"),
+                            capture_output=True, check=True)
+    data = result.stdout
+    cursor = 0
+    blobs: dict[str, bytes] = {}
+    for expected in object_ids:
+        end = data.find(b"\n", cursor)
+        if end < 0:
+            raise ValueError("Git returned a truncated object header")
+        fields = data[cursor:end].decode("ascii").split(" ")
+        if len(fields) != 3 or fields[0] != expected or fields[1] != "blob":
+            raise ValueError("Git returned a non-blob snapshot object")
+        size = int(fields[2])
+        cursor = end + 1
+        blob_end = cursor + size
+        if blob_end >= len(data) or data[blob_end:blob_end + 1] != b"\n":
+            raise ValueError("Git returned a truncated blob")
+        blobs[expected] = data[cursor:blob_end]
+        cursor = blob_end + 1
+    if cursor != len(data):
+        raise ValueError("Git returned unexpected snapshot object data")
+    return blobs
+
+
+def _make_snapshot(snapshot: pathlib.Path, base_files: list[tuple[str, str, str]],
+                   changes: list[dict[str, str]], candidate: bool,
+                   blobs: dict[str, bytes], root: pathlib.Path) -> None:
+    snapshot.mkdir(parents=True)
+    if not candidate:
+        for _mode, blob, path in base_files:
+            _write_snapshot_file(snapshot, path, blobs[blob])
+        return
+    removed = set()
+    added = set()
+    for item in changes:
+        status = item["status"]
+        if status == "deleted":
+            removed.add(item["path"])
+        elif status == "renamed":
+            removed.add(item["old_path"])
+            added.add(item["new_path"])
+        else:
+            added.add(item["path"])
+    for _mode, blob, path in base_files:
+        if path in removed or path in added:
+            continue
+        _write_snapshot_file(snapshot, path, blobs[blob])
+    for relative in sorted(added):
+        rel = _safe_repo_path(relative)
+        source = root.joinpath(*rel.parts)
+        if not source.is_file() or source.is_symlink():
+            raise ValueError("candidate snapshot has a missing or non-regular changed path: " + relative)
+        _write_snapshot_file(snapshot, relative, source.read_bytes())
+
+
+def _graph_evidence(root: pathlib.Path, base_commit: str, base_tree: str, head: str,
+                    tree_id: str, files: list[dict[str, str]], policy: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    scripts = pathlib.Path(__file__).resolve().parent
+    sys.path.insert(0, str(scripts))
+    import test_dependency_graph
+
+    graph_policy = policy.get("graphify") if isinstance(policy, dict) else None
+    versions = graph_policy.get("version_allowlist") if isinstance(graph_policy, dict) else None
+    if not isinstance(versions, list) or len(versions) != 1 or not isinstance(versions[0], str):
+        return None, {"complete": False, "diagnostics": ["Graphify version policy is missing or ambiguous"]}
+    provenance: dict[str, Any] = {"graphify_version": versions[0], "base": {}, "candidate": {}}
+    try:
+        base_files = _git_tree_files(root, base_commit)
+        blobs = _git_blob_map(root, sorted({blob for _mode, blob, _path in base_files}))
+        with tempfile.TemporaryDirectory(prefix="r4-impact-") as temporary:
+            temp = pathlib.Path(temporary)
+            base_snapshot, candidate_snapshot = temp / "base", temp / "candidate"
+            _make_snapshot(base_snapshot, base_files, files, False, blobs, root)
+            _make_snapshot(candidate_snapshot, base_files, files, True, blobs, root)
+            base = test_dependency_graph.build(base_snapshot, versions[0])
+            candidate = test_dependency_graph.build(candidate_snapshot, versions[0])
+            for name, result in (("base", base), ("candidate", candidate)):
+                provenance[name] = {
+                    "complete": result.get("complete") is True,
+                    "graph_digest": result.get("graph_digest"),
+                    "source_inventory_hash": result.get("source_inventory_hash"),
+                    "graphify_version": result.get("graphify_version"),
+                    "diagnostics": result.get("diagnostics", []),
+                }
+            valid = all(result.get("complete") is True
+                        and result.get("graphify_version") == versions[0]
+                        and isinstance(result.get("graph_digest"), str)
+                        and _HASH.fullmatch(result["graph_digest"])
+                        and isinstance(result.get("source_inventory_hash"), str)
+                        and _HASH.fullmatch(result["source_inventory_hash"])
+                        and isinstance(result.get("reverse_edges"), dict)
+                        for result in (base, candidate))
+            if not valid:
+                provenance["complete"] = False
+                return None, provenance
+            edges: dict[str, set[str]] = {}
+            for result in (base, candidate):
+                for source, targets in result["reverse_edges"].items():
+                    edges.setdefault(source, set()).update(targets)
+            graph = {"version": 1, "base_commit": base_commit,
+                     "base_tree_hash": "commit:%s+sha256:%s" % (base_commit, _digest(base_tree)),
+                     "reverse_edges": {key: sorted(value) for key, value in sorted(edges.items())},
+                     "provenance": provenance}
+            provenance["complete"] = True
+            provenance["base_commit"] = base_commit
+            provenance["base_tree_hash"] = "commit:%s+sha256:%s" % (base_commit, _digest(base_tree))
+            provenance["candidate_commit"] = head
+            provenance["candidate_tree_hash"] = tree_id
+            graph["provenance"] = provenance
+            return graph, provenance
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
+        provenance["complete"] = False
+        provenance["diagnostics"] = ["Graphify snapshots unavailable: " + str(exc)]
+        return None, provenance
+
+
 def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
     """Create a conservative manifest from current Git state and ledger commands.
 
-    Dependency graphs are not accepted from gate callers. Until a trusted graph
-    source is configured, test_impact's missing-graph fallback selects complete
-    suites. A coder cannot supply a test path list to this function.
+    Dependency evidence is extracted only from disposable Git base/candidate
+    snapshots. A caller cannot supply a graph or test path list to this function.
     """
     scripts = pathlib.Path(__file__).resolve().parent
     sys.path.insert(0, str(scripts))
@@ -169,8 +337,11 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
                             "commands": commands})
 
     head = _git(root, "rev-parse", "HEAD")
-    base_tree = _git(root, "rev-parse", "HEAD^{tree}")
-    raw = _git(root, "diff", "--name-status", "-z", "HEAD", binary=True).split(b"\0")
+    requested_base = os.environ.get("PIPELINE_IMPACT_BASE_COMMIT") or head
+    base = _git(root, "rev-parse", "--verify", requested_base + "^{commit}")
+    _git(root, "merge-base", "--is-ancestor", base, head)
+    base_tree = _git(root, "rev-parse", base + "^{tree}")
+    raw = _git(root, "diff", "--name-status", "-z", base, binary=True).split(b"\0")
     files: list[dict[str, str]] = []
     index = 0
     while index < len(raw) and raw[index]:
@@ -203,7 +374,7 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
                         | {item["path"] for item in files if item.get("status") != "deleted"}
                         | {item["new_path"] for item in files if item.get("status") == "renamed"})
     tree_digest = hashlib.sha256()
-    tree_digest.update(_git(root, "diff", "--binary", "HEAD", binary=True))
+    tree_digest.update(_git(root, "diff", "--binary", base, binary=True))
     for item in sorted(files, key=lambda value: (value.get("path", value.get("old_path", "")), value["status"])):
         for name in (item.get("path"), item.get("new_path")):
             if name and (root / pathlib.PurePosixPath(name)).is_file():
@@ -216,13 +387,22 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
                            "toolchains": descriptors, "policy": policy})
     environment_hash = _digest({"python": sys.version, "platform": sys.platform,
                                  "path": os.environ.get("PATH", "")})
-    diff = {"base_commit": head, "head_commit": head,
-            "base_tree_hash": "commit:%s+sha256:%s" % (head, _digest(base_tree)),
+    diff = {"base_commit": base, "head_commit": head,
+            "base_tree_hash": "commit:%s+sha256:%s" % (base, _digest(base_tree)),
             "tree_hash": tree_id, "config_hash": config_hash,
             "environment_hash": environment_hash, "task_scope": scope,
             "test_paths": [path for path in test_paths if "test" in pathlib.PurePosixPath(path).name.lower()],
             "files": files}
-    manifest = test_impact.select(diff, None, descriptors, policy)
+    phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
+    if phase in ("baseline", "closing"):
+        graph, graph_provenance = None, {"complete": False,
+            "diagnostics": ["full test suites are required in %s phase" % phase]}
+    else:
+        graph, graph_provenance = _graph_evidence(root, base, base_tree, head, tree_id, files, policy)
+    manifest = test_impact.select(diff, graph, descriptors, policy)
+    manifest["evidence"]["graph_provenance"] = graph_provenance
+    manifest["selection_hash"] = _digest({key: value for key, value in manifest.items()
+                                           if key != "selection_hash"})
     manifest = validate_manifest(manifest)
     destination = pathlib.Path(workspace) / "impact-manifest.json"
     destination.parent.mkdir(parents=True, exist_ok=True)

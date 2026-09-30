@@ -458,6 +458,7 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
             "base_commit": graph.get("base_commit").lower() if graph.get("base_commit") else None,
             "base_tree_hash": graph.get("base_tree_hash").lower() if graph.get("base_tree_hash") else None,
             "reverse_edges": edges,
+            "provenance": graph.get("provenance"),
         }),
         "toolchains_hash": _digest_json(sorted(toolchain_evidence, key=lambda item: item["id"])),
         "policy_hash": _digest_json(policy),
