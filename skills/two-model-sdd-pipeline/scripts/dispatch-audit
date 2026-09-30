@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""Audit newly added semantic dispatch call sites and bounded exits."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+
+
+CALL = re.compile(r"\b(?:dispatch|invoke|run_dispatch|delegate_worker|dispatch_worker)\s*\(")
+DYNAMIC_CALL = re.compile(r"getattr\([^\n]+\)\s*\(")
+MECHANICAL_ROUTE = re.compile(
+    r"(?:if|elif|case|match)\b[^\n]*(?:severity|role|backend|tier|finding)[^\n]*"
+    r"\n(?:[^\n]*\n){0,3}[^\n]*(?:model|requested_model)\s*=", re.I)
+MODEL_KEY_ROUTE = re.compile(
+    r"(?:\b(?:model|requested_model|tier)\w*\s*=\s*[^\n]*(?:severity|finding|role|backend)"
+    r"|\b(?:model|tier)[A-Z0-9_]*(?:ROLE|SEVERITY|FINDING|BACKEND)\b\s*\["
+    r"|\b(?:severity|finding|role|backend)\w*(?:\.[\w]+|\[[^]]+\])?[^\n]*(?:model|tier))", re.I)
+LOOP = re.compile(r"^\s*(?:while\b.*|for\b.*)(?::|;\s*do)\s*$", re.I)
+REQUIRED_CALL_FIELDS = ("file", "line", "role", "trigger", "frequency", "budget",
+                        "termination", "decision", "justification")
+DECISIONS = ("keep", "remove", "merge")
+
+
+def _fail(message):
+    raise ValueError(message)
+
+
+def _canonical_path(value):
+    if not isinstance(value, str) or not value or "\x00" in value:
+        _fail("changed file path must be a nonempty string")
+    path = pathlib.PurePosixPath(value)
+    if (path.is_absolute() or "\\" in value or value.startswith(":")
+            or re.match(r"^[A-Za-z]:", value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        _fail("unsafe changed file path: %s" % value)
+    return value
+
+
+def _git(repo, *args):
+    completed = subprocess.run(["git", *args], cwd=str(repo), text=True,
+                               capture_output=True)
+    if completed.returncode:
+        _fail("git %s failed: %s" % (args[0], completed.stderr.strip()))
+    return completed.stdout
+
+
+def _validate_inventory(inventory):
+    if not isinstance(inventory, dict) or set(inventory) != {
+            "version", "repo", "base", "head", "call_sites"}:
+        _fail("inventory must contain exactly version, repo, base, head, call_sites")
+    if inventory["version"] != 1:
+        _fail("inventory version must be 1")
+    repo = pathlib.Path(inventory["repo"]).resolve()
+    if not repo.is_dir():
+        _fail("inventory repo must be an existing directory")
+    _git(repo, "rev-parse", "--is-inside-work-tree")
+    for key in ("base", "head"):
+        if not isinstance(inventory[key], str) or not re.fullmatch(r"[0-9a-fA-F]{7,64}", inventory[key]):
+            _fail("inventory %s must be a hexadecimal commit identity" % key)
+        _git(repo, "rev-parse", "--verify", inventory[key] + "^{commit}")
+    sites = inventory["call_sites"]
+    if not isinstance(sites, list):
+        _fail("call_sites must be an array")
+    normalized = {}
+    for index, site in enumerate(sites):
+        if not isinstance(site, dict) or set(site) != set(REQUIRED_CALL_FIELDS):
+            _fail("call_sites[%d] must contain exactly %s" % (index, ", ".join(REQUIRED_CALL_FIELDS)))
+        path = _canonical_path(site["file"])
+        line = site["line"]
+        if isinstance(line, bool) or not isinstance(line, int) or line < 1:
+            _fail("call_sites[%d].line must be a positive integer" % index)
+        for field in REQUIRED_CALL_FIELDS:
+            if field in ("line", "budget", "decision"):
+                continue
+            if not isinstance(site[field], str) or not site[field].strip():
+                _fail("call_sites[%d].%s must be a nonempty string" % (index, field))
+        if isinstance(site["budget"], bool) or not isinstance(site["budget"], (int, str)):
+            _fail("call_sites[%d].budget must be a positive count or documented limit" % index)
+        if isinstance(site["budget"], int) and site["budget"] < 1:
+            _fail("call_sites[%d].budget must be positive" % index)
+        if isinstance(site["budget"], str) and not site["budget"].strip():
+            _fail("call_sites[%d].budget must not be empty" % index)
+        if site["decision"] not in DECISIONS:
+            _fail("call_sites[%d].decision must be keep, remove or merge" % index)
+        key = (path, line)
+        if key in normalized:
+            _fail("duplicate call site %s:%d" % key)
+        normalized[key] = site
+    return repo, normalized
+
+
+def _script_file(path):
+    if "tests" in pathlib.PurePosixPath(path).parts:
+        return False
+    suffix = pathlib.PurePosixPath(path).suffix.lower()
+    return suffix in (".py", ".sh", ".bash") or "/scripts/" in "/" + path
+
+
+def _added_lines(repo, base, head):
+    names = _git(repo, "diff", "--name-only", "-z", "--diff-filter=ACMRT", base, head, "--").split("\0")
+    result = {}
+    for raw in (name for name in names if name):
+        path = _canonical_path(raw)
+        if not _script_file(path):
+            continue
+        diff = _git(repo, "diff", "--no-ext-diff", "--unified=0", base, head,
+                    "--", ":(literal)" + path)
+        lines = []
+        current = 0
+        for line in diff.splitlines():
+            match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+            if match:
+                current = int(match.group(1))
+            elif line.startswith("+") and not line.startswith("+++"):
+                lines.append((current, line[1:]))
+                current += 1
+            elif line.startswith(" "):
+                current += 1
+        result[path] = lines
+    return result
+
+
+def _enclosing_loops(source, line_no):
+    stack = []
+    for index, line in enumerate(source[:line_no - 1]):
+        if not line.strip() or line.lstrip().startswith(("#", "//")):
+            continue
+        indent = len(line) - len(line.lstrip())
+        while stack and indent <= stack[-1][2]:
+            stack.pop()
+        if LOOP.match(line):
+            stack.append((index + 1, line, indent))
+    return stack
+
+
+def _loop_body(source, line_no, indent):
+    body = []
+    for line in source[line_no:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _unbounded_dispatch_loop(header, body):
+    has_call = CALL.search(body) or DYNAMIC_CALL.search(body)
+    if not has_call:
+        return False
+    bounded_condition = re.search(
+        r"while\s+[\w.]+\s*(?:<|<=|>|>=)\s*(?:\d+|max_[\w]+|[A-Z][A-Z0-9_]*)", header, re.I)
+    bounded_for = re.search(
+        r"for\s+\w+\s+in\s+range\(\s*\d+(?:\s*,\s*\d+)?(?:\s*,\s*-?\d+)?\s*\)", header)
+    bounded_body = re.search(
+        r"\bbreak\b|\bmax_(?:attempts|retries|cycles)\b|\battempt\s*[<>]=?\s*\d+", body)
+    return not (bounded_condition or bounded_for or bounded_body)
+
+
+def audit(inventory, policy):
+    if not isinstance(policy, dict) or set(policy) != {
+            "version", "semantic_justification_required"} or policy.get("version") != 1:
+        _fail("policy must contain exactly version=1 and semantic_justification_required")
+    if policy.get("semantic_justification_required") is not True:
+        _fail("semantic_justification_required must be true")
+    repo, declared = _validate_inventory(inventory)
+    added = _added_lines(repo, inventory["base"], inventory["head"])
+    findings = []
+    observed = set()
+    for path, lines in added.items():
+        source_path = repo / pathlib.PurePosixPath(path)
+        try:
+            resolved_source = source_path.resolve(strict=True)
+            if not resolved_source.is_relative_to(repo):
+                _fail("changed script resolves outside the repository: %s" % path)
+            if source_path.is_symlink():
+                _fail("changed script must not be a symlink: %s" % path)
+            source = source_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError) as exc:
+            _fail("cannot read changed script %s: %s" % (path, exc))
+        for line_no, text in lines:
+            code = text.split("#", 1)[0].split("//", 1)[0]
+            call = bool(CALL.search(code) or DYNAMIC_CALL.search(code))
+            if call:
+                key = (path, line_no)
+                observed.add(key)
+                site = declared.get(key)
+                if site is None:
+                    findings.append({"code": "uninventoried_semantic_call", "file": path,
+                                     "line": line_no, "message": "new semantic call lacks an inventory justification"})
+                elif not site["justification"].strip():
+                    findings.append({"code": "missing_semantic_justification", "file": path,
+                                     "line": line_no, "message": "semantic call justification is empty"})
+                for header_line, header, indent in _enclosing_loops(source, line_no):
+                    if _unbounded_dispatch_loop(header, _loop_body(source, header_line, indent)):
+                        findings.append({"code": "unbounded_dispatch_loop", "file": path,
+                                         "line": header_line, "message": "dispatch loop has no visible bounded exit"})
+            if (MECHANICAL_ROUTE.search(code + "\n" + "\n".join(source[line_no:line_no + 4]))
+                    or MODEL_KEY_ROUTE.search(code)):
+                findings.append({"code": "mechanical_model_routing", "file": path,
+                                 "line": line_no, "message": "model selection branches on a semantic finding/role"})
+            if LOOP.match(code):
+                indent = len(source[line_no - 1]) - len(source[line_no - 1].lstrip())
+                body = _loop_body(source, line_no, indent)
+                if _unbounded_dispatch_loop(code, body):
+                    findings.append({"code": "unbounded_dispatch_loop", "file": path,
+                                     "line": line_no, "message": "dispatch loop has no visible bounded exit"})
+    unique = {(item["code"], item["file"], item["line"]): item for item in findings}
+    findings = sorted(unique.values(), key=lambda item: (item["file"], item["line"], item["code"]))
+    return {"version": 1, "status": "rejected" if findings else "passed",
+            "base": inventory["base"], "head": inventory["head"],
+            "changed_script_files": sorted(added), "observed_call_sites": len(observed),
+            "findings": findings}
+
+
+def _write_json(path, value):
+    target = pathlib.Path(path).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".dispatch-audit-", dir=str(target.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--inventory", required=True)
+    parser.add_argument("--policy", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args(argv)
+    output = pathlib.Path(args.output)
+    try:
+        inventory = json.loads(pathlib.Path(args.inventory).read_text(encoding="utf-8"))
+        policy = json.loads(pathlib.Path(args.policy).read_text(encoding="utf-8"))
+        report = audit(inventory, policy)
+        _write_json(output, report)
+        return 1 if report["findings"] else 0
+    except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
+        report = {"version": 1, "status": "rejected", "findings": [
+            {"code": "invalid_input", "message": str(exc)}]}
+        try:
+            _write_json(output, report)
+        except OSError:
+            pass
+        print("dispatch-audit: %s" % exc, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

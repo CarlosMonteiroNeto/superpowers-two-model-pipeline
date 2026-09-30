@@ -9,6 +9,21 @@ In this pipeline a script is not utility code — it is the thing that takes a m
 
 Read the closest existing sibling before writing anything: `coder-gate` for loop-owning gates, `route-next` for pure deciders, `red-form-check` / `keep-discard` for Python classifiers, `cmd` for command wrappers, `dispatch` for anything that spawns an LLM.
 
+Before accepting a dispatch or loop change, complete its call-site inventory:
+role, trigger, expected frequency, bounded budget, termination entry/condition,
+and keep/remove/merge decision. Include dynamic dispatch and worker delegation;
+each retained semantic call needs a reason tied to judgment that cannot be
+mechanically decided. Run `dispatch-audit --inventory FILE --policy FILE --output FILE`
+on the candidate's added script lines. The audit rejects
+uninventoried semantic calls, mechanical model selection based on findings or
+roles, and call-bearing open loops without a bounded exit. It is a static
+guard, not proof that the semantic justification or quality of a gate is sound.
+
+Report execution cost only from observed evidence: semantic invocations,
+backend turns, retries, Jev calls, input/output/cached tokens, latency and
+escaped defects remain distinct. Missing values stay `null`; fewer semantic
+invocations alone does not demonstrate lower cost.
+
 ## Pipeline Integration (skill-scripter)
 
 `skill-scripter` audits a skill or stage and decides *what* should become a script; this skill implements each approved item. When it hands you a candidate, follow the per-candidate specification it produced (position, inputs, criterion, exit codes, ledger entries, fallback, idempotency, risk, resource profile) and do not silently widen the scope.
