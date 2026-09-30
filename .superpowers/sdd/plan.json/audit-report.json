@@ -5,7 +5,7 @@
     "skills/two-model-sdd-pipeline/scripts/dispatch_metrics.py"
   ],
   "findings": [],
-  "head": "6df8d72",
+  "head": "d1fed3b1b632c73f21ff886c67b9714ea04e3162",
   "observed_call_sites": 0,
   "status": "passed",
   "version": 1

@@ -4,8 +4,8 @@
 - Task: 5, “Add dispatch-cost audits, documentation and acceptance”
 - Worktree: `C:\Users\Carlos_Neto\.codex\worktrees\r4-task5-audit-docs\superpowers-two-model-pipeline`
 - Base: `473c4e8`
-- Commits: `aa01cff`, `6df8d72`, `a1b3b2c`, `411a1db`
-- Final candidate: `411a1db`
+- Commits: `aa01cff`, `6df8d72`, `a1b3b2c`, `411a1db`, `3b9d4c0`, `d1fed3b`
+- Final candidate: `d1fed3b`
 - Scope: Task 5 only; no Two Model Pipeline runner/orchestrator was used.
 
 ## Changes
@@ -24,8 +24,9 @@
 - `python skills/two-model-sdd-pipeline/tests/test_r4_efficiency_acceptance.py -v` — 19/19 passed.
 - `python skills/two-model-sdd-pipeline/tests/test_r4_dispatch_metrics.py -v` — 6/6 passed.
 - `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v` — 90/90 passed after adding positive/negative infinity, one-line loop and method-dispatch fixtures.
-- Dispatch audit against the actual script diff `473c4e8..411a1db` — passed with no findings or observed new semantic call sites.
-- Scoped re-review identified infinite counter initialization as a remaining boundness hole. Both positive and negative infinity fixtures failed before the fix; one-line suites and method calls added to pre-existing loops then exposed two more loop-discovery bypasses. All regressions now pass; Task 5 acceptance 19/19, R4 discovery 90/90. Scoped re-review pending.
+- Dispatch audit against the actual script diff `473c4e8..d1fed3b` — passed with no findings or observed new semantic call sites.
+- Independent scoped re-review: approved after verifying prior regressions, finite integer counter initialization, single-line suites, method-call ancestry, and the documented candidate identity. Reviewer ran the combined Task 5 focused tests 25/25; R4 discovery remained 90/90 from the direct run above.
+- Scoped re-review identified infinite counter initialization as a remaining boundness hole. Both positive and negative infinity fixtures failed before the fix; one-line suites and method calls added to pre-existing loops then exposed two more loop-discovery bypasses. All regressions now pass; Task 5 acceptance 19/19, combined focused Task 5 tests 25/25, R4 discovery 90/90, and actual diff audit `473c4e8..d1fed3b` passed with no findings. Final scoped re-review approved.
 - `python3 skills/two-model-sdd-pipeline/scripts/dispatch-audit --help` — passed.
 - Ran the new audit against the actual `473c4e8..6df8d72` source diff with empty call-site inventory — status `passed`, no findings; this also guards against self-matching its regex literals.
 - Python `compile()` check for both implementation files — passed.
