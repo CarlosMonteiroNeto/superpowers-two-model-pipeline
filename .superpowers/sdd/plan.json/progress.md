@@ -44,3 +44,7 @@ Task 1: complete after three fix rounds, scoped review clean.
 
 Task 4: ready after Tasks 1–3 integration; implement impact wiring at task/integration/closing boundaries. Reviewer must verify script-owned evidence, recomputation on merged candidates, cache identity, baseline waiver semantics, and both backend fixtures. Task 3 carry-forward applies: candidate and approval ledger must be loaded from supervisor-owned state, not trusted from caller input.
 
+
+Task 4: review round 1 found four Important findings (waiver disconnected; caller could select partial toolchains; config hash omitted analyze/format; post-run candidate not revalidated). Fix commit 152b40e integrated all four. Re-review approved. Additional fix-round verification: R4 65/65, coder-gate 27/27, final-gate 18/18, integrate 20/20, run-pipeline 20/20; bash syntax, py_compile, diff-check passed. Commits integrated: 991c76f..152b40e. Waiver adapters without complete inventory/raw identity fail closed; documented limitation.
+Task 4 complete after review and fix round 1. Task 5 is now eligible.
+
