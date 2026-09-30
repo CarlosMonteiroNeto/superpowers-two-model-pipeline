@@ -11,6 +11,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import io
+import tokenize
 
 
 CALL = re.compile(r"\b(?:dispatch|invoke|run_dispatch|delegate_worker|dispatch_worker)\s*\(")
@@ -103,6 +105,26 @@ def _script_file(path):
     return suffix in (".py", ".sh", ".bash") or "/scripts/" in "/" + path
 
 
+def _mask_python_literals(source):
+    """Blank Python strings/comments while preserving line/column positions."""
+    lines = source.splitlines(keepends=True)
+    mutable = [list(line) for line in lines]
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type not in (tokenize.STRING, tokenize.COMMENT):
+                continue
+            (start_row, start_col), (end_row, end_col) = token.start, token.end
+            for row in range(start_row, end_row + 1):
+                first = start_col if row == start_row else 0
+                last = end_col if row == end_row else len(mutable[row - 1])
+                for column in range(first, last):
+                    if mutable[row - 1][column] not in ("\n", "\r"):
+                        mutable[row - 1][column] = " "
+    except (tokenize.TokenError, IndentationError) as exc:
+        _fail("cannot tokenize changed Python script: %s" % exc)
+    return ["".join(line) for line in mutable]
+
+
 def _added_lines(repo, base, head):
     names = _git(repo, "diff", "--name-only", "-z", "--diff-filter=ACMRT", base, head, "--").split("\0")
     result = {}
@@ -183,8 +205,13 @@ def audit(inventory, policy):
             source = source_path.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeError) as exc:
             _fail("cannot read changed script %s: %s" % (path, exc))
+        python_source = pathlib.PurePosixPath(path).suffix.lower() == ".py" or bool(
+            source and re.match(r"^\s*#!.*\bpython(?:\d+(?:\.\d+)*)?\b", source[0], re.I))
+        code_lines = _mask_python_literals("\n".join(source)) if python_source else source
         for line_no, text in lines:
-            code = text.split("#", 1)[0].split("//", 1)[0]
+            code = code_lines[line_no - 1]
+            if not python_source:
+                code = code.split("#", 1)[0].split("//", 1)[0]
             call = bool(CALL.search(code) or DYNAMIC_CALL.search(code))
             if call:
                 key = (path, line_no)
@@ -196,17 +223,17 @@ def audit(inventory, policy):
                 elif not site["justification"].strip():
                     findings.append({"code": "missing_semantic_justification", "file": path,
                                      "line": line_no, "message": "semantic call justification is empty"})
-                for header_line, header, indent in _enclosing_loops(source, line_no):
-                    if _unbounded_dispatch_loop(header, _loop_body(source, header_line, indent)):
+                for header_line, header, indent in _enclosing_loops(code_lines, line_no):
+                    if _unbounded_dispatch_loop(header, _loop_body(code_lines, header_line, indent)):
                         findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                          "line": header_line, "message": "dispatch loop has no visible bounded exit"})
-            if (MECHANICAL_ROUTE.search(code + "\n" + "\n".join(source[line_no:line_no + 4]))
+            if (MECHANICAL_ROUTE.search(code + "\n" + "\n".join(code_lines[line_no:line_no + 4]))
                     or MODEL_KEY_ROUTE.search(code)):
                 findings.append({"code": "mechanical_model_routing", "file": path,
                                  "line": line_no, "message": "model selection branches on a semantic finding/role"})
             if LOOP.match(code):
-                indent = len(source[line_no - 1]) - len(source[line_no - 1].lstrip())
-                body = _loop_body(source, line_no, indent)
+                indent = len(code_lines[line_no - 1]) - len(code_lines[line_no - 1].lstrip())
+                body = _loop_body(code_lines, line_no, indent)
                 if _unbounded_dispatch_loop(code, body):
                     findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                      "line": line_no, "message": "dispatch loop has no visible bounded exit"})

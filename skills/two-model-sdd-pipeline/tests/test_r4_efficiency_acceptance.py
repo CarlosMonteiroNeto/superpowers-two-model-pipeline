@@ -145,6 +145,16 @@ class DispatchAuditAcceptanceTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_pattern_definitions_do_not_look_like_model_routing(self):
+        source = AUDIT.read_text(encoding="utf-8")
+        temporary, root, base, head = self._repo(source)
+        try:
+            result, report = self._run_audit(root, base, head, [])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(report["findings"], [])
+        finally:
+            temporary.cleanup()
+
     def test_rejects_call_loop_over_unbounded_iterator(self):
         temporary, root, base, head = self._repo(
             "for item in itertools.count():\n    dispatch(item)\n")
