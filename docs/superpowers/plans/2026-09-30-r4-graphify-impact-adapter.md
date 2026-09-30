@@ -2,100 +2,101 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Use a trusted, ephemeral Graphify AST graph to select affected Python and Flutter/Dart tests at task and integration gates, with full-suite fallback whenever graph evidence is uncertain.
+**Goal:** Reduce repeated tests and graph overhead without adding work or context to the agent creating `plan.json`.
 
-**Architecture:** A project-owned adapter invokes only the allowlisted Graphify CLI `extract <snapshot> --code-only --no-cluster --out <isolated-output>`, validates its version/raw schema, and converts AST import edges into the existing selector's `reverse_edges`. Gate evidence builds clean baseline and candidate snapshots, binds graph evidence to exact source identities, and passes the validated selection to test execution. Graph artifacts stay in temporary directories; analysis, formatting, baseline, and closing remain full scope.
+**Architecture:** Keep the existing Graphify AST adapter, base/candidate edge union, and verified test-command execution. Classify full-suite decisions before graph access, cache normalized evidence by exact content and extractor identity outside the checkout, and verify unchanged gate inputs after tests without re-extraction.
 
-**Tech Stack:** Python 3 standard library, Git CLI, Graphify CLI 0.9.50 (allowlisted), existing `unittest` suite and shell gate entry points.
+**Tech Stack:** Python 3 standard library, Git CLI, allowlisted Graphify 0.9.50, existing unittest suites and shell gates.
 
-**Spec:** `docs/superpowers/specs/2026-09-30-r4-trusted-impact-gates-design.md`; decision amendment: `docs/superpowers/adr/0004-graphify-post-commit-subgraph.md`.
+**Spec:** [R4 trusted impact gates](../specs/2026-09-30-r4-trusted-impact-gates-design.md); [ADR-0004](../adr/0004-graphify-post-commit-subgraph.md).
 
-## Global Constraints
+## Implementation status and handoff
 
-- Only validated Graphify version/schema and AST-origin `imports`/`imports_from` edges contribute dependency paths.
-- No `update`, semantic/LLM extraction, clustering, labeling, `affected`, `explain`, or global graph command is used.
-- Graphify absence, unvalidated output, failed sources, unresolved/dynamic/ambiguous dependencies, and candidate drift select full suites or reject PASS.
-- No generated graph artifact is written to or committed from the user's checkout.
-- Task and integration tests may be selective; baseline and closing verification always run complete configured suites.
-- Preserve existing ledger-owned toolchain commands, R3 candidate identity, and analysis/format scope.
+This revision was requested on 2026-09-30 for another session to implement. Read the spec and current code before editing. Preserve unrelated working-tree changes. The extracted ADR under `.work/r3-extracted-package-final-after-probe/` is historical package content; do not edit or use it as the current contract.
 
-## Review Focus
+The original three deliverables already exist:
 
-- Graphify's Dart `package:` nodes may have no `source_file`; pin URI-to-`lib/` resolution and full-suite fallback for unknown package or missing file in Task 1.
-- Graphify may return exit 0 with incomplete evidence; pin `failed_sources`, AST origin, expected node/link schema, and empty/unsupported edge handling in Task 1.
-- Baseline and candidate import graphs can differ after deletion/rename; pin deterministic edge union and exact base/candidate identities in Task 2.
-- A valid selection can still be ignored by the runtime gate; prove the executed test argv equals the validated manifest command in Task 3.
-- User `graphify-out/` state must remain untouched; prove all CLI output paths are inside disposable snapshots in Task 1 and Task 3.
+| Original task | Implementation commit | Treatment |
+| --- | --- | --- |
+| Isolated Graphify adapter | `5d3f000` | Retain extractor safety contract |
+| Base/candidate graph binding | `64ed077` | Refactor orchestration and add cache |
+| Selected command execution | `638f9c1` | Preserve execution and replace post-run rebuild |
+
+These references establish implementation presence, not fresh test certification. Do not repeat the old plan's missing-adapter RED steps. All remaining work is listed below; no runtime optimization has been implemented by this documentation revision.
+
+## Global constraints
+
+- Only validated Graphify 0.9.50 schema and AST `imports`/`imports_from` relations contribute dependencies; retain existing resolution and uncertainty fallback.
+- No `update`, semantic/LLM extraction, clustering, labeling, global graph queries, or graph context in prompts.
+- Raw graphs/snapshots remain temporary. Only complete normalized evidence may be cached, under supervisor ownership outside checkouts.
+- No graph fields or affected-test authoring requirement in `plan.json`; no cache of test PASS results and no new test-skip policy.
+- Preserve exact base/candidate binding, ledger-owned argv/cwd/env, full baseline/closing suites, and analysis/format scope.
+- Use focused checks per task; complete shared and Flutter suites once on the final candidate. Repeat broader checks only after relevant changes/failures; investigate every unexpected failure.
+
+## Review focus
+
+- Mixed toolchains: preflight must preserve independent full-suite reasons without losing cross-toolchain dependencies (Task 1).
+- Same filenames with changed bytes/configuration/extractor: cache must miss; commit identity alone is insufficient (Task 2).
+- Corrupt/concurrently written cache and path ownership: invalid entries cannot become trusted evidence or unsafe cleanup targets (Task 2).
+- Warm cache or deleted cache after selection: neither may bypass source drift checks or require post-run extraction (Task 3).
+- Performance claims: graph call counts and measured net gate time must distinguish fixture results from real Python/Flutter workloads (Task 3).
 
 ---
 
-### Task 1: Add the isolated Graphify AST adapter
+### Task 1: Separate input capture and graph-independent decisions
 
-**Files:**
-- Create: `skills/two-model-sdd-pipeline/scripts/test_dependency_graph.py`
-- Create: `skills/two-model-sdd-pipeline/tests/test_r4_dependency_graph.py`
-- Modify: `skills/two-model-sdd-pipeline/toolchains/test-impact-rules.json`
+**Files:** Modify `skills/two-model-sdd-pipeline/scripts/gate_evidence.py`, `skills/two-model-sdd-pipeline/scripts/test_impact.py`, and `skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_evidence.py`. Create `skills/two-model-sdd-pipeline/tests/test_r4_impact_preflight.py`.
 
 **Interfaces:**
-- Produces: `test_dependency_graph.build(snapshot: pathlib.Path, expected_version: str) -> dict`
-- Returns extractor evidence: sorted repository-relative `reverse_edges`, `graphify_version`, `graph_digest`, `source_inventory_hash`, and completeness diagnostics. It does not claim Git identity; Task 2 attaches commit/tree identity from its trusted snapshot manifest.
-- Consumes raw Graphify JSON v0.9.50 fields `nodes`, `edges`, and `hyperedges`; accepts only nodes and edges whose `_origin` is `ast`, and only `imports`/`imports_from` relations. If `failed_sources` is present, it must be an empty list.
 
-- [ ] **Step 1: Write failing adapter tests** for Python transitive imports, standard-library and declared external imports, missing local Python modules, Dart relative and `package:` imports, declared external packages, unknown package names, mismatched edge-source identity, deterministic output, exact raw-extract CLI arguments, and output confinement to a temporary snapshot. Assert `--code-only` and `--no-cluster` are present; no `update` or LLM command runs.
-- [ ] **Step 2: Verify RED** with `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p test_r4_dependency_graph.py -v`; expected failure because the adapter does not exist.
-- [ ] **Step 3: Write failing safety tests** for missing binary, wrong version, nonzero exit, malformed JSON, nonempty optional `failed_sources`, unsupported raw schema, inferred edges, mismatched edge-source identity, unresolved/ambiguous relative paths, unknown Dart package names, absent target paths, and dynamic import relations. Assert result marks graph incomplete, never returns partial `reverse_edges` as trusted evidence.
-- [ ] **Step 4: Implement `build`** using `subprocess.run` with argv (never shell), invoke only `graphify --version` and `graphify extract <snapshot> --code-only --no-cluster --out <snapshot>/.r4-graphify-output`, read `<snapshot>/.r4-graphify-output/graphify-out/graph.json`, map raw `edges` to repository paths using the complete source inventory, require source-node/source-file agreement, ignore only Python standard-library/verified declared third-party imports and Dart packages declared as external dependencies, and resolve Dart URI-only local nodes by the declared package name plus `lib/` or a unique relative path. Any unknown or unresolved local input returns incomplete evidence.
-- [ ] **Step 5: Add policy allowlist** for the validated Graphify version, JSON schema contract, accepted relations, and AST origin in `test-impact-rules.json`; do not silently allow unknown future versions.
-- [ ] **Step 6: Run adapter tests**; expected all pass and the disposable fixtures are removed by test cleanup.
-- [ ] **Step 7: Commit** adapter, tests, and policy as `feat(r4): add isolated Graphify dependency adapter`.
+- `capture_workspace_inputs(workspace: str, selection: list[str], mode: str) -> dict`: graph-independent diff, descriptors, policy, phase, and identity; no manifest write.
+- `preflight(diff: dict, toolchains: list, policy: dict, phase: str) -> dict`: `requires_graph: bool` plus per-toolchain full-suite reasons; share classification with `select`.
+- Preserve `create_workspace_manifest(workspace, selection, mode) -> dict` and existing manifest validation for callers.
 
-### Task 2: Bind baseline and candidate graphs to gate evidence
+- [ ] **Step 1: Add focused regressions.** Parameterize baseline/closing, changed dependency/build configuration, shared infrastructure, unsupported adapters, deleted tests, and unclassified files. Assert existing full argv/reasons and zero graph builds/snapshot materializations. Add mixed-toolchain coverage and an eligible source edit that still requires graph evidence; prove preflight and selector reasons agree.
+- [ ] **Step 2: Verify intended RED.** Run `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p test_r4_impact_preflight.py -v`. Confirm failure is the missing preflight contract or unnecessary graph calls, not fixture setup.
+- [ ] **Step 3: Implement capture and preflight.** Factor current graph-independent input collection and common full-suite rules; invoke preflight before `_graph_evidence`. Carry per-toolchain reasons into selection without using missing-graph diagnostics to overwrite known reasons. If all require full suites, skip graph acquisition entirely. Do not add skip semantics for empty or documentation-only diffs.
+- [ ] **Step 4: Verify the changed boundary.** Run the new preflight module and `test_r4_graphify_gate_evidence.py` with unittest discovery. Investigate failures; adjust tests whose old unconditional-extraction expectations are intentionally superseded.
+- [ ] **Step 5: Commit the deliverable** as `perf(r4): classify full-suite gates before graph extraction` after focused checks pass.
 
-**Files:**
-- Modify: `skills/two-model-sdd-pipeline/scripts/gate_evidence.py`
-- Modify: `skills/two-model-sdd-pipeline/scripts/test_impact.py`
-- Modify: `skills/two-model-sdd-pipeline/tests/test_r4_impact_gate_wiring.py`
-- Create: `skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_evidence.py`
+### Task 2: Cache normalized evidence per exact snapshot identity
+
+**Files:** Create `skills/two-model-sdd-pipeline/scripts/test_dependency_cache.py` and `skills/two-model-sdd-pipeline/tests/test_r4_dependency_cache.py`. Modify `gate_evidence.py`, `test_dependency_graph.py` only for necessary extractor identity/normalization interfaces, and `test_r4_graphify_gate_evidence.py` under the same script/test directories. Inspect `scripts/run-pipeline`, `scripts/codex_launcher.py`, and `scripts/run_control.py` to wire lifecycle at the actual supervisor owner, preserving supported entry points.
 
 **Interfaces:**
-- Consumes: `test_dependency_graph.build(snapshot, expected_version) -> graph evidence`.
-- Produces: a selector graph v1 (`version`, `base_commit`, `base_tree_hash`, `reverse_edges`) plus `gate_evidence.create_workspace_manifest(workspace, selection, mode) -> manifest` with graph digest/provenance bound to the exact baseline/candidate snapshot identities.
 
-- [ ] **Step 1: Write failing tests** proving a task gate builds graphs from separate baseline and candidate snapshots, unions normalized import edges deterministically, passes the trusted graph to `test_impact.select`, and records graph/tool/version/source-inventory identity in evidence.
-- [ ] **Step 2: Verify RED** with the focused graph evidence tests; expected selector receives `None` or lacks graph provenance under the current implementation.
-- [ ] **Step 3: Add failing fallback tests** for Graphify absent/unknown version, extraction failure, changed `pubspec.yaml`, deleted or renamed source/test, incomplete inventory, base mismatch, and snapshot drift. Assert each selects full suites and records reasons/gaps; never preserve a partial graph.
-- [ ] **Step 4: Implement snapshot building** from the Git base tree and the exact current candidate (including staged, unstaged, and untracked files already captured by the manifest's diff); exclude `.git`, all ignored graph output, and unrelated external workspaces. Ensure all Graphify output remains below disposable snapshot roots.
-- [ ] **Step 5: Implement graph union and provenance** in `gate_evidence.py`; retain the current full-suite fallback if either side is incomplete. Extend `test_impact` only as needed to validate graph schema/provenance without relaxing path safety or candidate identity.
-- [ ] **Step 6: Run focused graph evidence and selector tests**; expected selected graph hash and selector result remain deterministic across repeated builds.
-- [ ] **Step 7: Commit** as `feat(r4): bind Graphify impact graphs to gate snapshots`.
+- `test_dependency_cache.make_key(inputs: dict) -> str`: canonical hash of repository namespace, complete snapshot path/content inventory and relevant modes, resolution inputs, extractor installation/version/schema/flags, adapter identity, and policy identity.
+- `test_dependency_cache.get_or_build(cache_root: pathlib.Path, key: str, builder: Callable[[], dict]) -> dict`: validated normalized graph evidence; invokes builder only on a miss. Builder materializes/verifies snapshot content before `test_dependency_graph.build`.
+- Supervisor supplies one private external cache directory per run through owned runtime state; direct gates fall back to a disposable local-to-gate external cache. Diagnostics stay outside deterministic evidence hashes.
 
-### Task 3: Execute only the verified test command at task/integration gates
+- [ ] **Step 1: Add cache regressions.** Assert one build for repeated identical keys; changed source bytes, resolution manifest, extractor, adapter, policy, or repository namespace cause misses. Cover corrupt payload/schema, incomplete results, atomic concurrent publication, unwritable cache, and safe cleanup ownership. Assert no cache/raw output under source checkouts and no worker-supplied graph acceptance.
+- [ ] **Step 2: Verify intended RED.** Run `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p test_r4_dependency_cache.py -v`; confirm failure concerns the missing cache behavior.
+- [ ] **Step 3: Implement cache and supervisor lifecycle.** Use canonical JSON, validated complete entries, atomic replacement, and an owned temporary root. Validate paths/provenance and digest on hits. Cache write failure retains valid fresh evidence; corrupt/missing entries rebuild or fall back. Keep raw graphs disposable and cleanup restricted to roots created by this run. A conservative whole-snapshot content key is acceptable; do not add incremental parsing.
+- [ ] **Step 4: Integrate independent base/candidate acquisition.** Compute keys before materialization; reuse validated evidence and preserve deterministic union. Reattach current Git provenance on every gate. Retain sealed gate-owned evidence for later verification, independent of cache eviction.
+- [ ] **Step 5: Add orchestration assertions.** A cold gate builds at most once per distinct identity; unchanged warm inputs build zero times; a cached base plus changed candidate builds once. Assert snapshots are not materialized on hits, old/new rename consumers remain covered, and identical content can reuse evidence across commits without reusing gate approval.
+- [ ] **Step 6: Verify the boundary.** Run `test_r4_dependency_cache.py` and `test_r4_graphify_gate_evidence.py` with unittest discovery. Run `test_r4_dependency_graph.py` only if adapter code changed. Investigate any failures before committing.
+- [ ] **Step 7: Commit the deliverable** as `perf(r4): reuse validated dependency evidence by content`.
 
-**Files:**
-- Modify: `skills/two-model-sdd-pipeline/scripts/run-gates`
-- Modify: `skills/two-model-sdd-pipeline/scripts/toolchain_gate.py`
-- Modify: `skills/two-model-sdd-pipeline/tests/test_r4_impact_gate_wiring.py`
-- Create: `skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_execution.py`
-- Modify: `skills/two-model-sdd-pipeline/SKILL.md`
-- Modify: `skills/flutter-app-pipeline/SKILL.md`
+### Task 3: Verify retained evidence without rebuilding and measure net cost
+
+**Files:** Modify `skills/two-model-sdd-pipeline/scripts/gate_evidence.py`, `scripts/run-gates`, `scripts/toolchain_gate.py` if needed for pre-execution identity checks, `tests/test_r4_graphify_gate_execution.py`, and `tests/test_r4_impact_gate_wiring.py` under the same skill. Update `skills/two-model-sdd-pipeline/SKILL.md` and `skills/flutter-app-pipeline/SKILL.md` to describe implemented behavior. Save measured results to `docs/superpowers/plans/2026-09-30-r4-impact-efficiency-results.md`.
 
 **Interfaces:**
-- Consumes: candidate-bound impact manifest from Task 2 and the supervisor-owned toolchain descriptor.
-- Produces: task/integration test invocations using only the validated manifest argv; baseline/closing and uncertainty invoke the original complete-suite argv.
 
-- [ ] **Step 1: Write failing execution tests** with a fake test executable that records argv/cwd/env. Prove a selected manifest executes the affected selector paths, while the original full command executes for closing and uncertainty. Prove analysis/format argv is unchanged.
-- [ ] **Step 2: Verify RED**; expected the current code invokes the original complete test argv despite a valid selector result.
-- [ ] **Step 3: Add failing integrity tests** for manifest tampering, wrong toolchain ID, unsafe argv/path, candidate drift after the test, and Graphify artifact leakage; assert no selected test command runs and PASS is impossible.
-- [ ] **Step 4: Implement gate consumption** by validating the persisted manifest immediately before execution, deriving test argv solely from the ledgered descriptor plus safe selected paths, preserving the existing command runner and non-test commands, and forcing full argv in `baseline`/`closing` phases.
-- [ ] **Step 5: Recompute candidate/graph identity after execution** and reject PASS on any drift; ledger the executed argv and impact-selection hash.
-- [ ] **Step 6: Update operator guidance** to describe candidate-bound Graphify AST evidence and full-suite fallback without adding a worker/reviewer graph-context stage.
-- [ ] **Step 7: Run focused wiring/runner tests and then both complete suites**: `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -v` and `python -m unittest discover -s skills/flutter-app-pipeline/tests -v`. Expected: no new failures; preserve and investigate every failure before reporting.
-- [ ] **Step 8: Commit** as `feat(r4): execute candidate-bound affected test gates`.
+- `verify_workspace_manifest(workspace: str, selection: list[str], mode: str, manifest: dict) -> None`: recaptures inputs via Task 1, validates retained evidence, and raises on drift. No extraction, reselection, manifest rewrite, or requirement that the cache still exists.
+- `run-gates` invokes verification immediately before commands and after commands, preserving executed argv and the original selection hash in the ledger.
 
-## Self-review
+- [ ] **Step 1: Add regressions.** Assert successful gates call graph construction only during preparation, never during post-run checks. Parameterize candidate bytes, base, plan, descriptor/argv, environment, policy, extractor/adapter identity, and manifest tampering; each must reject PASS. Removing the cache after selection must still permit unchanged retained evidence. Preserve selected/full argv and unchanged analysis/format behavior.
+- [ ] **Step 2: Verify intended RED.** Run `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -p test_r4_graphify_gate_execution.py -v`; classify failures at the new verification/count assertions before changing runtime behavior.
+- [ ] **Step 3: Implement identity-only verification.** Replace the post-run `create_workspace_manifest` call. Check current inputs and the original sealed manifest/evidence; never repair drift by constructing a new manifest. Keep diagnostics/timing outside selection hashes. Maintain existing failure ledger behavior.
+- [ ] **Step 4: Verify focused execution.** Run execution and wiring modules with unittest discovery. Confirm zero extraction calls for known full-suite gates, warm eligible gates, and post-run verification; distinguish warm preparation from post-run checks.
+- [ ] **Step 5: Measure and record.** Use disposable representative Python and Flutter workloads with real tools where available. Record cold/warm extraction counts, cache hits/misses, snapshot/extraction/selection/validation/test times, selected/total test counts, and fallback reasons. Compare net time against configured full suites and, where practical, the original R4 lifecycle on the same candidate/environment. Label unavailable toolchains and fixture-only evidence; do not claim speed from mocks. Avoid adding a general benchmark subsystem.
+- [ ] **Step 6: Update operator guidance.** Remove contradictory guidance prescribing unconditional per-task full suites or graph rebuilds. Document private evidence reuse, conservative fallback, unchanged planning contract, and the limits of the measurements. Preserve historical ADR sections.
+- [ ] **Step 7: Verify the final candidate.** Run `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -v` and `python -m unittest discover -s skills/flutter-app-pipeline/tests -v` once after final code changes. Investigate failures before reporting; rerun affected checks after fixes. Do not claim unavailable verification passed.
+- [ ] **Step 8: Commit and hand off** as `perf(r4): verify gate identity without graph reconstruction`, with focused/full verification results and measured limitations.
 
-- Spec coverage: isolated CLI, version/schema/AST validation, Python/Dart resolution, exact baseline and candidate identity, graph uncertainty fallback, task/integration wiring, full closing suites, and no user graph artifact mutation are assigned to Tasks 1–3.
-- Step scan: every implementation step names an owner, input, or testable result. Expected RED failures are at the missing adapter or ignored manifest command.
-- Type consistency: Task 1's graph evidence is consumed by Task 2; Task 2's validated impact manifest is consumed by Task 3. All use repository-relative paths and the existing selector graph v1 contract.
-- Review focus: all five risk classes are pinned to focused tests in their owning task.
-- Proportion: three deliverables align with the graph adapter, candidate evidence, and gate execution boundaries; each ends in its own test cycle and commit.
+## Self-review and execution boundary
+
+Preflight waste maps to Task 1; identity-safe reuse/lifecycle maps to Task 2; drift checks, guidance, and performance evidence map to Task 3. The interfaces compose without moving selection into the planning agent. Safety fallbacks and closing verification remain intact. Full suites are concentrated on the final implementation candidate, not each optimization task.
+
+This session changes documentation only. The next implementation session should start at Task 1 after confirming repository state and reading the revised spec; the original three implementation commits must not be recreated.

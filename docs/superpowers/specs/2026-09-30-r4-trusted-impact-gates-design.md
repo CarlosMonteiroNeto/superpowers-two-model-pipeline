@@ -1,43 +1,71 @@
 # R4 trusted impact gates design
 
-## Goal
+## Goal and status
 
-Wire R4 affected-test selection into task and integration gates so a verified manifest determines the test command that actually runs. Preserve full-suite verification whenever dependency coverage, source identity, or command selection is uncertain. Closing verification always runs every configured full suite.
+Reduce repeated tests per task, add no graph-selection work or graph context to the agent creating `plan.json`, and avoid unnecessary graph extraction/loading. Preserve candidate-bound evidence and full suites whenever impact is uncertain. Baseline and closing remain full-suite; analysis and formatting retain their scope.
 
-## Current gap
+Documentation revision authorized on 2026-09-30 for implementation in another session. The original adapter, snapshot binding, and selected-command execution exist in commits `5d3f000`, `64ed077`, and `638f9c1`. The optimizations below remain pending.
 
-`test_impact.select` can emit deterministic affected test paths and argv, but `gate_evidence.create_workspace_manifest` always passes a missing graph. This makes every runtime manifest select full suites. `run-gates` then invokes the original toolchain descriptor commands, without consuming the manifest's selected argv. Existing tests therefore prove the selector in isolation but not selective gate execution.
+## Evidence and decision
 
-## Graphify decision
+The existing `run-gates` creates a manifest before commands and recreates it afterward. Each task/integration manifest builds base and candidate graphs: normally four extractions per gate. Extraction also precedes selector rules that can already require full suites. There is no reuse between attempts.
 
-Use Graphify only as an optional, ephemeral AST dependency extractor for R4 affected-test selection. The user explicitly authorized revising ADR-0004 if Graphify is more viable. Disposable probes with Graphify 0.9.50 showed that `extract <snapshot> --code-only --no-cluster --out <isolated-output>` emits raw AST `edges` with source/target import orientation and makes no LLM calls. Do not use `update`: it writes `directed: false` for raw updates, risking orientation loss in its graph merge. External Python modules and some Dart `package:` imports may have no repository-file nodes. The adapter must match local imports against the complete supported source inventory, require each edge's source node to match the import's `source_file`, resolve a Dart project's own `package:` URIs against its `pubspec.yaml`, and ignore only imports verified as standard-library or declared external dependencies. Missing local source nodes, undeclared external modules/packages, or ambiguous paths fail closed.
+Keep the deterministic Graphify adapter and selector. Add graph-independent classification, a supervisor-owned cache of validated normalized dependency evidence, and identity-only post-run verification. Replacing Graphify with language-specific parsers is a separate decision requiring comparative measurements. No latency improvement is claimed without measurement.
 
-This does not restore Graphify as a knowledge/context stage: do not run `affected`, `explain`, `update`, semantic extraction, clustering, labeling, or global-graph commands; do not persist or commit generated graph artifacts; and do not pass graph context to workers or reviewers. Build a fresh raw graph under a temporary source snapshot for the exact candidate, accept only the tested Graphify version/schema and AST-origin import relations, and convert those relations into the existing selector's repository-relative `reverse_edges`. Require successful extraction, no failed sources if that field appears, complete node/path resolution, and candidate/base identity binding. A missing binary, unsupported version/schema, unresolved/dynamic/ambiguous import, or incomplete source inventory selects full suites.
+## Extractor contract retained
 
-ADR-0004's 2026-09-10 removal remains correct for the old knowledge/context graph workflow. This is a narrow, newly authorized R4 decision that amends its scope; R5 must not broaden it into another pipeline stage.
+Graphify remains an optional AST extractor for supported Python and Flutter/Dart adapters. Only allowlisted version `0.9.50` and `extract <snapshot> --code-only --no-cluster --out <isolated-output>` are accepted. Raw output uses `nodes`, `edges`, and `hyperedges`; dependencies must have AST origin and `imports`/`imports_from` relations, with source-node/source-file agreement. Require complete source inventory and empty `failed_sources` when present.
 
-## Design
+Resolve local Python imports against the supported inventory and local Dart `package:` URIs through the owning `pubspec.yaml` and `lib/`. Ignore only verified standard-library or declared external dependencies. Missing, dynamic, unsupported, ambiguous, or unresolved dependencies remain uncertain and force full suites. Never trust partial graphs.
 
-1. Add a deterministic Graphify adapter for the already-supported Python and Flutter/Dart test adapters. It builds a fresh raw AST graph from isolated Git source snapshots using the allowlisted Graphify CLI with `extract --code-only --no-cluster --out`, accepts only raw `edges` with AST-origin `imports`/`imports_from` relations, verifies that each edge's source node identifies its `source_file`, and maps those edges to repository-relative files. It does not execute project code, invoke external providers, call Graphify's LLM modes, or mutate the user's checkout. Record Graphify binary/version, graph digest, source inventory, and exact source commit/tree identity.
-2. Build the graph from both sides of the gate diff so renamed and deleted source paths retain their old consumers while additions and changed imports use candidate consumers. The graph is accepted only when its baseline identity matches the selected diff base.
-3. Treat Graphify extraction errors/failed sources, unrecognized version/schema, unresolved or dynamic local imports, ambiguous module resolution, unsupported constructs, stale graph identity, missing test inventory, and missing source-to-test coverage as uncertain. These conditions select each toolchain's configured full-suite command. Never use a partial result from an uncertain graph. Python imports resolve against the full supported source inventory; unresolved names are ignored only when they are standard-library names or verified declared dependencies. Dart `package:` URIs resolve only when their package name matches the snapshot's declared package and the target exists below `lib/`; imports of verified external dependencies are ignored; relative imports resolve only when the target is unique relative to the importing file.
-4. Have `gate_evidence` derive the actual changed paths for task gates and integration gates. For a clean merged candidate, integration uses the exact pre-wave integration commit as the diff base; task gates use the current committed baseline plus the candidate worktree changes. Bind this base, head tree, environment, toolchain commands, and impact policy into the manifest.
-5. Make `run-gates` validate the manifest immediately before execution and pass its test argv only for the exact selected toolchain when the manifest proves a complete affected selection. The selected argv must originate from the ledgered descriptor and differ only by safe test-path arguments. Configured analysis and formatting commands retain their existing full scope. Baseline capture and closing verification always execute full configured suites.
-6. Recompute and validate the same candidate-bound impact identity after commands finish. Any source, graph, command, or environment drift prevents a passing gate record. Ledger evidence records the selected command and manifest hash.
+Do not use `update`, `affected`, `explain`, semantic/LLM extraction, clustering, labeling, or global knowledge graphs. Raw graphs and extraction snapshots remain disposable. Only normalized validated dependency evidence may survive in the private cache. No generated graph/cache artifact enters the checkout or commits.
+
+## Gate flow
+
+1. Capture actual Git base/candidate diff, test inventory, ledgered toolchains, policy, and environment. Task gates use the committed baseline plus current candidate changes; integration uses the exact pre-wave integration commit. Preserve staged, unstaged, untracked, renamed, and deleted paths under the existing identity contract.
+2. Classify before constructing snapshots, reading cache entries, or invoking Graphify. Baseline/closing, unsupported adapters, configuration/shared-infrastructure changes, deleted tests, and unclassified changes retain existing full-suite decisions. If every selected toolchain requires full suites, perform zero graph reads or extractions. For mixed decisions, extract only if some toolchain still needs graph evidence, preserving the complete dependency inventory and cross-toolchain dependencies.
+3. Obtain normalized evidence independently for base and candidate using the cache. Union reverse edges deterministically so deleted/renamed sources retain old consumers and new imports retain new consumers. Bind the union to this gate's exact identities; a cache hit is not a prior gate approval.
+4. Run the existing selector. Missing test mappings and other uncertainty select full suites. Commands come only from ledgered descriptors plus validated test arguments. This revision introduces no documentation-only or empty-selection skip policy and no reuse of previous test PASS results.
+5. Immediately before execution, validate the sealed manifest and current input identities. Execute selected test argv and record actual argv/cwd/env and selection hash.
+6. After execution, recapture input identities and validate the same sealed evidence without calling the extractor or rebuilding the manifest/selection. Candidate, base, plan, toolchain, command, policy, extractor/adapter, environment, or manifest drift prevents PASS. Do not overwrite original evidence with evidence for a different candidate.
+
+## Cache identity, ownership, and lifecycle
+
+Add `test_dependency_cache.py` to own cache keys, storage, and validation. Use a supervisor-owned temporary directory outside all source checkouts, shared across gates/attempts of one pipeline run. Pass its absolute location through supervisor state to gate processes; workers and the planning agent do not supply entries. Reuse an established runtime-directory mechanism where available. Without a safe shared location, use a disposable per-gate cache and report that cross-gate reuse is unavailable. Delete the shared cache at run teardown; never delete an arbitrary caller-supplied path.
+
+Cache each snapshot independently. Its canonical key includes repository namespace, sorted repository-relative paths and content digests for the complete extractor input inventory (including resolution manifests), extraction flags/schema, verified extractor installation identity/version, adapter implementation identity, and resolution-policy identity. Include file modes/link treatment where they affect extraction. File counts, mtimes, branch names, or commit IDs alone are insufficient. A conservative whole-snapshot content key is acceptable initially; incremental parsing and long-lived cross-run caches are out of scope.
+
+On a hit, validate key, schema, complete status, normalized paths/edges, provenance, and payload digest. A digest detects corruption; supervisor ownership supplies the trust boundary. Do not trust worker-supplied evidence merely because its checksum is consistent. Write complete entries atomically; concurrent readers must never see partial writes. Missing, invalid, incompatible, or corrupt entries are misses followed by extraction or safe full-suite fallback. Cache write failures must not discard valid in-memory evidence. Do not persist incomplete evidence as a successful entry.
+
+Materialize a snapshot only on a miss and verify that its content matches the key before publishing evidence. Retain a sealed in-memory or gate-owned copy/digest of the evidence used for selection. Post-run verification checks retained evidence rather than relying on an evictable cache entry. Unchanged base and candidate content may share one entry; attach Git provenance separately for each gate.
+
+## Planning and agent token contract
+
+The strategic agent continues to write scope, acceptance, task dependencies, and existing plan fields. It does not enumerate affected tests, load graph files, construct cache keys, or maintain dependency edges. No graph fields are added to `plan.json`. Workers/reviewers receive no graph context or extra graph dispatch stage. Scripts own selection and emit compact reasons; raw graphs remain outside prompts. This prevents additional planning cost; it does not eliminate context needed to understand and plan a feature.
 
 ## Ownership and interfaces
 
-- `test_dependency_graph` owns isolated Graphify invocation, version/schema validation, source/path resolution, graph identity, and completeness diagnostics for Python and Dart/Flutter.
-- `gate_evidence` owns the baseline/candidate diff, graph identity, and validated manifest creation.
-- `run-gates` and `toolchain_gate` own execution of manifest-selected test argv. Callers cannot submit arbitrary test paths or commands.
-- `test_impact` remains the deterministic selector and continues to fail closed to full suites for unsupported or incomplete evidence.
+- `test_impact.preflight(diff, toolchains, policy, phase) -> dict` returns `requires_graph: bool` and per-toolchain full-suite reasons using the same classification rules as `select`. It never reads graphs or changes fallback semantics.
+- `test_dependency_graph.build(snapshot, expected_version) -> dict` retains extraction/normalization ownership.
+- `test_dependency_cache.get_or_build(cache_root, key, builder) -> dict` validates/reuses complete evidence or invokes a zero-argument builder on a miss. The builder materializes/verifies the snapshot. Diagnostics/timings are separate from deterministic evidence hashes.
+- `gate_evidence.capture_workspace_inputs(workspace, selection, mode) -> dict` captures graph-independent inputs/identity without writing a manifest. `create_workspace_manifest` composes capture, preflight, cache, and selection.
+- `gate_evidence.verify_workspace_manifest(workspace, selection, mode, manifest) -> None` validates retained evidence and recaptured inputs; raises on drift and never extracts, selects again, or rewrites the manifest.
+- `run-gates` and `toolchain_gate` retain ledger-owned execution. Supervisor runtime lifecycle owns shared cache creation and teardown.
 
-## Verification
+## Acceptance and proportionate verification
 
-- Unit fixtures cover Graphify invocation without LLM modes, version/schema and failed-source rejection, AST relation filtering, Python imports, Dart package/relative imports, URI/path resolution, cycles, rename/delete/add changes, ambiguous or dynamic imports, missing tests, stale identities, and conservative fallback. Disposable CLI probes verify the pinned Graphify behavior without reading or changing user graph artifacts.
-- Gate integration tests prove a selected test argv is the command executed, full suite runs for uncertain impact and during closing, analysis remains unchanged, and post-run candidate drift records FAIL rather than PASS.
-- Existing shared and Flutter suites must pass on the final candidate. Acceptance remains bound to the final source commit and declared runtime.
+Use focused regressions per changed boundary; preserve existing adapter safety tests. Run relevant shared and Flutter complete suites once on the final candidate, repeating only when later changes or failures justify it. Investigate unexpected failures. This development policy does not relax runtime baseline/closing gates or task RED/GREEN evidence.
 
-## Risks and limits
+Required checks:
 
-Static dependency extraction cannot prove arbitrary runtime behavior, and Graphify's AST graph is only as complete as the extractor/version contract. Dynamic and ambiguous dependencies therefore force full suites. Graphify is optional: absent or unvalidated installations retain safe full-suite behavior. This design does not add language or test-framework support beyond the current Python and Flutter/Dart adapters, and does not make closing verification selective.
+- Known full-suite decisions: zero snapshot materializations, cache graph reads, or extraction calls.
+- Cold eligible gate: at most one extraction per distinct base/candidate content identity (normally two); warm identical gate: zero. Cached base plus changed candidate: at most one new extraction.
+- Post-run verification: zero extractions, with candidate/configuration/environment/manifest drift still rejected.
+- Corruption, incompatible extractor/adapter/policy, and changed resolution inputs never reuse stale evidence. Concurrent writes never expose partial entries. Missing cache after selection does not invalidate retained evidence.
+- Rename/delete union and exact executed argv remain correct. No graph context or required graph fields enter planning, briefs, or review packages.
+
+Record snapshot, extraction, selection/identity-validation, and test elapsed times, extraction counts, cache hits/misses, selected/total test counts, and fallback reasons outside deterministic hashes. Compare cold and warm representative Python and Flutter gates against configured full-suite executions and, where practical, the pre-optimization implementation on the same candidate/environment. Report unavailable real toolchains honestly. Fixtures prove call-count bounds, not real-world speed. Measure net gate time before claiming improvement.
+
+## Limits
+
+Static imports cannot prove arbitrary runtime behavior; uncertainty retains full suites. Hashing and filesystem scans still cost time on cache hits. This revision does not add languages, expand graph scope into planning, skip required tests, cache PASS results, or claim Graphify is fastest. ADR-0004's removed knowledge/context workflow remains removed.

@@ -1,8 +1,10 @@
-# ADR-0004: Graphify — update before commit, subgraph read immediately after, for B and D
+# ADR-0004: Graphify — isolated test-impact extraction and evidence reuse
 
 > **Historical decision superseded for R4's narrow test-impact use (2026-09-30).**
 > The old knowledge/context graph workflow remains removed. R4 adds a new,
 > isolated AST dependency-extraction use described in the amendment below.
+> The efficiency revision at the end is the current target design; its
+> implementation is pending. Earlier sections preserve historical decisions.
 
 - **Status:** AMENDED (historical context-graph workflow remains superseded)
 - **Date:** 2026-09-02 (amended 2026-09-05, superseded 2026-09-10, narrowly amended 2026-09-30)
@@ -98,9 +100,10 @@ The R4 decision is deliberately narrower than the superseded workflow:
 - Only validated Graphify version/schema and AST-origin `imports` or
   `imports_from` relations may contribute edges. Other relations, inferred
   edges, semantic extraction, clustering, and labeling are not used.
-- The graph is built from exact isolated Git source snapshots, identity-bound
-  to their source commit/tree, and deleted with the temporary workspace. No
-  `graphify-out/` artifact enters the user's checkout or commit.
+- Raw graphs are built from exact isolated Git source snapshots, identity-bound
+  to their source commit/tree, and deleted with the temporary workspace.
+  The efficiency revision below permits private reuse of normalized evidence.
+  No `graphify-out/` artifact enters the user's checkout or commit.
 - Missing or incompatible Graphify, extraction errors, failed sources,
   unsupported/dynamic imports, unresolved targets, or ambiguous path mapping
   select complete configured suites. Closing verification remains full-suite.
@@ -114,38 +117,49 @@ The user explicitly approved this scope change on 2026-09-30. This amendment
 supersedes only the 2026-09-10 statement that no stage may build a code graph;
 all other removal decisions above remain in force.
 
-## R4 amendment (2026-09-30): script-owned graph context and run-scoped reuse
+## R4 efficiency revision (2026-09-30): decide first, reuse evidence
 
-The user clarified that the plan author must not read or summarize the graph.
-After canonical plan validation, Script CEO refreshes and reads the run-start
-raw AST graph once, derives task dependency metadata, and stores an immutable
-run-local index. `brief-scaffold` queries that index for the current task and
-adds only a bounded structural slice to the coder brief. The authored canonical
-`plan.json` remains unchanged; graph-derived data is script-owned runtime
-metadata keyed to its source-tree and plan identities. Per-task briefs and
-corrective briefs must not invoke Graphify or reload the complete graph.
+The user requested this documentation revision for implementation in another
+session. The goals are fewer repeated tests per task, no additional graph work
+for the agent creating `plan.json`, and fewer unnecessary graph loads/extractions.
 
-The per-gate raw Graphify rebuild in the initial R4 design is superseded by this
-run-scoped map for task-level affected-test selection. The map is explicitly
-bound to the run-start source tree; candidate diffs still determine changed
-paths. If the map or Green evidence cannot prove a safe narrowed selection,
-the gate executes the configured full suite. A task's own tests already
-passed by Green are omitted from its affected integration selection only while
-their file and relevant-input evidence remains valid. Closing always executes
-all configured suites, catching interactions introduced after the run-start
-snapshot.
+The initial R4 implementation creates base and candidate graphs both before and
+after commands: normally four extractions per task/integration gate. It also
+extracts before checking rules that can already require full suites. Keep the
+adapter and change this lifecycle:
 
-For `pull_request` publication, refresh tracked Graphify output before the
-closing full-suite gate and final review so the graph is part of the reviewed
-candidate. Never update it after final review. The persisted Graphify view may
-contain undirected merged relations and is for project navigation only; R4
-directional test impact continues to come exclusively from the validated raw
-AST extraction contract. `local` publication does not refresh tracked graph
-artifacts. A failed required refresh blocks publication.
+- Apply graph-independent full-suite rules before snapshots, cache reads, or
+  extraction. Baseline/closing and decisions already requiring full suites need
+  no graph. Unknown changes retain conservative behavior; this revision adds
+  no new test-skipping policy.
+- Reuse validated normalized dependency evidence in a supervisor-owned cache
+  outside source checkouts, shared for one pipeline run and removed at teardown.
+  Raw output remains ephemeral. Bind cache keys to complete input content,
+  resolution manifests, extractor installation/version/schema/flags, adapter,
+  and policy. Branch names, mtimes, or commit IDs alone cannot establish reuse.
+- Validate cache integrity and provenance; publish complete entries atomically.
+  Missing/corrupt/incompatible entries cause extraction or safe fallback. Never
+  treat incomplete evidence as trusted or a cached graph as a cached test PASS.
+- Preserve deterministic base/candidate edge union and exact gate identities.
+  Extract at most once per distinct uncached snapshot identity; materialize
+  snapshots only on misses. Revalidate sealed inputs/evidence after commands
+  without invoking Graphify, reselection, or rewriting the original manifest.
+  Drift still rejects PASS.
+- Keep selection in scripts. Add no graph context, graph dispatch stage, or
+  affected-test authoring requirement to planning, workers, or reviewers.
+  Baseline/closing full suites and existing analysis/format scope remain intact.
 
-This amendment supersedes the R4 design's per-gate full graph extraction and
-its prohibition on script-generated graph context in coder briefs. It does not
-give the planning agent graph input, make graph inspection an LLM stage, or
-permit persisted merged edges to control test selection. Detailed contracts
-and verification are in
-`docs/superpowers/specs/2026-09-30-r4-script-owned-graph-context.md`.
+This supersedes the initial R4 requirement to discard all normalized dependency
+evidence after each extraction; it does not restore a persistent knowledge graph.
+Prefer this bounded lifecycle change over retaining repeated extraction or
+replacing Graphify with new parsers before measuring the alternatives.
+
+Acceptance requires zero extraction for known full-suite decisions, zero for
+warm identical inputs, and zero during post-run verification. Record cold/warm
+net gate time, extraction counts, cache hits, selection size, and fallback reasons
+before claiming performance gains. Use focused regressions during development
+and complete shared/Flutter verification on the final candidate.
+
+The authoritative details and remaining implementation work are in
+[the R4 spec](../specs/2026-09-30-r4-trusted-impact-gates-design.md) and
+[the R4 plan](../plans/2026-09-30-r4-graphify-impact-adapter.md).
