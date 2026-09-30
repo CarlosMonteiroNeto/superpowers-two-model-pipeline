@@ -74,6 +74,25 @@ class DispatchMetricsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             metrics.compare_cost({"tokens": {"input": "many"}}, {})
 
+    def test_usage_reduction_with_any_worsened_dimension_cannot_claim_savings(self):
+        metrics = load_metrics(self)
+        baseline = {"tokens": {"input": 100, "output": 100, "cached": 10},
+                    "latency_ms_total": 100, "escaped_defects": 0}
+        current = {"tokens": {"input": 110, "output": 20, "cached": 20},
+                   "latency_ms_total": 200, "escaped_defects": 0}
+        result = metrics.compare_cost(baseline, current)
+        self.assertFalse(result["savings_claim_allowed"])
+
+    def test_usage_reduction_without_pricing_model_is_not_a_cost_savings_claim(self):
+        metrics = load_metrics(self)
+        baseline = {"tokens": {"input": 100, "output": 100, "cached": 10},
+                    "latency_ms_total": 100, "escaped_defects": 0}
+        current = {"tokens": {"input": 80, "output": 90, "cached": 5},
+                   "latency_ms_total": 90, "escaped_defects": 0}
+        result = metrics.compare_cost(baseline, current)
+        self.assertFalse(result["savings_claim_allowed"])
+        self.assertEqual(result["status"], "measured_usage_reduction")
+
 
 if __name__ == "__main__":
     unittest.main()

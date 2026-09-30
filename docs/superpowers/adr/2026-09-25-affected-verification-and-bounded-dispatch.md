@@ -34,6 +34,9 @@ call. Unknown observations must stay unknown.
   entry/condition, keep/remove/merge decision, and semantic justification.
   `dispatch-audit` checks added script lines for missing inventory,
   mechanical model routing, and call-bearing loops without a bounded exit.
+  Unknown frequency, budget or termination fields are rejected. Python counted
+  loops require a finite literal range or a matching monotonic counter update
+  on every iteration; breaks and nested-loop exits alone do not prove a bound.
 - Cost reports keep semantic invocations, backend turns, transport retries,
   Jev calls, input/output/cached tokens, latency and escaped-defect
   observations separate. Metrics are aggregated only from observed records;
@@ -46,9 +49,10 @@ call. Unknown observations must stay unknown.
 
 ## Consequences
 
-- A caller can compare cost only when baseline and candidate contain comparable
-  observed usage and quality evidence. Otherwise the result is
-  `insufficient_evidence`.
+- A caller can compare observed usage only when baseline and candidate contain
+  comparable usage and quality evidence. Otherwise the result is
+  `insufficient_evidence`; even a usage reduction cannot support a monetary
+  savings claim without a pricing model.
 - The audit is a deterministic static guard, not a substitute for reviewing
   whether a semantic justification is sound or whether the acceptance tests
   prove behavior.

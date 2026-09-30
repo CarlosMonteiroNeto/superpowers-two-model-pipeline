@@ -566,17 +566,23 @@ version-1 inventory containing `repo`,
 `trigger`, `frequency`, `budget`, `termination`, `decision` (`keep`, `remove`
 or `merge`) and `justification`. The audit examines newly added script lines,
 rejecting mechanical model routing, semantic calls absent from the inventory,
-and call-bearing loops without a bounded exit. Its report is static evidence,
-not a semantic review.
+and call-bearing loops without a bounded exit. For Python, a `while` bound
+needs a matching monotonic counter update on every iteration; `break` and
+nested-loop exits do not establish a bound. Unknown frequency, budget or
+termination is rejected. The audit recognizes finite literal ranges and
+simple counted loops, and fails closed when it cannot prove a bound. Its report
+is static evidence, not a semantic review.
 
 `dispatch_metrics.summarize(records)` reports semantic invocations, backend
 model turns, transport retries, Jev calls, input/output/cached tokens, latency
 and escaped-defect observations independently. It accepts normalized records
 from either backend. A field that the record does not expose remains `null`;
 the aggregator never estimates token use from prompt size or invocation
-counts. `compare_cost` permits a measured reduction claim only when both
-records provide token and latency usage plus escaped-defect evidence, with no
-quality regression. Fewer invocations alone are insufficient.
+counts. `compare_cost` requires complete token, latency and escaped-defect
+evidence. It reports measured usage reductions separately from monetary cost:
+without an explicit pricing model, it never authorizes a savings claim. Any
+increased usage dimension is reported as a tradeoff, not a reduction. Fewer
+invocations alone are insufficient.
 
 R4 acceptance uses offline Codex/OpenCode fixtures, regression/quality gates,
 and complete configured suites during round closing. The report binds the

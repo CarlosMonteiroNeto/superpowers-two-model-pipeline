@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import pathlib
@@ -13,6 +14,7 @@ import sys
 import tempfile
 import io
 import tokenize
+import textwrap
 
 
 CALL = re.compile(r"\b(?:dispatch|invoke|run_dispatch|delegate_worker|dispatch_worker)\s*\(")
@@ -89,6 +91,13 @@ def _validate_inventory(inventory):
             _fail("call_sites[%d].budget must be positive" % index)
         if isinstance(site["budget"], str) and not site["budget"].strip():
             _fail("call_sites[%d].budget must not be empty" % index)
+        for field in ("frequency", "termination"):
+            if re.search(r"\b(?:unknown|unspecified|unbounded|none|n/?a|tbd)\b",
+                         site[field], re.I):
+                _fail("call_sites[%d].%s must describe a known bound" % (index, field))
+        if isinstance(site["budget"], str) and re.search(
+                r"\b(?:unknown|unspecified|unbounded|none|n/?a|tbd)\b", site["budget"], re.I):
+            _fail("call_sites[%d].budget must describe a known limit" % index)
         if site["decision"] not in DECISIONS:
             _fail("call_sites[%d].decision must be keep, remove or merge" % index)
         key = (path, line)
@@ -171,16 +180,68 @@ def _loop_body(source, line_no, indent):
     return "\n".join(body)
 
 
-def _unbounded_dispatch_loop(header, body):
+def _python_loop_is_bounded(header, body):
+    try:
+        module = ast.parse(textwrap.dedent(header.lstrip() + "\n" + body))
+    except SyntaxError:
+        return False
+    if not module.body or not isinstance(module.body[0], (ast.For, ast.While)):
+        return False
+    loop = module.body[0]
+    if isinstance(loop, ast.For):
+        iterator = loop.iter
+        if (isinstance(iterator, ast.Call) and isinstance(iterator.func, ast.Name)
+                and iterator.func.id == "range" and not iterator.keywords
+                and 1 <= len(iterator.args) <= 3
+                and all(isinstance(arg, ast.Constant) and type(arg.value) is int
+                        for arg in iterator.args)):
+            return not (len(iterator.args) == 3 and iterator.args[2].value == 0)
+        return isinstance(iterator, (ast.List, ast.Tuple, ast.Set)) and all(
+            isinstance(item, ast.Constant) for item in iterator.elts)
+
+    test = loop.test
+    if (not isinstance(test, ast.Compare) or len(test.ops) != 1
+            or len(test.comparators) != 1 or not isinstance(test.left, ast.Name)
+            or not isinstance(test.comparators[0], ast.Constant)
+            or type(test.comparators[0].value) is not int):
+        return False
+    variable = test.left.id
+    operator = test.ops[0]
+    expected = (ast.Lt, ast.LtE) if isinstance(operator, (ast.Lt, ast.LtE)) else (
+        ast.Gt, ast.GtE) if isinstance(operator, (ast.Gt, ast.GtE)) else ()
+    if not expected:
+        return False
+    updates = [statement for statement in loop.body
+               if isinstance(statement, ast.AugAssign)
+               and isinstance(statement.target, ast.Name)
+               and statement.target.id == variable
+               and isinstance(statement.op, (ast.Add, ast.Sub))
+               and isinstance(statement.value, ast.Constant)
+               and type(statement.value.value) is int and statement.value.value > 0]
+    if len(updates) != 1:
+        return False
+    update = updates[0]
+    writes = [node for node in ast.walk(loop)
+              if isinstance(node, ast.Name) and node.id == variable
+              and isinstance(node.ctx, ast.Store)]
+    if len(writes) != 1 or any(isinstance(node, ast.Continue) for node in ast.walk(loop)):
+        return False
+    increasing = isinstance(operator, (ast.Lt, ast.LtE))
+    return (isinstance(update.op, ast.Add) if increasing else isinstance(update.op, ast.Sub))
+
+
+def _unbounded_dispatch_loop(header, body, python_source=False):
     has_call = CALL.search(body) or DYNAMIC_CALL.search(body)
     if not has_call:
         return False
+    if python_source:
+        return not _python_loop_is_bounded(header, body)
     bounded_condition = re.search(
         r"while\s+[\w.]+\s*(?:<|<=|>|>=)\s*(?:\d+|max_[\w]+|[A-Z][A-Z0-9_]*)", header, re.I)
     bounded_for = re.search(
         r"for\s+\w+\s+in\s+range\(\s*\d+(?:\s*,\s*\d+)?(?:\s*,\s*-?\d+)?\s*\)", header)
     bounded_body = re.search(
-        r"\bbreak\b|\bmax_(?:attempts|retries|cycles)\b|\battempt\s*[<>]=?\s*\d+", body)
+        r"\bmax_(?:attempts|retries|cycles)\b|\battempt\s*[<>]=?\s*\d+", body)
     return not (bounded_condition or bounded_for or bounded_body)
 
 
@@ -224,7 +285,8 @@ def audit(inventory, policy):
                     findings.append({"code": "missing_semantic_justification", "file": path,
                                      "line": line_no, "message": "semantic call justification is empty"})
                 for header_line, header, indent in _enclosing_loops(code_lines, line_no):
-                    if _unbounded_dispatch_loop(header, _loop_body(code_lines, header_line, indent)):
+                    if _unbounded_dispatch_loop(header, _loop_body(code_lines, header_line, indent),
+                                                python_source):
                         findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                          "line": header_line, "message": "dispatch loop has no visible bounded exit"})
             if (MECHANICAL_ROUTE.search(code + "\n" + "\n".join(code_lines[line_no:line_no + 4]))
@@ -234,7 +296,7 @@ def audit(inventory, policy):
             if LOOP.match(code):
                 indent = len(code_lines[line_no - 1]) - len(code_lines[line_no - 1].lstrip())
                 body = _loop_body(code_lines, line_no, indent)
-                if _unbounded_dispatch_loop(code, body):
+                if _unbounded_dispatch_loop(code, body, python_source):
                     findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                      "line": line_no, "message": "dispatch loop has no visible bounded exit"})
     unique = {(item["code"], item["file"], item["line"]): item for item in findings}

@@ -160,12 +160,71 @@ class DispatchAuditAcceptanceTests(unittest.TestCase):
             "for item in itertools.count():\n    dispatch(item)\n")
         try:
             declared = [{"file": "worker.py", "line": 2, "role": "operator",
-                         "trigger": "each item", "frequency": "unknown", "budget": "unknown",
-                         "termination": "none", "decision": "keep",
+                         "trigger": "each item", "frequency": "each item",
+                         "budget": 3, "termination": "all items consumed", "decision": "keep",
                          "justification": "dispatch items"}]
             result, report = self._run_audit(root, base, head, declared)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unbounded_dispatch_loop", [x["code"] for x in report["findings"]])
+        finally:
+            temporary.cleanup()
+
+    def test_rejects_while_comparison_without_progress(self):
+        temporary, root, base, head = self._repo(
+            "attempt = 0\nwhile attempt < 3:\n    dispatch()\n")
+        try:
+            declared = [{"file": "worker.py", "line": 3, "role": "operator",
+                         "trigger": "task start", "frequency": "up to three",
+                         "budget": 3, "termination": "attempt reaches three",
+                         "decision": "keep", "justification": "semantic work"}]
+            result, report = self._run_audit(root, base, head, declared)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unbounded_dispatch_loop", [x["code"] for x in report["findings"]])
+        finally:
+            temporary.cleanup()
+
+    def test_rejects_counter_mutation_inside_branch_despite_later_increment(self):
+        temporary, root, base, head = self._repo(
+            "attempt = 0\nwhile attempt < 3:\n    if should_retry:\n        attempt -= 1\n    dispatch()\n    attempt += 1\n")
+        try:
+            declared = [{"file": "worker.py", "line": 5, "role": "operator",
+                         "trigger": "task start", "frequency": "up to three",
+                         "budget": 3, "termination": "attempt reaches three",
+                         "decision": "keep", "justification": "semantic work"}]
+            result, report = self._run_audit(root, base, head, declared)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unbounded_dispatch_loop", [x["code"] for x in report["findings"]])
+        finally:
+            temporary.cleanup()
+
+    def test_nested_break_does_not_bound_outer_dispatch_loop(self):
+        temporary, root, base, head = self._repo(
+            "while True:\n    for item in items:\n        break\n    dispatch(item)\n")
+        try:
+            declared = [{"file": "worker.py", "line": 4, "role": "operator",
+                         "trigger": "task start", "frequency": "once per task",
+                         "budget": 1, "termination": "outer loop completes",
+                         "decision": "keep", "justification": "semantic work"}]
+            result, report = self._run_audit(root, base, head, declared)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unbounded_dispatch_loop", [x["code"] for x in report["findings"]])
+        finally:
+            temporary.cleanup()
+
+    def test_rejects_unknown_inventory_frequency_budget_and_termination(self):
+        temporary, root, base, head = self._repo("dispatch()\n")
+        try:
+            base_site = {"file": "worker.py", "line": 1, "role": "operator",
+                         "trigger": "task start", "frequency": "once",
+                         "budget": 1, "termination": "worker returns",
+                         "decision": "keep", "justification": "semantic work"}
+            for field, value in (("frequency", "unknown"), ("budget", "unbounded"),
+                                 ("termination", "none")):
+                with self.subTest(field=field):
+                    declared = [{**base_site, field: value}]
+                    result, report = self._run_audit(root, base, head, declared)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(report["findings"][0]["code"], "invalid_input")
         finally:
             temporary.cleanup()
 
@@ -185,8 +244,8 @@ class DispatchAuditAcceptanceTests(unittest.TestCase):
         head = git(root, "rev-parse", "HEAD")
         try:
             declared = [{"file": "worker.py", "line": 2, "role": "operator",
-                         "trigger": "loop iteration", "frequency": "unbounded", "budget": "unbounded",
-                         "termination": "none", "decision": "keep",
+                         "trigger": "loop iteration", "frequency": "each iteration", "budget": 3,
+                         "termination": "bounded by configured cycle", "decision": "keep",
                          "justification": "dispatch each item"}]
             result, report = self._run_audit(root, base, head, declared)
             self.assertNotEqual(result.returncode, 0)

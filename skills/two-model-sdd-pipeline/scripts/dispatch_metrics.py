@@ -125,7 +125,13 @@ def compare_cost(baseline, current):
     if new_defects > old_defects:
         return {"status": "quality_regression", "savings_claim_allowed": False,
                 "reason": "escaped defects increased"}
+    worsened = any(new > old for old, new in pairs) or new_latency > old_latency
     reduced = any(new < old for old, new in pairs) or new_latency < old_latency
-    return {"status": "measured_cost_reduction" if reduced else "no_measured_cost_reduction",
-            "savings_claim_allowed": reduced,
-            "reason": "measured token and latency usage with non-worsened escaped defects"}
+    if worsened:
+        return {"status": "usage_tradeoff", "savings_claim_allowed": False,
+                "reason": "one or more measured usage dimensions increased"}
+    if reduced:
+        return {"status": "measured_usage_reduction", "savings_claim_allowed": False,
+                "reason": "usage dimensions fell, but no pricing model establishes cost savings"}
+    return {"status": "no_measured_usage_reduction", "savings_claim_allowed": False,
+            "reason": "no measured token or latency usage dimension decreased"}
