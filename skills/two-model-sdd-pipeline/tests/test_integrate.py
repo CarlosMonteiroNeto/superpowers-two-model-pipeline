@@ -503,15 +503,19 @@ class IntegrateTest(unittest.TestCase):
         self.shard_complete(1)
         self.shard_complete(2)
         counter = self._tmp / "gate-count"
+        base_capture = self._tmp / "impact-base"
+        expected_base = git(self.repo, "rev-parse", "HEAD").stdout.strip()
         stub = write_stub(
             self.stub_dir, "gate-count",
             "n=$(cat \"%s\" 2>/dev/null || echo 0)\n"
             "n=$((n+1))\n"
             "printf '%%s' \"$n\" > \"%s\"\n"
+            "printf '%%s' \"${PIPELINE_IMPACT_BASE_COMMIT:-}\" > \"$GATE_BASE_CAPTURE\"\n"
             "exit 0\n" % (counter, counter))
-        r = self.run_integrate(1, 2, RUN_GATES_BIN=stub)
+        r = self.run_integrate(1, 2, RUN_GATES_BIN=stub, GATE_BASE_CAPTURE=str(base_capture))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(counter.read_text(encoding="utf-8").strip(), "1")
+        self.assertEqual(base_capture.read_text(encoding="utf-8").strip(), expected_base)
         self.assertEqual(
             sorted(str(e["task"]) for e in self.entries("integrated")), ["1", "2"])
         self.assertTrue((self.repo / "lib" / "task1.go").is_file())

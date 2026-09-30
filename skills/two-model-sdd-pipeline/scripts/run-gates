@@ -50,6 +50,28 @@ fi
 if [ "$impact_manifest_created" = "1" ] && [ "${PIPELINE_GATE_PHASE:-task}" = closing ]; then
   rm -f "$ws/supervisor/current-evidence.json"
 fi
+if [ "$impact_manifest_created" = "1" ]; then
+  export PIPELINE_IMPACT_MANIFEST="$ws/impact-manifest.json"
+  rm -f "$ws/run-gates-executed.json"
+  if ! impact_expected_hash=$(python3 - "$SCRIPT_DIR" "$PIPELINE_IMPACT_MANIFEST" "${PIPELINE_GATE_PHASE:-task}" <<'PY'
+import json, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+import gate_evidence
+manifest = gate_evidence.validate_manifest(json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")))
+phase = sys.argv[3]
+if phase not in ("task", "integration", "baseline", "closing"):
+    raise SystemExit("invalid gate phase")
+if phase in ("baseline", "closing") and any(not item.get("full_suite") for item in manifest["commands"]):
+    raise SystemExit("baseline and closing phases require complete configured suites")
+print(manifest["selection_hash"])
+PY
+  ); then
+    echo "RUN-GATES: persisted impact manifest failed pre-execution validation" >&2
+    exit 3
+  fi
+  export PIPELINE_IMPACT_EXPECTED_HASH="$impact_expected_hash"
+fi
+
 if [ $# -eq 2 ] && [[ "$1" != --* ]] && [ -f "$ws/ledger.jsonl" ]; then
   # Preserve the single unstructured legacy gate path. Its command summaries
   # come from the ledger, never directly from the caller's shell arguments.
@@ -119,16 +141,20 @@ if [ "$impact_manifest_created" = "1" ]; then
   task_id="-"
   if [ "${1:-}" = "--tasks" ] && [ $# -eq 2 ]; then task_id=$2; fi
   if ! python3 - "$SCRIPT_DIR" "$ws/impact-manifest.json" "$ws/ledger.jsonl" "$phase" "$task_id" "$run_rc" <<'PY'
-import json, os, pathlib, shutil, subprocess, sys
+import hashlib, json, os, pathlib, shutil, subprocess, sys
 script_dir, manifest_path, ledger, phase, task_id, gate_rc = sys.argv[1:]
+ws = pathlib.Path(manifest_path).parent
 manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
 identity = manifest["identity"]
 kind = "impact_gate_evidence"
 summary = "{} gate status={} mode={}".format(phase, "PASS" if gate_rc == "0" else "FAIL", manifest["mode"])
+execution_path = pathlib.Path(ws) / "run-gates-executed.json"
+execution_hash = hashlib.sha256(execution_path.read_bytes()).hexdigest() if execution_path.is_file() else "0" * 64
 args = [os.environ.get("BASH_BIN") or shutil.which("bash") or "bash",
         str(pathlib.Path(script_dir) / "ledger-append"), ledger, kind, task_id, summary,
         "selection_hash=" + manifest["selection_hash"],
         "impact_selection_hash=" + manifest["selection_hash"],
+        "executed_argv_hash=" + execution_hash,
         "candidate_commit=" + identity["head_commit"], "tree_hash=" + identity["tree_hash"],
         "config_hash=" + identity["config_hash"], "environment_hash=" + identity["environment_hash"],
         "phase=" + phase, "gate_status=" + ("PASS" if gate_rc == "0" else "FAIL")]

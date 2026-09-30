@@ -100,10 +100,18 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         self.assertIn("writing-good-tests.md", prompt)
 
     def test_no_graphify_in_process(self):
-        """The knowledge graph is fully out of the pipeline: no stage
-        invokes it, so the skill must not mention graphify anywhere."""
+        """Graphify is limited to the explicitly specified R4 impact gate.
+
+        The legacy worker/reviewer knowledge-graph stages remain absent.
+        """
         text = self.skill.read_text(encoding="utf-8")
-        self.assertNotIn("graphify", text.lower())
+        lower = text.lower()
+        self.assertIn("candidate-bound test impact gates (r4)", lower)
+        self.assertEqual(lower.count("graphify"), 2)
+        pre_r4 = lower.split("candidate-bound test impact gates (r4)", 1)[0]
+        self.assertNotIn("graphify", pre_r4)
+        self.assertNotIn("graphify-update", lower)
+        self.assertNotIn("graphify-subgraph", lower)
 
     def test_coder_runs_unbounded_until_green(self):
         """The Coder loop has no round budget: coder-gate retries until the

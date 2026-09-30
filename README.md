@@ -200,6 +200,18 @@ retention is 30 days (configurable).
   manipulation, interruptibility, springs, momentum, materials,
   typography, reduced motion), and the revisor checks them.
 
+**Candidate-bound test impact (R4).** Task and integration gates may select
+only tests proven affected by local imports in the candidate-bound Graphify
+AST graphs. The extractor runs inside disposable base/candidate snapshots;
+it does not write to the user's `graphify-out/` or provide graph context to
+workers or reviewers. Missing, unsupported, unresolved, or otherwise
+uncertain graph evidence runs each configured full test suite. Integration
+selection is relative to the exact pre-wave commit. Baseline and closing
+gates always run complete suites; analyze and format commands keep their
+ledgered full-scope arguments. The gate records the manifest selection hash
+and executed argv hash, and refuses PASS if the candidate changes during
+verification.
+
 **Corollary — script-decided routing.** If a check can be performed by a
 script, the script performs it *and* routes straight to the next step,
 without waiting for an LLM to read the result and approve it. This applies
@@ -298,7 +310,7 @@ subagent-mode agents cannot be targeted headlessly by `opencode run
 | `harness-project prepare --project DIR --backend NAME` (two-model) | Enrolls a first-use project or resolves its pin; reports changed paths before an optional accepted upgrade, and keeps the pin during a resume | exit 0 ready; 2 invalid state; 3 operational failure; 4 upgrade decision required |
 | `brief-scaffold WORKSPACE TASK` (two-model) | Scaffold the task brief mechanically from the plan (statement, acceptance, spec_refs, machine-readable RED instructions). No LLM | exit 0 wrote; 1 plan unreadable; 2 usage |
 | `coder-agent-for LANG` (two-model) | Maps a `resolve-toolchain` lang to the operador variant (`two-model-coder-{python,node,rust,go}`) | agent name on stdout; 0 |
-| `run-gates WS TEST ANALYZE` (two-model) | Generic green approval: full suite + analysis through `cmd` | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
+| `run-gates WS TEST ANALYZE` (two-model) | Generic green approval; task/integration gates use validated candidate-bound affected test paths when Graphify evidence is complete, otherwise the full suite; baseline/closing always run full suite; analysis/format scope is unchanged | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
 | `orient-llm [REPO]` | Brainstorming pre-flight: locate and print this repo's `README.md` so the agent is oriented before work starts | exit 0 printed; 1 missing (gate — stop); 2 usage |
 | `pkg-score PACKAGE` | Fetch pub.dev + GitHub, compute the corrected Quality Score | JSON + gate verdict (AUTO_APPROVE / DEVELOPER_DECISION / AUTO_REJECT) |
 | `template-search CATEGORY` | Search GitHub for project templates (stars descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific 50–69 group) | JSON list of candidates with scores |

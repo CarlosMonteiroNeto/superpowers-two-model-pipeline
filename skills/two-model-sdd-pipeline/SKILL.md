@@ -669,3 +669,18 @@ All tasks complete:
 [Rulings exported] [doc-check] [workspace deleted] [push + PR]
 Use superpowers:finishing-a-development-branch.
 ```
+
+
+## Candidate-bound test impact gates (R4)
+
+At task and integration gates, `run-gates` may execute only the selected test
+paths from a validated impact manifest. The manifest is built from temporary
+Git base and candidate snapshots and uses the allowlisted Graphify AST import
+extractor; only proven local imports select tests. Missing or uncertain graph
+coverage runs each configured full test suite. Integration selection compares
+the merged candidate to the exact pre-wave commit. Baseline and closing gates
+always run full suites. Analysis and formatting commands retain their
+ledgered full-scope argv. Gate evidence binds the manifest and executed test
+argv to the candidate; any change detected after execution prevents PASS.
+Graphify graph files remain in disposable snapshot folders and provide no
+worker or reviewer context.

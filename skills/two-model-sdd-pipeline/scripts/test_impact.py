@@ -312,6 +312,18 @@ def _affected_argv(argv: list[str], adapter: str, paths: list[str]) -> list[str]
     return argv + selectors
 
 
+def affected_argv(full_argv: list[str], adapter: str | None, tests: list[str]) -> list[str]:
+    """Derive safe affected-test argv from a trusted descriptor and paths."""
+    if not isinstance(full_argv, list) or not full_argv or not all(
+        isinstance(part, str) and part and "\x00" not in part for part in full_argv
+    ):
+        _fail("full test argv must be a nonempty string array")
+    selected = _paths(tests, "selected test paths")
+    if adapter is not None and not isinstance(adapter, str):
+        _fail("test adapter must be a string or null")
+    return _affected_argv(full_argv, adapter or "", selected)
+
+
 def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
     """Select impacted test paths and commands from base/head evidence.
 
