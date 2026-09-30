@@ -165,6 +165,11 @@ class GraphifyGateExecutionTests(unittest.TestCase):
         (workspace / "ledger.jsonl").write_text(json.dumps({"type": "gate", "task": "-",
             "summary": "configured", "toolchain_id": "python", "toolchain_descriptor": descriptor}) + "\n",
             encoding="utf-8")
+        source = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                                capture_output=True, text=True, check=True).stdout.strip()
+        (workspace / "base-commit.txt").write_text(source + "\n", encoding="utf-8")
+        context = load("graph_context").prepare(workspace, root, workspace / "plan.json", source)
+        self.assertTrue(context["complete"], context)
         result = subprocess.run(["bash", str(RUN_GATES), str(workspace), "--tasks", "1"],
                                 cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -303,6 +303,15 @@ def _impact_test_argv(workspace: str, entry: dict[str, Any], spec: dict[str, Any
         if mismatches:
             raise ValueError("impact manifest toolchain contract differs from the ledger (%s)"
                              % ", ".join(mismatches))
+        phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
+        if command.get("skip_tests") is True:
+            proof = manifest["evidence"].get("green_subtractions", [])
+            if (phase != "integration" or command.get("full_suite") is not False
+                    or command.get("tests") != [] or command.get("argv") != []
+                    or not any(item.get("toolchain_id") == identity for item in proof
+                               if isinstance(item, dict))):
+                raise ValueError("test skip lacks valid integration Green evidence")
+            return [], manifest["selection_hash"]
         full_argv = list(spec["argv"])
         if command.get("full_suite") is True:
             if command.get("argv") != full_argv or command.get("tests") != []:
@@ -313,7 +322,6 @@ def _impact_test_argv(workspace: str, entry: dict[str, Any], spec: dict[str, Any
         expected = test_impact.affected_argv(full_argv, descriptor.get("red_adapter"), command.get("tests"))
         if command.get("argv") != expected:
             raise ValueError("impact manifest selected argv is not derived from the ledger")
-        phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
         if phase in ("baseline", "closing"):
             return full_argv, manifest["selection_hash"]
         return expected, manifest["selection_hash"]
@@ -377,8 +385,17 @@ def _run_one(workspace: str, entry: dict[str, Any], name: str, log_path: str) ->
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     argv = list(spec["argv"])
     selection_hash = None
+    skip_tests = False
     if name == "test":
         argv, selection_hash = _impact_test_argv(workspace, entry, spec)
+        skip_tests = not argv and selection_hash is not None
+        if skip_tests:
+            _record_executed_command(workspace, entry, name, argv, cwd, selection_hash)
+            Path(log_path).write_text(
+                "RUN-GATES: selected tests were already Green with matching candidate inputs; skipped.\n",
+                encoding="utf-8")
+            Path(log_path + ".exit-code").write_text("0", encoding="ascii")
+            return 0
         adapter = descriptor.get("red_adapter")
         evidence_file = log_path + ".report.json"
         if adapter == "pytest_json_report":

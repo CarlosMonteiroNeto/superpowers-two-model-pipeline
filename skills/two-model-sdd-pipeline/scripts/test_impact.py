@@ -340,6 +340,13 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
     if edges is not None:
         if isinstance(graph.get("version"), bool) or graph.get("version") != 1:
             graph_error = "dependency graph version is missing or unsupported"
+        elif isinstance(graph.get("provenance"), dict) and graph["provenance"].get("kind") == "run_start":
+            provenance = graph["provenance"]
+            if ((graph.get("base_commit") or "").lower() != str(normalized.get("run_start_commit", "")).lower()
+                    or (graph.get("base_tree_hash") or "").lower() != str(normalized.get("run_start_tree_hash", "")).lower()
+                    or provenance.get("run_start_commit") != graph.get("base_commit")
+                    or provenance.get("run_start_tree_hash") != graph.get("base_tree_hash")):
+                graph_error = "dependency graph is stale for the run-start source tree"
         elif ((graph.get("base_commit") or "").lower() != normalized["base_commit"]
               or (graph.get("base_tree_hash") or "").lower() != normalized["base_tree_hash"]):
             graph_error = "dependency graph is stale for the selected base commit/tree"

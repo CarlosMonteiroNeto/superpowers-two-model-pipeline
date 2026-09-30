@@ -113,3 +113,39 @@ The R4 decision is deliberately narrower than the superseded workflow:
 The user explicitly approved this scope change on 2026-09-30. This amendment
 supersedes only the 2026-09-10 statement that no stage may build a code graph;
 all other removal decisions above remain in force.
+
+## R4 amendment (2026-09-30): script-owned graph context and run-scoped reuse
+
+The user clarified that the plan author must not read or summarize the graph.
+After canonical plan validation, Script CEO refreshes and reads the run-start
+raw AST graph once, derives task dependency metadata, and stores an immutable
+run-local index. `brief-scaffold` queries that index for the current task and
+adds only a bounded structural slice to the coder brief. The authored canonical
+`plan.json` remains unchanged; graph-derived data is script-owned runtime
+metadata keyed to its source-tree and plan identities. Per-task briefs and
+corrective briefs must not invoke Graphify or reload the complete graph.
+
+The per-gate raw Graphify rebuild in the initial R4 design is superseded by this
+run-scoped map for task-level affected-test selection. The map is explicitly
+bound to the run-start source tree; candidate diffs still determine changed
+paths. If the map or Green evidence cannot prove a safe narrowed selection,
+the gate executes the configured full suite. A task's own tests already
+passed by Green are omitted from its affected integration selection only while
+their file and relevant-input evidence remains valid. Closing always executes
+all configured suites, catching interactions introduced after the run-start
+snapshot.
+
+For `pull_request` publication, refresh tracked Graphify output before the
+closing full-suite gate and final review so the graph is part of the reviewed
+candidate. Never update it after final review. The persisted Graphify view may
+contain undirected merged relations and is for project navigation only; R4
+directional test impact continues to come exclusively from the validated raw
+AST extraction contract. `local` publication does not refresh tracked graph
+artifacts. A failed required refresh blocks publication.
+
+This amendment supersedes the R4 design's per-gate full graph extraction and
+its prohibition on script-generated graph context in coder briefs. It does not
+give the planning agent graph input, make graph inspection an LLM stage, or
+permit persisted merged edges to control test selection. Detailed contracts
+and verification are in
+`docs/superpowers/specs/2026-09-30-r4-script-owned-graph-context.md`.

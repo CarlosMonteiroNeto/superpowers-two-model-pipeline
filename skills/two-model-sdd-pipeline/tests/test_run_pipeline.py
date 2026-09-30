@@ -316,6 +316,15 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         for want in ("brief_ready", "task_complete", "final_review"):
             self.assertIn(want, ledger_text)
         self.assertTrue((ws / "closing-review.diff").exists())
+        self.assertTrue((ws / "graph-context.sqlite3").is_file(),
+                        "run-start graph preparation must precede task dispatch")
+        first_brief = (ws / "task-1-brief.md").read_text(encoding="utf-8")
+        self.assertIn("## Graph context (script-derived)", first_brief)
+        self.assertIn("Status: unavailable", first_brief,
+                      "Go-only fixture has no supported graph evidence and must fall back safely")
+        canonical_plan = self.plan.read_text(encoding="utf-8")
+        self.assertNotIn("graph_digest", canonical_plan,
+                         "derived graph metadata must stay out of the planner-authored plan")
         dcalls = self.dispatch_log.read_text(encoding="utf-8")
         self.assertNotIn("EXPAND", dcalls)
         # Complete plan: exactly one task-generator dispatch, the closing one.

@@ -229,6 +229,18 @@ run_gate() {
     return "$rc"
   fi
   for task_id in "${selected[@]}"; do
+    # R4: make the task's candidate-bound Green evidence available to the
+    # integration selector before it decides which already-passing tests can
+    # be omitted. The selector revalidates config, environment, graph source,
+    # and every recorded test input against this merged candidate.
+    local task_wt task_ws green_source
+    task_wt=$(worktree_of "$task_id")
+    task_ws="$task_wt/.superpowers/two-model/$slug"
+    green_source="$task_ws/green-evidence/task-$task_id.json"
+    if [ -f "$green_source" ]; then
+      mkdir -p "$ws/green-evidence"
+      cp -f "$green_source" "$ws/green-evidence/task-$task_id.json"
+    fi
     if ! lang=$(python3 "$script_dir/toolchain_gate.py" task-lang "$ws" "$task_id"); then
       echo "INTEGRATE: cannot resolve language for task $task_id; refusing gate fallback" >&2
       return 3

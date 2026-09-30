@@ -121,6 +121,20 @@ mkdir -p "$wt_ws"
 printf '*\n' > "$root/.superpowers/two-model/.gitignore"
 printf '*\n' > "$wt/.superpowers/two-model/.gitignore"
 cp -f "$ws/plan.json" "$wt_ws/plan.json"
+if [ -f "$ws/base-commit.txt" ]; then cp -f "$ws/base-commit.txt" "$wt_ws/base-commit.txt"; fi
+# R4: task worktrees reuse the integration run's immutable graph cache and
+# generated task slices. The per-task brief can then query its local slice
+# without refreshing or reading the full Graphify graph.
+if [ -f "$ws/graph-context.sqlite3" ]; then
+  cp -f "$ws/graph-context.sqlite3" "$wt_ws/graph-context.sqlite3"
+fi
+if [ -f "$ws/graph-context-status.json" ]; then
+  cp -f "$ws/graph-context-status.json" "$wt_ws/graph-context-status.json"
+fi
+if [ -d "$ws/graph-task-context" ]; then
+  mkdir -p "$wt_ws/graph-task-context"
+  cp -f "$ws/graph-task-context/"*.json "$wt_ws/graph-task-context/" 2>/dev/null || true
+fi
 mkdir -p "$(dirname "$owner_file")"
 python3 - "$owner_file" "$root" "$ws" "$wt" "$branch" "$run_id" "$task" "$base" <<'PY'
 import json, os, sys, tempfile

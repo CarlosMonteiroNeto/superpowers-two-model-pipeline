@@ -60,6 +60,20 @@ class WorktreeTest(unittest.TestCase):
         self.assertIn("worktree_alloc",
                       (self.ws / "ledger.jsonl").read_text(encoding="utf-8"))
 
+    def test_alloc_seeds_run_graph_cache_and_task_context(self):
+        (self.ws / "graph-context.sqlite3").write_bytes(b"run-start graph cache")
+        graph_tasks = self.ws / "graph-task-context"
+        graph_tasks.mkdir()
+        (graph_tasks / "3.json").write_text('{"task": {"task_id": "3"}}\n', encoding="utf-8")
+
+        result = self.run_it("worktree-alloc", 3)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        wt_ws = self.repo / ".superpowers" / "two-model" / "worktrees" / "task-3" / ".superpowers" / "two-model" / "plan"
+        self.assertEqual((wt_ws / "graph-context.sqlite3").read_bytes(), b"run-start graph cache")
+        self.assertEqual((wt_ws / "graph-task-context" / "3.json").read_text(encoding="utf-8"),
+                         '{"task": {"task_id": "3"}}\n')
+
     def test_alloc_leaves_integration_tree_clean(self):
         self.run_it("worktree-alloc", 3)
         out = subprocess.run(["git", "-C", str(self.repo), "status", "--porcelain"],

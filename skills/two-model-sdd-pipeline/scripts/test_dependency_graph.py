@@ -33,6 +33,7 @@ def _digest(value: Any) -> str:
 def _empty(version: str | None, diagnostics: list[str], inventory_hash: str = "") -> dict[str, Any]:
     return {
         "complete": False,
+        "forward_edges": {},
         "reverse_edges": {},
         "graphify_version": version,
         "graph_digest": "",
@@ -421,6 +422,7 @@ def build(snapshot: pathlib.Path, expected_version: str) -> dict[str, Any]:
         diagnostics.extend(dart_errors)
         if diagnostics:
             return _empty(observed_version, diagnostics, inventory_hash)
+        forward: dict[str, set[str]] = {}
         reverse: dict[str, set[str]] = {}
         for edge in graph[raw_edges_key]:
             if not isinstance(edge, dict):
@@ -457,8 +459,10 @@ def build(snapshot: pathlib.Path, expected_version: str) -> dict[str, Any]:
                 return _empty(observed_version, ["unresolved or ambiguous import target: " + target_label], inventory_hash)
             if target_path is not None:
                 reverse.setdefault(target_path, set()).add(source_file)
+                forward.setdefault(source_file, set()).add(target_path)
         return {
             "complete": True,
+            "forward_edges": {key: sorted(values) for key, values in sorted(forward.items())},
             "reverse_edges": {key: sorted(values) for key, values in sorted(reverse.items())},
             "graphify_version": observed_version,
             "graph_digest": graph_digest,

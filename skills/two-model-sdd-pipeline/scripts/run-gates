@@ -145,6 +145,10 @@ import hashlib, json, os, pathlib, shutil, subprocess, sys
 script_dir, manifest_path, ledger, phase, task_id, gate_rc = sys.argv[1:]
 ws = pathlib.Path(manifest_path).parent
 manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
+if phase == "task" and gate_rc == "0" and task_id != "-":
+    sys.path.insert(0, script_dir)
+    import gate_evidence
+    gate_evidence.record_green_evidence(ws, task_id, gate_evidence.validate_manifest(manifest))
 identity = manifest["identity"]
 kind = "impact_gate_evidence"
 summary = "{} gate status={} mode={}".format(phase, "PASS" if gate_rc == "0" else "FAIL", manifest["mode"])

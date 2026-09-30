@@ -171,6 +171,30 @@ PRINCIPLES
 - Agente revisor reviews compiler-approved code only (Item 2) and returns a
   structured JSON verdict; minor findings are PARKED for closing, never fix
   loops.
+
+R4 GRAPH AND TEST IMPACT
+------------------------
+After the canonical plan is validated, run-pipeline refreshes and reads the
+allowlisted raw Graphify AST import graph once from the recorded run-start
+commit. Scripts keep an immutable run-local SQLite index and per-task sidecars;
+the authored plan remains unchanged and its author receives no graph payload.
+brief-scaffold reads only a task's slice and adds a coder-only graph context
+section capped at 100 lines and 12,000 bytes. Corrective tasks reuse the same
+index and query their own touches.
+
+Task and integration gates query only dependency neighbors reachable from the
+actual diff. Missing, stale, incomplete, unsupported, or uncertain graph data
+selects every configured full test suite. An integration gate omits a task
+test already passed by Green only while its input hashes, command
+configuration, and environment still match; a changed input restores it to
+the selection. Baseline and closing always run full suites.
+
+For pull_request publication, tracked Graphify project-view files refresh once
+before closing verification and final review. The script blocks on pre-existing
+graphify-out/ changes and commits only refreshed tracked Graphify files. Local publication
+skips that update. The reviewed HEAD must remain unchanged through
+publication. The persisted, potentially undirected project view never drives
+test selection; that uses only the isolated raw AST import graph.
 - Corrective tasks append to plan.json (`corrects: N`); `brief-scaffold`
   builds the corrective brief and the SAME operador session resumes until
   green. On resume (dispatch --continue --session),

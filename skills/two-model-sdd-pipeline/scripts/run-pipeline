@@ -120,6 +120,16 @@ if [ ! -f "$WS/target-branch.txt" ]; then
   target_branch=${PIPELINE_TARGET_BRANCH:-$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf main)}
   printf '%s\n' "$target_branch" > "$WS/target-branch.txt" || { echo "RUN-PIPELINE: cannot record target branch" >&2; exit 1; }
 fi
+# R4: prepare the directed dependency graph once from the exact run-start
+# commit. This script-owned cache is copied into isolated task workspaces;
+# brief-scaffold only reads each task's bounded slice and never runs Graphify.
+# An unavailable or incomplete graph is recorded as such and downstream gates
+# conservatively use their configured full suites.
+source_commit=$(cat "$WS/base-commit.txt")
+if ! python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import graph_context; result=graph_context.prepare(sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5]); print("RUN-PIPELINE: graph context {} ({})".format("ready" if result.get("complete") else "incomplete", result.get("graph_digest", "")))' \
+    "$SCRIPT_DIR" "$WS" "$ROOT" "$WS/plan.json" "$source_commit"; then
+  echo "RUN-PIPELINE: graph context preparation failed; affected gates must use full configured suites" >&2
+fi
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 # CODER_GATE is a legacy alias; the orchestrator and this script now share the
 # single CODER_GATE_BIN name.
@@ -525,6 +535,22 @@ refresh_plan_snapshot || block "plan refresh failed before closing"
 check_total_fresh
 total=$(total_now)
 cd "$ROOT" || block "cannot cd to $ROOT"
+publication=local
+if [ "$NO_PUSH" -eq 0 ]; then
+  if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+    publication=${PIPELINE_PUBLICATION:-}
+    case "$publication" in local|pull_request) ;; *) block "Codex run requires explicit local or pull_request publication policy" ;; esac
+  else
+    publication=pull_request
+  fi
+fi
+if [ "$publication" = pull_request ]; then
+  # R4: tracked Graphify files join the reviewed candidate before the closing
+  # full-suite gate and final review. publication.py remains push-only.
+  python3 "$SCRIPT_DIR/graph_publication.py" --repository "$ROOT" \
+    --graphify-bin "${GRAPHIFY_BIN:-graphify}" \
+    || block "required Graphify publication refresh failed; run remains resumable"
+fi
 base=$(cat "$WS/base-commit.txt")
 target_branch=$(cat "$WS/target-branch.txt")
 target_commit=$(git rev-parse --verify "$target_branch^{commit}" 2>/dev/null) \
@@ -577,13 +603,11 @@ else
   ledger final_review "-" "diretor closing complete"
 fi
 if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
-  publication=${PIPELINE_PUBLICATION:-}
-  [ "$NO_PUSH" -eq 0 ] || publication=local
-  case "$publication" in local|pull_request) ;; *) block "Codex run requires explicit local or pull_request publication policy" ;; esac
   branch=$(git branch --show-current) || block "cannot determine branch"
   [ -n "$branch" ] || block "detached HEAD - select an integration branch"
   python3 "$SCRIPT_DIR/publication.py" --repository "$ROOT" --branch "$branch" \
-    --target "$target_branch" --policy "$publication" || block "publication failed; run remains resumable"
+    --target "$target_branch" --policy "$publication" --expected-head "$candidate" \
+    || block "publication failed; run remains resumable"
   say "closing complete under $publication policy"
   exit 0
 fi
@@ -593,6 +617,8 @@ if [ "$NO_PUSH" -eq 1 ]; then
 fi
 branch=$(git branch --show-current) || block "cannot determine branch"
 [ -n "$branch" ] || block "detached HEAD - push manually"
+current_head=$(git rev-parse HEAD) || block "cannot verify the approved candidate HEAD"
+[ "$current_head" = "$candidate" ] || block "HEAD changed after closing/final review approval"
 git push -u origin "$branch" || block "push rejected - investigate, force-push only on explicit request"
 if command -v gh >/dev/null 2>&1; then
   gh pr create --fill --base main 2>/dev/null \
