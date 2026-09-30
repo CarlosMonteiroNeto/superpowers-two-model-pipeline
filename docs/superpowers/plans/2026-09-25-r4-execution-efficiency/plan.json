@@ -121,13 +121,16 @@
       "spec_refs": [
         "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
         "roadmap.md#d10--affected-tests-per-task-complete-suite-at-closing",
-        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions",
+        "docs/superpowers/specs/2026-09-30-r4-trusted-impact-gates-design.md#graphify-decision"
       ],
       "touches": [
         "skills/two-model-sdd-pipeline/scripts/test_impact.py",
         "skills/two-model-sdd-pipeline/scripts/select-tests",
         "skills/two-model-sdd-pipeline/schemas/test-impact.schema.json",
-        "skills/two-model-sdd-pipeline/toolchains/test-impact-rules.json"
+        "skills/two-model-sdd-pipeline/toolchains/test-impact-rules.json",
+        "skills/two-model-sdd-pipeline/scripts/test_dependency_graph.py",
+        "skills/two-model-sdd-pipeline/tests/test_r4_dependency_graph.py"
       ],
       "depends_on": [],
       "acceptance": [
@@ -135,7 +138,8 @@
         "Include affected consumers, contracts and integration checks. A changed production path with no match is an explicit gap requiring broader tests.",
         "Missing/stale graph, unknown language, dependency/build/test configuration, shared infrastructure or generated contract changes expand to full suite. Do not infer completeness from file-name proximity.",
         "Provide initial Python unittest and Flutter/Dart rules with demonstrable mappings; unsupported Node/Rust/Go configurations retain full-suite descriptors until adapter evidence exists.",
-        "Use deterministic traversal and stable output; reject unsafe argv/path selectors and malformed graphs. Cover cycles, renames, deleted tests, transitive imports and shared-code changes."
+        "Use deterministic traversal and stable output; reject unsafe argv/path selectors and malformed graphs. Cover cycles, renames, deleted tests, transitive imports and shared-code changes.",
+        "Build a fresh Graphify 0.9.50 raw AST graph from an isolated baseline/candidate snapshot with `--no-cluster`; use only validated AST-origin imports/imports_from, validate source inventory and Dart/package/ Python module resolution, and fail closed to complete suites for missing/untrusted evidence. The old Graphify knowledge/context stage remains excluded."
       ],
       "interfaces": {
         "produces": [
@@ -149,7 +153,8 @@
       "verification": {
         "new_test_files": [
           "skills/two-model-sdd-pipeline/tests/test_r4_test_impact.py",
-          "skills/two-model-sdd-pipeline/tests/test_r4_impact_fallbacks.py"
+          "skills/two-model-sdd-pipeline/tests/test_r4_impact_fallbacks.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_dependency_graph.py"
         ],
         "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
         "additional_checks": [
@@ -210,7 +215,8 @@
       "spec_refs": [
         "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
         "roadmap.md#d10--affected-tests-per-task-complete-suite-at-closing",
-        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions",
+        "docs/superpowers/specs/2026-09-30-r4-trusted-impact-gates-design.md#graphify-decision"
       ],
       "touches": [
         "skills/two-model-sdd-pipeline/scripts/run-gates",
@@ -218,7 +224,11 @@
         "skills/two-model-sdd-pipeline/scripts/final-gate",
         "skills/two-model-sdd-pipeline/scripts/gate_evidence.py",
         "skills/flutter-app-pipeline/scripts/gate-entry",
-        "skills/two-model-sdd-pipeline/prompts/core-operator.md"
+        "skills/two-model-sdd-pipeline/prompts/core-operator.md",
+        "skills/two-model-sdd-pipeline/scripts/test_dependency_graph.py",
+        "skills/two-model-sdd-pipeline/scripts/toolchain_gate.py",
+        "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_evidence.py",
+        "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_execution.py"
       ],
       "depends_on": [
         1,
@@ -231,7 +241,8 @@
         "Closing requires every configured suite for every affected toolchain. Cache reuse needs identical tree/environment/commands/config; otherwise rerun.",
         "Final new regressions block completion/publication and reopen work. Proven pre-existing failures require a valid candidate-bound user waiver; preserve a non-green, explicitly waived completion status. Unknown impact broadens test selection.",
         "Update operator guidance to focused iteration and script-owned verification, explicitly overriding upstream pre-commit full-suite language only under this verified policy.",
-        "Fixtures simulate cross-task regression, stale evidence, configuration changes, no test matches, mixed toolchains and final failure."
+        "Fixtures simulate cross-task regression, stale evidence, configuration changes, no test matches, mixed toolchains and final failure.",
+        "Task/integration gates execute only validated manifest test argv for the exact candidate; baseline/closing execute full suites. Graphify or candidate drift rejects selective PASS, while analysis/format scope and the user checkout graphify-out remain untouched."
       ],
       "interfaces": {
         "produces": [
@@ -245,7 +256,9 @@
       "verification": {
         "new_test_files": [
           "skills/two-model-sdd-pipeline/tests/test_r4_impact_gate_wiring.py",
-          "skills/two-model-sdd-pipeline/tests/test_r4_final_suite.py"
+          "skills/two-model-sdd-pipeline/tests/test_r4_final_suite.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_evidence.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_execution.py"
         ],
         "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
         "additional_checks": [

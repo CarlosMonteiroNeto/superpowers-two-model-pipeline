@@ -1,11 +1,11 @@
 # ADR-0004: Graphify — update before commit, subgraph read immediately after, for B and D
 
-> **SUPERSEDED (2026-09-10):** the knowledge graph is fully out of the
-> pipeline. No stage builds, updates, or queries a code graph; the
-> graphify integration scripts were removed. This record is kept as history.
+> **Historical decision superseded for R4's narrow test-impact use (2026-09-30).**
+> The old knowledge/context graph workflow remains removed. R4 adds a new,
+> isolated AST dependency-extraction use described in the amendment below.
 
-- **Status:** SUPERSEDED (was: Amended — superseded the original "post-commit update only" decision)
-- **Date:** 2026-09-02 (amended 2026-09-05, superseded 2026-09-10)
+- **Status:** AMENDED (historical context-graph workflow remains superseded)
+- **Date:** 2026-09-02 (amended 2026-09-05, superseded 2026-09-10, narrowly amended 2026-09-30)
 
 ## Context
 
@@ -70,3 +70,46 @@ the benefit).
 - **Keep the main agent gathering interfaces (current):** rejected — it is the
   only non-deterministic slice in subagent headers and defeats the script-driven
   dispatch design.
+
+## R4 amendment (2026-09-30): isolated AST dependency extraction
+
+The user authorized reconsidering Graphify for R4 and changing this ADR. A
+disposable probe of installed Graphify 0.9.50 confirmed that
+`graphify extract <snapshot> --code-only --no-cluster --out <temporary-dir>`
+produces a raw AST graph with oriented import edges for Python and Dart without
+invoking an LLM. The `update` command is explicitly rejected: the observed
+0.9.50 output set `directed: false`, and Graphify documents that update can
+drop direction through its graph merge ([Graphify issue #2342](https://github.com/Graphify-Labs/graphify/issues/2342)).
+The raw extractor writes `edges` rather than `links`; the adapter accepts that
+raw schema only and verifies that each import edge's source node matches its
+`source_file` before trusting source-to-target orientation. Python imports may
+refer to standard-library/declared external modules without repository nodes.
+Dart package imports may also target URI-only nodes, so the R4 adapter resolves
+the project's own `package:` URIs through its `pubspec.yaml`, ignores only
+verified external dependencies, and fails closed for missing or ambiguous
+files.
+
+The R4 decision is deliberately narrower than the superseded workflow:
+
+- Graphify may build a fresh, temporary raw AST graph solely to derive
+  source-to-test dependencies for task and integration test selection. Only
+  `extract --code-only --no-cluster` is used; `update` is prohibited because
+  its persisted undirected format cannot prove import orientation.
+- Only validated Graphify version/schema and AST-origin `imports` or
+  `imports_from` relations may contribute edges. Other relations, inferred
+  edges, semantic extraction, clustering, and labeling are not used.
+- The graph is built from exact isolated Git source snapshots, identity-bound
+  to their source commit/tree, and deleted with the temporary workspace. No
+  `graphify-out/` artifact enters the user's checkout or commit.
+- Missing or incompatible Graphify, extraction errors, failed sources,
+  unsupported/dynamic imports, unresolved targets, or ambiguous path mapping
+  select complete configured suites. Closing verification remains full-suite.
+- The adapter feeds the existing deterministic selector; it does not expose
+  graph context to workers/reviewers, query the general knowledge graph, or
+  add another dispatch/stage to the LLM workflow.
+- R5 may consume the shared R4 impact contract but must not broaden this
+  adapter into template recall, planning context, or a new Graphify stage.
+
+The user explicitly approved this scope change on 2026-09-30. This amendment
+supersedes only the 2026-09-10 statement that no stage may build a code graph;
+all other removal decisions above remain in force.

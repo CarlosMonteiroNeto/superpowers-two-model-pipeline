@@ -343,7 +343,7 @@
         "Automatically adopt suitable templates when requirements/technical compatibility checks pass; raise questions only for changes/conflicts requiring judgment. Source score alone cannot authorize adoption. Stage material safely and preserve target project changes.",
         "Allow new compatible, license-approved dependencies without separate user approval; unknown/conflicting checks ask the user. Acquire director-approved existing manifest/lockfile grants and coordinate writes through the shared resource lock before install.",
         "Record versions, license/compatibility evidence, downloads/cache effects and source provenance. Keep secrets out of artifacts; never describe pub get as lockfile-only.",
-        "Keep RED/GREEN/review/RTK/final behavior routed to already shared owners. Generalize requirements and research entry points while leaving Flutter-specific UI/tooling in adapters; no graphify stage.",
+        "Keep RED/GREEN/review/RTK/final behavior routed to already shared owners. Generalize requirements and research entry points while leaving Flutter-specific UI/tooling in adapters; do not add a Graphify context stage or broaden the narrowly scoped R4 source-to-test impact adapter.",
         "Fixtures prove generic operation without Flutter binaries when no Flutter capability applies, existing Flutter command compatibility, auto-adoption, ambiguous compatibility, dependency conflict and concurrent manifest claims."
       ],
       "interfaces": {
@@ -398,7 +398,7 @@
       "acceptance": [
         "Planning resolves profiles and installed skills, consults cached external sources for missing coverage, and automatically adopts compatible templates. Present a consolidated baseline summary; ask only about ambiguous applicability, conflicts or exceptions. External skill installation still requires approval.",
         "Generic tooling/debug tasks do not receive irrelevant Flutter/category requirements. Missing required skill blocks; optional omissions are explicit.",
-        "Record archive-by-file dispositions with current contract reasons; do not copy stale code or reinstate a graphify dependency.",
+        "Record archive-by-file dispositions with current contract reasons; do not copy stale code or broaden the narrowly scoped R4 Graphify adapter into a planning/reuse dependency.",
         "Package generic and ecosystem profiles/assets fully; retain compatibility wrappers for existing Flutter callers.",
         "Acceptance covers one Flutter planning fixture and one Python fixture, migration rollback, adoption outcomes, update conflicts and license/provenance failures; full suites close the round.",
         "Every Flutter stage inventory row resolves to a tested shared capability or an intentionally specialized adapter. No newly supported language is claimed from a generic fixture."
