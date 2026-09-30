@@ -74,6 +74,28 @@ class GraphifyGateEvidenceTests(unittest.TestCase):
         self.assertEqual(manifest["mode"], "full_suite")
         self.assertFalse(manifest["evidence"]["graph_provenance"]["complete"])
 
+    def test_configuration_full_suite_skips_graph_reads_and_snapshot_materialization(self):
+        self._write("pyproject.toml", "[tool.pytest.ini_options]\n")
+        self._git("add", "pyproject.toml")
+        gate = subject()
+        with mock.patch.object(gate, "_run_start_graph",
+                               side_effect=AssertionError("configuration fallback must precede graph access")):
+            manifest = gate.create_workspace_manifest(str(self.workspace), ["1"], "tasks")
+        self.assertEqual(manifest["mode"], "full_suite")
+        self.assertIn("changed dependency, build, or test configuration requires complete suite",
+                      manifest["reasons"])
+        self.assertIn("graph acquisition skipped during preflight",
+                      manifest["evidence"]["graph_provenance"]["diagnostics"])
+
+    def test_workspace_input_capture_does_not_read_graph_or_write_manifest(self):
+        gate = subject()
+        with mock.patch.object(gate, "_run_start_graph",
+                               side_effect=AssertionError("input capture must not read graph evidence")):
+            inputs = gate.capture_workspace_inputs(str(self.workspace), ["1"], "tasks")
+        self.assertEqual(inputs["descriptors"][0]["id"], "python")
+        self.assertEqual(inputs["phase"], "task")
+        self.assertFalse((self.workspace / "impact-manifest.json").exists())
+
     def test_task_gate_reuses_run_start_cache_without_graphify(self):
         scripts = str(SCRIPTS)
         if scripts not in sys.path:

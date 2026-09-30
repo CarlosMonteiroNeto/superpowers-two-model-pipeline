@@ -256,6 +256,61 @@ def _changed_paths(files: list[dict[str, str]]) -> list[tuple[str, str]]:
     return sorted(set(result))
 
 
+def preflight(diff: dict, toolchains: list, policy: dict, phase: str) -> dict:
+    """Classify graph-independent full-suite decisions before graph acquisition."""
+    normalized, files, _task_scope, declared_tests = _read_diff(diff)
+    if not isinstance(policy, dict) or not isinstance(policy.get("version"), str) or not policy["version"]:
+        _fail("policy.version is required")
+    if not isinstance(toolchains, list) or not toolchains:
+        _fail("toolchains must be a nonempty list")
+    parsed = [_command(raw, index) for index, raw in enumerate(toolchains)]
+    identifiers = [item[0] for item in parsed]
+    if len(identifiers) != len(set(identifiers)):
+        _fail("toolchains contain duplicate ids")
+    changed = _changed_paths(files)
+    unclassified = _unclassified_changes(changed, declared_tests, parsed, policy)
+    reasons: dict[str, str | None] = {}
+    graph_candidates: list[tuple[str, list[tuple[str, str]]]] = []
+
+    for descriptor in parsed:
+        identifier, language, adapter, _argv, _cwd, _env = descriptor
+        rule = _rule_for(language, policy)
+        reason: str | None = None
+        if phase in ("baseline", "closing"):
+            reason = "full test suites are required in %s phase" % phase
+        elif rule is None:
+            reason = "unsupported language %s has no tested impact adapter" % language
+        elif rule.get("supported") is not True or adapter not in rule.get("adapters", []):
+            reason = "unsupported adapter for %s; retain its complete suite" % language
+        else:
+            reason = _full_suite_reason(files, policy, rule)
+            if reason is None and unclassified:
+                reason = "unclassified changes require complete suite"
+            if reason is None:
+                test_globs = _globs(rule.get("test_globs", []), "policy language %s test_globs" % language)
+                deleted_tests = sorted({path for path, kind in changed
+                                        if kind == "deleted source" and _matches(path, test_globs)})
+                if deleted_tests:
+                    reason = "deleted test cannot be executed: " + ", ".join(deleted_tests)
+            if reason is None:
+                source_globs = _globs(rule.get("source_globs", []), "policy language %s source_globs" % language)
+                graph_changes = [(path, kind) for path, kind in changed
+                                 if _matches(path, source_globs) and not _matches(path, test_globs)]
+                if graph_changes:
+                    graph_candidates.append((identifier, graph_changes))
+        reasons[identifier] = reason
+
+    requires_graph = any(reasons[identifier] is None for identifier, _changes in graph_candidates)
+    if not files and all(reason is None for reason in reasons.values()):
+        reason = "empty diff cannot justify an affected-test selection; complete suite required"
+        reasons = {identifier: reason for identifier in identifiers}
+        requires_graph = False
+    classification_inputs = {key: value for key, value in normalized.items()
+                             if key not in ("run_start_commit", "run_start_tree_hash")}
+    return {"requires_graph": requires_graph, "toolchain_reasons": reasons,
+            "phase": phase, "diff_hash": _digest_json(classification_inputs)}
+
+
 def _reachable(start: str, edges: dict[str, list[str]]) -> tuple[set[str], list[str]]:
     visited = {start}
     queue = deque([start])
@@ -324,7 +379,8 @@ def affected_argv(full_argv: list[str], adapter: str | None, tests: list[str]) -
     return _affected_argv(full_argv, adapter or "", selected)
 
 
-def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
+def select(diff: dict, graph: dict, toolchains: list, policy: dict,
+           preflight_result: dict | None = None, phase: str = "task") -> dict:
     """Select impacted test paths and commands from base/head evidence.
 
     ``graph.reverse_edges`` points from a changed node to its direct consumers.
@@ -354,6 +410,12 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
     parsed_toolchains = [
         (raw, _command(raw, index)) for index, raw in enumerate(toolchains)
     ]
+    if preflight_result is not None:
+        expected = preflight(diff, toolchains, policy, phase)
+        if preflight_result != expected:
+            _fail("preflight result does not match current impact inputs")
+        if not preflight_result["requires_graph"]:
+            graph_error = None
     changed = _changed_paths(files)
     unclassified = _unclassified_changes(changed, declared_tests,
                                          [item[1] for item in parsed_toolchains], policy)
@@ -372,13 +434,15 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
         toolchain_evidence.append({"id": identifier, "language": language, "red_adapter": adapter,
                                    "test": {"argv": full_argv, "cwd": cwd, "env": env}})
         rule = _rule_for(language, policy)
-        full_reason = graph_error
-        if rule is None:
-            full_reason = "unsupported language %s has no tested impact adapter" % language
-        elif rule.get("supported") is not True or adapter not in rule.get("adapters", []):
-            full_reason = "unsupported adapter for %s; retain its complete suite" % language
-        if full_reason is None and rule is not None:
-            full_reason = _full_suite_reason(files, policy, rule)
+        full_reason = (preflight_result["toolchain_reasons"].get(identifier)
+                       if preflight_result is not None else graph_error)
+        if full_reason is None and preflight_result is None:
+            if rule is None:
+                full_reason = "unsupported language %s has no tested impact adapter" % language
+            elif rule.get("supported") is not True or adapter not in rule.get("adapters", []):
+                full_reason = "unsupported adapter for %s; retain its complete suite" % language
+            if full_reason is None and rule is not None:
+                full_reason = _full_suite_reason(files, policy, rule)
 
         impacted: set[str] = set()
         local_gaps: set[str] = set()
@@ -388,7 +452,7 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
                                   "reason": "change is outside every configured toolchain source/test/configuration rule"})
         if unclassified and full_reason is None:
             full_reason = "unclassified changes require complete suite"
-        if full_reason is None and rule is not None and edges is not None:
+        if full_reason is None and rule is not None:
             test_globs = _globs(rule.get("test_globs", []), "policy language %s test_globs" % language)
             source_globs = _globs(rule.get("source_globs", []), "policy language %s source_globs" % language)
             test_extensions = rule.get("test_extensions", [])
@@ -415,6 +479,9 @@ def select(diff: dict, graph: dict, toolchains: list, policy: dict) -> dict:
                                               "reason": "changed test selected directly (%s)" % kind})
                     if not _matches(path, source_globs) or _matches(path, test_globs):
                         continue
+                    if edges is None:
+                        full_reason = graph_error or "dependency graph is missing for production changes"
+                        break
                     _, traversal = _reachable(path, edges)
                     reached_tests = sorted(node for node in traversal if (
                         _matches(node, test_globs) or node in declared_for_language

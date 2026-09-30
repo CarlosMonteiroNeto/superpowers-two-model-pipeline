@@ -515,7 +515,7 @@ def _subtract_green_tests(workspace: pathlib.Path, root: pathlib.Path,
     return removed
 
 
-def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
+def capture_workspace_inputs(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
     """Create a conservative manifest from current Git state and ledger commands.
 
     Dependency evidence is extracted only from disposable Git base/candidate
@@ -649,9 +649,37 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
         run_start_commit = run_start_path.read_text(encoding="utf-8").strip()
     diff["run_start_commit"] = run_start_commit
     phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
-    if phase in ("baseline", "closing"):
+    return {
+        "root": root, "plan": plan, "descriptors": descriptors,
+        "head": head, "base": base, "base_tree": base_tree, "files": files,
+        "test_paths": test_paths, "tree_id": tree_id, "config_hash": config_hash,
+        "environment_hash": environment_hash, "diff": diff, "policy": policy,
+        "run_start_commit": run_start_commit, "phase": phase,
+    }
+
+
+def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
+    """Create a candidate-bound manifest after graph-independent preflight."""
+    import test_impact
+
+    inputs = capture_workspace_inputs(workspace, selection, mode)
+    root = inputs["root"]
+    diff = inputs["diff"]
+    descriptors = inputs["descriptors"]
+    policy = inputs["policy"]
+    run_start_commit = inputs["run_start_commit"]
+    phase = inputs["phase"]
+    files = inputs["files"]
+    head = inputs["head"]
+    tree_id = inputs["tree_id"]
+    config_hash = inputs["config_hash"]
+    environment_hash = inputs["environment_hash"]
+    preflight_result = test_impact.preflight(diff, descriptors, policy, phase)
+    if not preflight_result["requires_graph"]:
+        reasons = sorted({reason for reason in preflight_result["toolchain_reasons"].values()
+                          if reason is not None})
         graph, graph_provenance = None, {"complete": False,
-            "diagnostics": ["full test suites are required in %s phase" % phase]}
+            "diagnostics": ["graph acquisition skipped during preflight", *reasons]}
     else:
         changed_paths = sorted({path for item in files
                                 for path in (item.get("path"), item.get("old_path"), item.get("new_path"))
@@ -661,7 +689,7 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
                                                     run_start_commit, policy)
         if graph is not None:
             diff["run_start_tree_hash"] = graph["base_tree_hash"]
-    manifest = test_impact.select(diff, graph, descriptors, policy)
+    manifest = test_impact.select(diff, graph, descriptors, policy, preflight_result, phase)
     manifest["evidence"]["graph_provenance"] = graph_provenance
     green_subtractions: list[dict[str, str]] = []
     if phase == "integration" and graph is not None:
