@@ -160,6 +160,31 @@ class TestResolveToolchain(CoderGateTestBase):
 
 
 class TestCoderGate(CoderGateTestBase):
+    def test_correction_started_candidate_reaches_gate_instead_of_old_codex_review(self):
+        self.brief()
+        self.write_red_evidence()
+        base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        (self.repo / "file.txt").write_text("reviewed candidate\n", encoding="utf-8")
+        subprocess.run(["git", "add", "file.txt"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "reviewed candidate"], cwd=self.repo, check=True)
+        candidate = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        (self.ws / "task-1-review-state.json").write_text(json.dumps({
+            "base_commit": base, "candidate_commit": candidate,
+            "status": "correction_started", "correction_attempt_id": "attempt-1"}), encoding="utf-8")
+        (self.ws / "task-1-review-package.diff").write_text("old candidate package", encoding="utf-8")
+        gate_calls = self._tmp / "correction-gate-calls.txt"
+        gate = write_stub(self.stub_dir, "correction-gate",
+                          'printf "%s\\n" "$*" >> "$GATE_CALLS"\nexit 0\n')
+        result = run_script("coder-gate", [str(self.ws), "1"], cwd=self.repo,
+                            env_extra={"PIPELINE_BACKEND": "codex", "RUN_GATES_BIN": gate,
+                                       "GATE_CALLS": str(gate_calls), "RTK_ENABLED": "0"})
+        self.assertTrue(gate_calls.exists(), result.stdout + result.stderr)
+        self.assertTrue(any(" --tasks 1" in line or " --toolchains " in line
+                            for line in gate_calls.read_text(encoding="utf-8").splitlines()),
+                        result.stdout + result.stderr)
+        self.assertNotIn("awaits normalized Codex review", result.stderr)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_send_back_direct_fix_reaches_new_candidate_gate(self):
         self._assert_send_back_direct_fix_reaches_new_candidate_gate("opencode")
 
@@ -190,9 +215,10 @@ class TestCoderGate(CoderGateTestBase):
                                      "commits": candidate}) + "\n")
             handle.write(json.dumps({"type": "review_outcome", "task": "1",
                                      "summary": "SEND_BACK", "findings": "1"}) + "\n")
-        gate_marker = self._tmp / "gate-ran.txt"
+        event_log = self._tmp / "task-run-gate-events.txt"
         dispatch_log = self._tmp / "dispatch-r4.log"
-        gate = write_stub(self.stub_dir, "gate-r4", 'echo gate >> "$GATE_MARKER"\nexit 0\n')
+        gate = write_stub(self.stub_dir, "gate-r4",
+                          'printf "gate=%s\\n" "$*" >> "$EVENT_LOG"\nexit 0\n')
         gate_wrapper = write_stub(self.stub_dir, "coder-gate-r4", '"$REAL_CODER_GATE" "$@" || exit $?\nexit 41\n')
         dispatch = write_stub(self.stub_dir, "dispatch-r4", r'''
 echo "$*" >> "$STUB_DISPATCH_LOG"
@@ -201,6 +227,7 @@ for value in "$@"; do
   if [ "$previous" = --agent ]; then agent=$value; fi
   previous=$value
 done
+echo "dispatch=$agent" >> "$EVENT_LOG"
 if [[ "$agent" == two-model-coder* ]]; then
   printf 'corrected\n' > "$FIX_FILE"
 elif [ "$agent" = two-model-reviewer ]; then
@@ -209,7 +236,7 @@ fi
 exit 0
 ''')
         env = {"PLAN": str(self.ws / "plan.json"), "PIPELINE_BACKEND": backend,
-                       "RUN_GATES_BIN": gate, "GATE_MARKER": str(gate_marker),
+                       "RUN_GATES_BIN": gate, "EVENT_LOG": str(event_log),
                        "CODER_GATE_BIN": gate_wrapper, "REAL_CODER_GATE": str(SCRIPTS / "coder-gate"),
                        "DISPATCH_BIN": dispatch, "STUB_DISPATCH_LOG": str(dispatch_log),
                        "FIX_FILE": str(self.repo / "file.txt"),
@@ -218,7 +245,15 @@ exit 0
             env["DISPATCH_RETRY_BIN"] = dispatch
         result = run_script("task-run", [str(self.ws), "1", "1"], cwd=self.repo,
                             env_extra=env)
-        self.assertTrue(gate_marker.exists(), result.stdout + result.stderr)
+        events = event_log.read_text(encoding="utf-8").splitlines() if event_log.exists() else []
+        gate_index = next((i for i, event in enumerate(events)
+                           if event.startswith("gate=") and
+                           (" --tasks 1" in event or " --toolchains " in event)), None)
+        coder_index = next((i for i, event in enumerate(events)
+                            if event.startswith("dispatch=") and "coder" in event), None)
+        self.assertIsNotNone(gate_index, result.stdout + result.stderr + repr(events))
+        self.assertIsNotNone(coder_index, result.stdout + result.stderr + repr(events))
+        self.assertLess(coder_index, gate_index, repr(events))
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("coder-gate exit 41", result.stderr)
         self.assertNotEqual(subprocess.check_output(["git", "rev-parse", "HEAD"],
