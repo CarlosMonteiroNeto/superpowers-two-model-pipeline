@@ -1,5 +1,16 @@
 {
   "version": "r4-impact-1",
+  "graphify": {
+    "version_allowlist": ["0.9.50"],
+    "schema_version": 1,
+    "command": "extract",
+    "code_only": true,
+    "no_cluster": true,
+    "raw_edges_key": "edges",
+    "node_origin": "ast",
+    "accepted_relations": ["imports", "imports_from"],
+    "require_edge_source_file_match": true
+  },
   "fallback_globs": {
     "configuration": [
       "**/package.json",
