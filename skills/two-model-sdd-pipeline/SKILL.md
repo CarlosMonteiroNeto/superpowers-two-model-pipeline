@@ -673,30 +673,21 @@ Use superpowers:finishing-a-development-branch.
 
 ## Candidate-bound test impact gates (R4)
 
-After validating the canonical plan, `run-pipeline` prepares the run-start
-Graphify AST import graph once from the recorded base commit. The script
-validates its allowlisted version, schema, and source mapping, then stores a
-run-local SQLite index and per-task sidecars. Plan authors receive no graph
-payload, and graph metadata never changes the canonical `plan.json`. A
-corrected task reuses the same index and gets a fresh slice for its current
-`touches`.
+`run-gates` classifies full-suite conditions before graph access. If impact
+selection remains eligible, it extracts normalized dependency evidence from
+disposable base/candidate snapshots and caches complete results by exact
+content, extractor, adapter, repository, and policy identity in a private
+external run cache. The cache is shared across gate attempts by the supervisor
+and removed at teardown; direct gates use a disposable cache. Cache hits do not
+reuse a prior gate approval. Missing, stale, incomplete, unsupported, or
+uncertain evidence selects each configured full test suite.
 
-`brief-scaffold` reads only the current task's sidecar and appends a coder-only
-`Graph context (script-derived)` section, capped at 100 lines and 12,000 bytes.
-It does not invoke Graphify or load the complete raw graph. Task and integration
-gates query only the cached dependency neighborhood reachable from their
-actual diff. Missing, stale, incomplete, unsupported, or uncertain evidence
-selects each configured full test suite. Integration gates omit a test already
-passed by Green only while its exact test inputs, command configuration, and
-environment still match the recorded evidence. A changed relevant input makes
-that test run again. Baseline and closing gates always run full suites;
-closing catches interactions introduced after the run-start snapshot.
-
-For `pull_request` publication, `graphify update` refreshes the tracked,
-human-facing project view before closing verification and final review. The
-refresh refuses pre-existing `graphify-out/` changes and commits only refreshed
-tracked graph files. It runs once at closing; local publication skips it. The
-published HEAD must still equal the exact closing/final-review-approved
-commit. This merged project view is never impact evidence: directional test
-selection uses only the isolated raw AST import graph. Graph context is sent
-only to coder briefs, never to the planner or reviewer.
+The planner, coder, and reviewer receive no graph context or graph fields in
+`plan.json`. The script selects impacted tests from the task diff and ledgered
+toolchain commands. A test that already passed during a task is not skipped in
+later integration gates. `run-gates` validates the sealed manifest immediately
+before execution and verifies the same retained evidence afterward using only
+input identities; it does not extract or reselect after tests. Candidate,
+plan, toolchain, command, policy, extractor, adapter, environment, or manifest
+drift prevents PASS. Baseline and closing gates always run full suites. Graph
+artifacts are neither published nor included in prompts or commits.

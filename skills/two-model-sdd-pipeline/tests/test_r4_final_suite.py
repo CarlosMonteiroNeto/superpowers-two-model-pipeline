@@ -10,7 +10,6 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 FINAL_GATE = ROOT / "skills/two-model-sdd-pipeline/scripts/final-gate"
 CLOSING_WAIVER = ROOT / "skills/two-model-sdd-pipeline/scripts/closing_waiver.py"
-GRAPH_PUBLICATION = ROOT / "skills/two-model-sdd-pipeline/scripts/graph_publication.py"
 RUN_PIPELINE = ROOT / "skills/two-model-sdd-pipeline/scripts/run-pipeline"
 
 
@@ -70,75 +69,15 @@ class FinalSuiteTests(unittest.TestCase):
             self.assertTrue(calls.exists(), "closing must revalidate all toolchains even when a prior gate was green")
             self.assertIn("--tasks 1 2", calls.read_text(encoding="utf-8"))
 
-    def test_graph_refresh_commits_only_tracked_graph_output_before_review(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = pathlib.Path(temporary) / "repo"
-            root.mkdir()
-            git(root, "init", "-q")
-            git(root, "config", "user.email", "test@example.invalid")
-            git(root, "config", "user.name", "Test")
-            graph = root / "graphify-out/graph.json"
-            graph.parent.mkdir(parents=True)
-            graph.write_text("old\n", encoding="utf-8")
-            git(root, "add", "graphify-out/graph.json")
-            git(root, "commit", "-qm", "base")
-            fake = root.parent / "fake_graphify.py"
-            fake.write_text(
-                "import pathlib,sys\n"
-                "if sys.argv[1:] == ['--version']:\n print('graphify 0.9.50'); raise SystemExit(0)\n"
-                "if sys.argv[1:] == ['update']:\n pathlib.Path('graphify-out/graph.json').write_text('fresh\\n'); raise SystemExit(0)\n"
-                "raise SystemExit(2)\n", encoding="utf-8")
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("r4_graph_publication", GRAPH_PUBLICATION)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-
-            result = module.refresh(root, [sys.executable, str(fake)])
-
-            self.assertEqual(result["status"], "refreshed")
-            self.assertEqual(result["files"], ["graphify-out/graph.json"])
-            self.assertEqual(git(root, "show", "HEAD:graphify-out/graph.json"), "fresh")
-            self.assertEqual(git(root, "status", "--porcelain"), "")
-
-    def test_graph_refresh_blocks_preexisting_user_changes_and_update_failure(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = pathlib.Path(temporary) / "repo"
-            root.mkdir()
-            git(root, "init", "-q")
-            git(root, "config", "user.email", "test@example.invalid")
-            git(root, "config", "user.name", "Test")
-            graph = root / "graphify-out/graph.json"
-            graph.parent.mkdir(parents=True)
-            graph.write_text("old\n", encoding="utf-8")
-            git(root, "add", "graphify-out/graph.json")
-            git(root, "commit", "-qm", "base")
-            fake = root.parent / "fake_graphify.py"
-            fake.write_text("import sys\nprint('graphify 0.9.50')\nraise SystemExit(7 if sys.argv[-1]=='update' else 0)\n",
-                            encoding="utf-8")
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("r4_graph_publication_failure", GRAPH_PUBLICATION)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            graph.write_text("user edit\n", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "pre-existing changes"):
-                module.refresh(root, [sys.executable, str(fake)])
-            graph.write_text("old\n", encoding="utf-8")
-            original_head = git(root, "rev-parse", "HEAD")
-            with self.assertRaisesRegex(ValueError, "Graphify update failed"):
-                module.refresh(root, [sys.executable, str(fake)])
-            self.assertEqual(git(root, "rev-parse", "HEAD"), original_head)
-            self.assertEqual(git(root, "status", "--porcelain"), "")
-
-    def test_pipeline_refreshes_pr_graph_before_closing_gate_and_skips_for_local(self):
-        text = RUN_PIPELINE.read_text(encoding="utf-8")
-        refresh = text.index('graph_publication.py')
+    def test_pipeline_does_not_refresh_or_publish_graphify_output(self):
+        text = (ROOT / "skills/two-model-sdd-pipeline/scripts/run-pipeline").read_text(encoding="utf-8")
+        self.assertNotIn("graph_publication.py", text)
+        self.assertNotIn("graphify-out", text)
         closing = text.index('"$SCRIPT_DIR/closing-gate"')
         review = text.index('"$SCRIPT_DIR/review-package"', closing)
         publish = text.index('"$SCRIPT_DIR/publication.py"')
-        self.assertLess(refresh, closing)
         self.assertLess(closing, review)
         self.assertLess(review, publish)
-        self.assertIn('if [ "$publication" = pull_request ]; then', text)
 
     def test_final_gate_blocks_new_closing_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

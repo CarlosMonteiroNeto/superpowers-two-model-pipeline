@@ -129,6 +129,18 @@ class GraphifyGateExecutionTests(unittest.TestCase):
                     self._run(manifest)
                 self.assertFalse(self.test_capture.exists())
 
+    def test_green_skip_manifest_is_rejected_and_tests_are_not_skipped(self):
+        manifest = self._manifest()
+        manifest["commands"][0].update(skip_tests=True, tests=[], argv=[])
+        manifest["commands"][0]["full_suite"] = False
+        manifest["evidence"]["green_subtractions"] = [{"toolchain_id": "python"}]
+        manifest.pop("selection_hash")
+        manifest["selection_hash"] = hashlib.sha256(json.dumps(
+            manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        with self.assertRaisesRegex(self.runner.GateContractError, "cannot skip tests"):
+            self._run(manifest, phase="integration")
+        self.assertFalse(self.test_capture.exists())
+
     def test_run_gates_executes_the_graphify_selected_path_and_ledgers_argv_hash(self):
         graphify = shutil.which("graphify")
         if graphify is None:
@@ -165,11 +177,6 @@ class GraphifyGateExecutionTests(unittest.TestCase):
         (workspace / "ledger.jsonl").write_text(json.dumps({"type": "gate", "task": "-",
             "summary": "configured", "toolchain_id": "python", "toolchain_descriptor": descriptor}) + "\n",
             encoding="utf-8")
-        source = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
-                                capture_output=True, text=True, check=True).stdout.strip()
-        (workspace / "base-commit.txt").write_text(source + "\n", encoding="utf-8")
-        context = load("graph_context").prepare(workspace, root, workspace / "plan.json", source)
-        self.assertTrue(context["complete"], context)
         result = subprocess.run(["bash", str(RUN_GATES), str(workspace), "--tasks", "1"],
                                 cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

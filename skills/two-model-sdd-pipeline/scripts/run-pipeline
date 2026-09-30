@@ -120,16 +120,17 @@ if [ ! -f "$WS/target-branch.txt" ]; then
   target_branch=${PIPELINE_TARGET_BRANCH:-$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf main)}
   printf '%s\n' "$target_branch" > "$WS/target-branch.txt" || { echo "RUN-PIPELINE: cannot record target branch" >&2; exit 1; }
 fi
-# R4: prepare the directed dependency graph once from the exact run-start
-# commit. This script-owned cache is copied into isolated task workspaces;
-# brief-scaffold only reads each task's bounded slice and never runs Graphify.
-# An unavailable or incomplete graph is recorded as such and downstream gates
-# conservatively use their configured full suites.
-source_commit=$(cat "$WS/base-commit.txt")
-if ! python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import graph_context; result=graph_context.prepare(sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5]); print("RUN-PIPELINE: graph context {} ({})".format("ready" if result.get("complete") else "incomplete", result.get("graph_digest", "")))' \
-    "$SCRIPT_DIR" "$WS" "$ROOT" "$WS/plan.json" "$source_commit"; then
-  echo "RUN-PIPELINE: graph context preparation failed; affected gates must use full configured suites" >&2
-fi
+# R4: one supervisor-owned evidence cache is shared with gate subprocesses for
+# this run. Workers receive neither the path nor authority to publish entries.
+PIPELINE_IMPACT_CACHE_ROOT=$(python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import test_dependency_cache; print(test_dependency_cache.create_owned_root())' "$SCRIPT_DIR") \
+  || { echo "RUN-PIPELINE: cannot create private impact cache" >&2; exit 2; }
+[ -n "$PIPELINE_IMPACT_CACHE_ROOT" ] || { echo "RUN-PIPELINE: private impact cache path is empty" >&2; exit 2; }
+export PIPELINE_IMPACT_CACHE_ROOT
+cleanup_impact_cache() {
+  python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import test_dependency_cache; test_dependency_cache.cleanup_owned_root(sys.argv[2])' \
+    "$SCRIPT_DIR" "$PIPELINE_IMPACT_CACHE_ROOT" >/dev/null 2>&1 || true
+}
+trap cleanup_impact_cache EXIT
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 # CODER_GATE is a legacy alias; the orchestrator and this script now share the
 # single CODER_GATE_BIN name.
@@ -544,13 +545,6 @@ if [ "$NO_PUSH" -eq 0 ]; then
     publication=pull_request
   fi
 fi
-if [ "$publication" = pull_request ]; then
-  # R4: tracked Graphify files join the reviewed candidate before the closing
-  # full-suite gate and final review. publication.py remains push-only.
-  python3 "$SCRIPT_DIR/graph_publication.py" --repository "$ROOT" \
-    --graphify-bin "${GRAPHIFY_BIN:-graphify}" \
-    || block "required Graphify publication refresh failed; run remains resumable"
-fi
 base=$(cat "$WS/base-commit.txt")
 target_branch=$(cat "$WS/target-branch.txt")
 target_commit=$(git rev-parse --verify "$target_branch^{commit}" 2>/dev/null) \
@@ -590,6 +584,8 @@ if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
     "$SCRIPT_DIR/pipeline-workspace" --refresh "$PLAN" >/dev/null || block "plan refresh failed after closing reopen"
     rerun=("$PLAN" --max-parallel "$MAX_PARALLEL")
     [ "$NO_PUSH" -eq 0 ] || rerun+=(--no-push)
+    cleanup_impact_cache
+    trap - EXIT
     exec "$SCRIPT_DIR/run-pipeline" "${rerun[@]}"
   fi
   [ "$verdict" = APPROVED ] || block "director closing verdict is $verdict; no publication allowed"

@@ -38,7 +38,8 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         marker = "## candidate-bound test impact gates (r4)"
         self.assertIn(marker, text)
         prior, r4 = text.split(marker, 1)
-        self.assertNotIn("graphify", prior)
+        self.assertIn("no graph context", prior)
+        self.assertNotIn("graph-publication", prior)
         self.assertIn("graphify ast import extractor", " ".join(r4.split()))
         self.assertNotIn("graphify-update", r4)
         self.assertNotIn("graphify-subgraph", r4)

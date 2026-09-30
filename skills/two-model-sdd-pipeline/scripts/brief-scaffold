@@ -23,67 +23,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pathclass import is_test_path  # noqa: E402
-from graph_context import load_task_context  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCOPED_RUN = os.path.join(HERE, "scoped-run").replace("\\", "/")
-GRAPH_CONTEXT_MAX_LINES = 100
-GRAPH_CONTEXT_MAX_BYTES = 12_000
 SAFE_REPO_PATH = re.compile(r"^[^\\\x00]+$")
-
-
-def graph_context_lines(workspace, task):
-    """Render only this task's validated, script-derived graph slice."""
-    try:
-        context = load_task_context(pathlib.Path(workspace), task)
-    except Exception as exc:  # A brief remains deterministic and usable on fallback.
-        context = {"complete": False, "requires_full_suite": True,
-                   "diagnostics": ["task graph context unavailable: " + str(exc)]}
-
-    def safe_paths(key):
-        values = context.get(key, [])
-        if not isinstance(values, list):
-            return []
-        accepted = []
-        for value in values:
-            if (isinstance(value, str) and value and SAFE_REPO_PATH.fullmatch(value)
-                    and not value.startswith("/")
-                    and not re.match(r"^[A-Za-z]:", value)
-                    and all(part not in ("", ".", "..") for part in value.split("/"))):
-                accepted.append(value)
-        return sorted(set(accepted))
-
-    complete = context.get("complete") is True and context.get("requires_full_suite") is not True
-    lines = ["## Graph context (script-derived)", "",
-             "Status: complete" if complete else "Status: unavailable; use the configured full suite"]
-    for title, key in (("Dependencies", "dependencies"),
-                       ("Consumers", "consumers"), ("Relevant tests", "tests")):
-        lines.extend(["", "### " + title])
-        values = safe_paths(key) if complete else []
-        lines.extend(("- `%s`" % value) for value in values)
-        if not values:
-            lines.append("- (none)")
-    diagnostics = context.get("diagnostics", [])
-    if not complete and isinstance(diagnostics, list) and diagnostics:
-        lines.extend(["", "Diagnostics: " + "; ".join(str(item) for item in diagnostics[:3])])
-
-    # Keep both hard limits even when one individual path is unusually long.
-    output = []
-    byte_count = 0
-    truncated = False
-    for line in lines:
-        encoded_size = len(line.encode("utf-8")) + (1 if output else 0)
-        if len(output) >= GRAPH_CONTEXT_MAX_LINES - 1 or byte_count + encoded_size > GRAPH_CONTEXT_MAX_BYTES - 32:
-            truncated = True
-            break
-        output.append(line)
-        byte_count += encoded_size
-    if truncated:
-        marker = "[Graph context truncated to the configured brief limit.]"
-        if len(output) >= GRAPH_CONTEXT_MAX_LINES:
-            output = output[:GRAPH_CONTEXT_MAX_LINES - 1]
-        output.append(marker)
-    return output
 
 
 def main(argv):
@@ -184,8 +127,6 @@ def main(argv):
         "## Out of scope",
         "",
         "Anything not listed under Acceptance (YAGNI fence).",
-        "",
-        *graph_context_lines(ws, match),
         "",
         "## RED order (you own the RED/GREEN loop)",
         "",

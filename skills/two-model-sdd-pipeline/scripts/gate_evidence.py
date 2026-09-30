@@ -7,7 +7,6 @@ import json
 import os
 import pathlib
 import re
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -55,31 +54,26 @@ def validate_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     for field in ("diff_hash", "graph_hash", "toolchains_hash", "policy_hash"):
         if not isinstance(evidence.get(field), str) or not _HASH.fullmatch(evidence[field]):
             raise ValueError("impact manifest has invalid %s" % field)
+    if "workspace_input_hash" in evidence and (
+            not isinstance(evidence["workspace_input_hash"], str)
+            or not _HASH.fullmatch(evidence["workspace_input_hash"])):
+        raise ValueError("impact manifest has invalid workspace input identity")
     provenance = evidence.get("graph_provenance")
     if not isinstance(provenance, dict) or not isinstance(provenance.get("complete"), bool):
         raise ValueError("impact manifest graph provenance is missing")
     if provenance["complete"]:
-        if provenance.get("kind") == "run_start":
-            if (not isinstance(provenance.get("run_start_commit"), str)
-                    or not _COMMIT.fullmatch(provenance["run_start_commit"])
-                    or not isinstance(provenance.get("run_start_tree_hash"), str)
-                    or not isinstance(provenance.get("graphify_version"), str)
-                    or not isinstance(provenance.get("graph_digest"), str)
-                    or not _HASH.fullmatch(provenance["graph_digest"])):
-                raise ValueError("impact manifest has incomplete run-start graph provenance")
-        else:
-            if (provenance.get("base_commit") != identity.get("base_commit")
-                    or provenance.get("candidate_commit") != identity.get("head_commit")
-                    or provenance.get("candidate_tree_hash") != identity.get("tree_hash")
-                    or not isinstance(provenance.get("graphify_version"), str)):
-                raise ValueError("impact manifest graph provenance does not match its candidate")
-            for side in ("base", "candidate"):
-                item = provenance.get(side)
-                if (not isinstance(item, dict) or item.get("complete") is not True
-                        or not isinstance(item.get("graph_digest"), str) or not _HASH.fullmatch(item["graph_digest"])
-                        or not isinstance(item.get("source_inventory_hash"), str)
-                        or not _HASH.fullmatch(item["source_inventory_hash"])):
-                    raise ValueError("impact manifest has incomplete %s graph provenance" % side)
+        if (provenance.get("base_commit") != identity.get("base_commit")
+                or provenance.get("candidate_commit") != identity.get("head_commit")
+                or provenance.get("candidate_tree_hash") != identity.get("tree_hash")
+                or not isinstance(provenance.get("graphify_version"), str)):
+            raise ValueError("impact manifest graph provenance does not match its candidate")
+        for side in ("base", "candidate"):
+            item = provenance.get(side)
+            if (not isinstance(item, dict) or item.get("complete") is not True
+                    or not isinstance(item.get("graph_digest"), str) or not _HASH.fullmatch(item["graph_digest"])
+                    or not isinstance(item.get("source_inventory_hash"), str)
+                    or not _HASH.fullmatch(item["source_inventory_hash"])):
+                raise ValueError("impact manifest has incomplete %s graph provenance" % side)
     for field in ("scope_paths", "tests", "commands", "reasons", "reasons_detail", "gaps"):
         if not isinstance(manifest.get(field), list):
             raise ValueError("impact manifest %s must be an array" % field)
@@ -214,305 +208,174 @@ def _make_snapshot(snapshot: pathlib.Path, base_files: list[tuple[str, str, str]
         _write_snapshot_file(snapshot, relative, source.read_bytes())
 
 
+def _extractor_input_path(path: str) -> bool:
+    rel = _safe_repo_path(path)
+    if any(part.startswith(".") or part in {"graphify-out", "__pycache__", ".dart_tool",
+                                             "build", "dist", ".venv", "venv"}
+           for part in rel.parts):
+        return False
+    name = rel.name
+    return (rel.suffix.lower() in {".py", ".dart"}
+            or name in {"pyproject.toml", "setup.cfg", "Pipfile", "pubspec.yaml"}
+            or (name.startswith("requirements") and name.endswith(".txt")))
+
+
+def _snapshot_input_records(root: pathlib.Path, base_files: list[tuple[str, str, str]],
+                            changes: list[dict[str, str]], blobs: dict[str, bytes],
+                            candidate: bool) -> list[tuple[str, str, bytes]]:
+    removed: set[str] = set()
+    added: set[str] = set()
+    if candidate:
+        for item in changes:
+            if item["status"] == "deleted":
+                removed.add(item["path"])
+            elif item["status"] == "renamed":
+                removed.add(item["old_path"])
+                added.add(item["new_path"])
+            else:
+                added.add(item["path"])
+    records: dict[str, tuple[str, bytes]] = {}
+    for _mode, blob, path in base_files:
+        if not _extractor_input_path(path) or (candidate and path in removed | added):
+            continue
+        # Graphify consumes file contents; executable permission does not
+        # change AST extraction, so both Git and worktree files share identity.
+        records[path] = ("regular", blobs[blob])
+    if candidate:
+        for path in sorted(added):
+            if not _extractor_input_path(path):
+                continue
+            relative = _safe_repo_path(path)
+            source = root.joinpath(*relative.parts)
+            if not source.is_file() or source.is_symlink():
+                raise ValueError("candidate extractor input is missing or not a regular file: " + path)
+            records[path] = ("regular", source.read_bytes())
+    return [(records[path][0], path, records[path][1]) for path in sorted(records)]
+
+
+def _make_extractor_snapshot(snapshot: pathlib.Path, records: list[tuple[str, str, bytes]]) -> None:
+    snapshot.mkdir(parents=True)
+    for _mode, path, content in records:
+        _write_snapshot_file(snapshot, path, content)
+
+
+def _repository_namespace(root: pathlib.Path) -> str:
+    try:
+        remote = _git(root, "config", "--get", "remote.origin.url")
+        if remote:
+            return remote
+    except ValueError:
+        pass
+    common = pathlib.Path(_git(root, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = root / common
+    return str(common.resolve())
+
+
 def _graph_evidence(root: pathlib.Path, base_commit: str, base_tree: str, head: str,
-                    tree_id: str, files: list[dict[str, str]], policy: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+                    tree_id: str, files: list[dict[str, str]], policy: dict[str, Any],
+                    diagnostics: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     scripts = pathlib.Path(__file__).resolve().parent
     sys.path.insert(0, str(scripts))
     import test_dependency_graph
+    import test_dependency_cache
 
     graph_policy = policy.get("graphify") if isinstance(policy, dict) else None
     versions = graph_policy.get("version_allowlist") if isinstance(graph_policy, dict) else None
     if not isinstance(versions, list) or len(versions) != 1 or not isinstance(versions[0], str):
         return None, {"complete": False, "diagnostics": ["Graphify version policy is missing or ambiguous"]}
     provenance: dict[str, Any] = {"graphify_version": versions[0], "base": {}, "candidate": {}}
+    extractor = test_dependency_graph.extractor_identity(versions[0])
+    provenance["extractor_identity_hash"] = _digest(extractor)
+    provenance["adapter_identity_hash"] = hashlib.sha256(
+        pathlib.Path(test_dependency_graph.__file__).read_bytes()).hexdigest()
+    if extractor.get("available") is not True:
+        provenance["diagnostics"] = [extractor.get("diagnostic") or "Graphify installation is not trusted"]
+        return None, provenance
+    configured_root = os.environ.get("PIPELINE_IMPACT_CACHE_ROOT")
+    cache_root = pathlib.Path(configured_root) if configured_root else None
+    owns_root = not (cache_root is not None and test_dependency_cache.is_owned_root(cache_root))
+    if owns_root:
+        cache_root = test_dependency_cache.create_owned_root()
     try:
         base_files = _git_tree_files(root, base_commit)
-        blobs = _git_blob_map(root, sorted({blob for _mode, blob, _path in base_files}))
-        with tempfile.TemporaryDirectory(prefix="r4-impact-") as temporary:
-            temp = pathlib.Path(temporary)
-            base_snapshot, candidate_snapshot = temp / "base", temp / "candidate"
-            _make_snapshot(base_snapshot, base_files, files, False, blobs, root)
-            _make_snapshot(candidate_snapshot, base_files, files, True, blobs, root)
-            base = test_dependency_graph.build(base_snapshot, versions[0])
-            candidate = test_dependency_graph.build(candidate_snapshot, versions[0])
-            for name, result in (("base", base), ("candidate", candidate)):
-                provenance[name] = {
-                    "complete": result.get("complete") is True,
-                    "graph_digest": result.get("graph_digest"),
-                    "source_inventory_hash": result.get("source_inventory_hash"),
-                    "graphify_version": result.get("graphify_version"),
-                    "diagnostics": result.get("diagnostics", []),
-                }
-            valid = all(result.get("complete") is True
-                        and result.get("graphify_version") == versions[0]
-                        and isinstance(result.get("graph_digest"), str)
-                        and _HASH.fullmatch(result["graph_digest"])
-                        and isinstance(result.get("source_inventory_hash"), str)
-                        and _HASH.fullmatch(result["source_inventory_hash"])
-                        and isinstance(result.get("reverse_edges"), dict)
-                        for result in (base, candidate))
-            if not valid:
-                provenance["complete"] = False
-                return None, provenance
-            edges: dict[str, set[str]] = {}
-            for result in (base, candidate):
-                for source, targets in result["reverse_edges"].items():
-                    edges.setdefault(source, set()).update(targets)
-            graph = {"version": 1, "base_commit": base_commit,
-                     "base_tree_hash": "commit:%s+sha256:%s" % (base_commit, _digest(base_tree)),
-                     "reverse_edges": {key: sorted(value) for key, value in sorted(edges.items())},
-                     "provenance": provenance}
-            provenance["complete"] = True
-            provenance["base_commit"] = base_commit
-            provenance["base_tree_hash"] = "commit:%s+sha256:%s" % (base_commit, _digest(base_tree))
-            provenance["candidate_commit"] = head
-            provenance["candidate_tree_hash"] = tree_id
-            graph["provenance"] = provenance
-            return graph, provenance
+        relevant = [(mode, blob, path) for mode, blob, path in base_files if _extractor_input_path(path)]
+        blobs = _git_blob_map(root, sorted({blob for _mode, blob, _path in relevant}))
+        snapshots = [
+            _snapshot_input_records(root, relevant, files, blobs, candidate=False),
+            _snapshot_input_records(root, relevant, files, blobs, candidate=True),
+        ]
+        adapter_digest = hashlib.sha256(pathlib.Path(test_dependency_graph.__file__).read_bytes()).hexdigest()
+        policy_digest = _digest(policy)
+        namespace = _repository_namespace(root)
+        cached: list[dict[str, Any]] = []
+        for name, records in zip(("base", "candidate"), snapshots):
+            inventory = [{"path": path, "sha256": hashlib.sha256(content).hexdigest(), "mode": mode}
+                         for mode, path, content in records]
+            resolution_inputs = [item for item in inventory
+                                 if pathlib.PurePosixPath(item["path"]).name in {
+                                     "pyproject.toml", "setup.cfg", "Pipfile", "pubspec.yaml"}
+                                 or (pathlib.PurePosixPath(item["path"]).name.startswith("requirements")
+                                     and pathlib.PurePosixPath(item["path"]).name.endswith(".txt"))]
+            key = test_dependency_cache.make_key({
+                "repository_namespace": namespace,
+                "snapshot_inventory": inventory,
+                "resolution_inputs": resolution_inputs,
+                "extractor_identity": extractor,
+                "adapter_identity": adapter_digest,
+                "policy_identity": {"digest": policy_digest},
+            })
+
+            def build_snapshot(records=records):
+                with tempfile.TemporaryDirectory(prefix="r4-impact-snapshot-") as temporary:
+                    snapshot = pathlib.Path(temporary) / "source"
+                    _make_extractor_snapshot(snapshot, records)
+                    return test_dependency_graph.build(snapshot, versions[0])
+
+            cache_status: dict[str, Any] = {}
+            result = test_dependency_cache.get_or_build(cache_root, key, build_snapshot, cache_status)
+            if diagnostics is not None:
+                diagnostics.append({"snapshot": name, **cache_status})
+            cached.append(result)
+            provenance[name] = {
+                "complete": result.get("complete") is True,
+                "graph_digest": result.get("graph_digest"),
+                "source_inventory_hash": result.get("source_inventory_hash"),
+                "graphify_version": result.get("graphify_version"),
+                "diagnostics": result.get("diagnostics", []),
+            }
+        valid = all(result.get("complete") is True
+                    and result.get("graphify_version") == versions[0]
+                    and isinstance(result.get("graph_digest"), str)
+                    and _HASH.fullmatch(result["graph_digest"])
+                    and isinstance(result.get("source_inventory_hash"), str)
+                    and _HASH.fullmatch(result["source_inventory_hash"])
+                    and isinstance(result.get("reverse_edges"), dict)
+                    for result in cached)
+        if not valid:
+            provenance["complete"] = False
+            return None, provenance
+        edges: dict[str, set[str]] = {}
+        for result in cached:
+            for source, targets in result["reverse_edges"].items():
+                edges.setdefault(source, set()).update(targets)
+        graph = {"version": 1, "base_commit": base_commit,
+                 "base_tree_hash": "commit:%s+sha256:%s" % (base_commit, _digest(base_tree)),
+                 "reverse_edges": {key: sorted(value) for key, value in sorted(edges.items())}}
+        provenance["complete"] = True
+        provenance["base_commit"] = base_commit
+        provenance["base_tree_hash"] = "commit:%s+sha256:%s" % (base_commit, _digest(base_tree))
+        provenance["candidate_commit"] = head
+        provenance["candidate_tree_hash"] = tree_id
+        graph["provenance"] = provenance
+        return graph, provenance
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
         provenance["complete"] = False
         provenance["diagnostics"] = ["Graphify snapshots unavailable: " + str(exc)]
         return None, provenance
-
-
-def _run_start_graph(workspace: pathlib.Path, changed_paths: list[str],
-                     fallback_commit: str, policy: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    """Query the run-start SQLite index for only paths reachable from this diff."""
-    scripts = pathlib.Path(__file__).resolve().parent
-    sys.path.insert(0, str(scripts))
-    import graph_context
-
-    provenance: dict[str, Any] = {"kind": "run_start", "complete": False,
-                                  "diagnostics": ["run-start graph cache is unavailable"]}
-    cache_path = workspace / "graph-context.sqlite3"
-    if not cache_path.is_file():
-        return None, provenance
-    try:
-        status_path = workspace / "graph-context-status.json"
-        status = None
-        if status_path.is_file():
-            status = json.loads(status_path.read_text(encoding="utf-8"))
-            if not isinstance(status, dict) or status.get("complete") is not True:
-                diagnostics = status.get("diagnostics", []) if isinstance(status, dict) else []
-                return None, {"kind": "run_start", "complete": False,
-                              "diagnostics": diagnostics or ["run-start graph refresh is incomplete"]}
-        graph_policy = policy.get("graphify", {})
-        versions = graph_policy.get("version_allowlist") if isinstance(graph_policy, dict) else None
-        if not isinstance(versions, list) or len(versions) != 1 or not isinstance(versions[0], str):
-            raise ValueError("Graphify version policy is missing or ambiguous")
-        source_commit = fallback_commit
-        base_path = workspace / "base-commit.txt"
-        if base_path.is_file():
-            source_commit = base_path.read_text(encoding="utf-8").strip()
-        _, source_tree = graph_context._tree_identity(workspace, source_commit)
-        run_identity = graph_context._run_identity(workspace)
-        _, policy_hash = graph_context._expected_version()
-        with graph_context.closing(graph_context.sqlite3.connect(
-                cache_path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
-            meta = graph_context._read_meta(db)
-            diagnostics = json.loads(meta.get("diagnostics", "[]"))
-            provenance = {"kind": "run_start", "complete": False,
-                          "run_start_commit": meta.get("source_commit", ""),
-                          "run_start_tree": meta.get("source_tree", ""),
-                          "graph_digest": meta.get("graph_digest", ""),
-                          "graphify_version": meta.get("graphify_version", ""),
-                          "diagnostics": diagnostics}
-            if (meta.get("schema_version") != str(graph_context.SCHEMA_VERSION)
-                    or meta.get("complete") != "true"
-                    or meta.get("source_commit") != source_commit
-                    or meta.get("source_tree") != source_tree
-                    or meta.get("run_identity") != run_identity
-                    or meta.get("policy_hash") != policy_hash
-                    or meta.get("graphify_version") != versions[0]
-                    or (status is not None and status.get("graph_digest") != meta.get("graph_digest"))
-                    or not _HASH.fullmatch(meta.get("graph_digest", ""))):
-                provenance["diagnostics"] = diagnostics or ["run-start graph cache identity is stale or incomplete"]
-                return None, provenance
-            repository = pathlib.Path(meta.get("repository", ""))
-            if not repository.is_absolute() or not repository.is_dir():
-                raise ValueError("run-start graph repository is unavailable")
-            # Linked task worktrees share the repository, but have different roots.
-            cached_common = pathlib.Path(_git(repository, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
-            current_common = pathlib.Path(_git(workspace, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
-            if cached_common != current_common:
-                raise ValueError("run-start graph belongs to another repository")
-            reverse = graph_context.impact_reverse_edges(db, changed_paths)
-        run_tree_hash = "commit:%s+sha256:%s" % (
-            source_commit, _digest(provenance["run_start_tree"]))
-        provenance.update(complete=True, run_start_tree_hash=run_tree_hash,
-                          diagnostics=[])
-        return ({"version": 1, "base_commit": source_commit,
-                 "base_tree_hash": run_tree_hash, "reverse_edges": reverse,
-                 "provenance": provenance}, provenance)
-    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error, json.JSONDecodeError) as exc:
-        provenance["diagnostics"] = ["run-start graph cache unavailable: " + str(exc)]
-        return None, provenance
-
-
-def _file_hash(root: pathlib.Path, relative: str) -> str | None:
-    pure = pathlib.PurePosixPath(relative) if isinstance(relative, str) else None
-    if (pure is None or not relative or "\\" in relative or pure.is_absolute()
-            or re.match(r"^[A-Za-z]:", relative)
-            or any(part in ("", ".", "..") for part in relative.split("/"))):
-        return None
-    path = root.joinpath(*pure.parts)
-    try:
-        if not path.is_file() or path.is_symlink():
-            return None
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
-
-
-def _green_inputs(workspace: pathlib.Path, tests: list[str]) -> dict[str, dict[str, str]]:
-    """Capture each test plus its run-start imported files for later validation."""
-    scripts = pathlib.Path(__file__).resolve().parent
-    sys.path.insert(0, str(scripts))
-    import graph_context
-
-    cache = workspace / "graph-context.sqlite3"
-    if not cache.is_file():
-        return {}
-    root_value = _git(workspace, "rev-parse", "--show-toplevel")
-    root = pathlib.Path(root_value)
-    result: dict[str, dict[str, str]] = {}
-    with graph_context.closing(graph_context.sqlite3.connect(
-            cache.resolve().as_uri() + "?mode=ro", uri=True)) as db:
-        meta = graph_context._read_meta(db)
-        if meta.get("complete") != "true":
-            return {}
-        for test in tests:
-            paths = sorted({test, *graph_context._reachable_db(db, [test], reverse=False)})
-            hashes = {path: value for path in paths
-                      if (value := _file_hash(root, path)) is not None}
-            if len(hashes) == len(paths):
-                result[test] = hashes
-    return result
-
-
-def record_green_evidence(workspace: str | pathlib.Path, task_id: str,
-                          manifest: dict[str, Any]) -> pathlib.Path | None:
-    """Persist exact task Green test and input evidence for integration subtraction."""
-    provenance = manifest.get("evidence", {}).get("graph_provenance", {})
-    if not provenance.get("complete") or provenance.get("kind") != "run_start":
-        return None
-    by_toolchain: dict[str, dict[str, Any]] = {}
-    all_tests: set[str] = set()
-    for command in manifest.get("commands", []):
-        tests = command.get("tests", []) if command.get("full_suite") is False else []
-        if not tests:
-            continue
-        identity = command.get("toolchain_id")
-        if not isinstance(identity, str) or not identity:
-            raise ValueError("Green evidence has an invalid toolchain identity")
-        by_toolchain[identity] = {"tests": sorted(set(tests)), "language": command.get("language")}
-        all_tests.update(tests)
-    if not all_tests:
-        return None
-    inputs = _green_inputs(pathlib.Path(workspace), sorted(all_tests))
-    for value in by_toolchain.values():
-        value["inputs"] = {test: inputs[test] for test in value["tests"] if test in inputs}
-        value["tests"] = sorted(value["inputs"])
-    by_toolchain = {key: value for key, value in by_toolchain.items() if value["tests"]}
-    if not by_toolchain:
-        return None
-    identity = manifest["identity"]
-    evidence = {
-        "schema_version": 1, "task_id": str(task_id),
-        "candidate_commit": identity["head_commit"], "tree_hash": identity["tree_hash"],
-        "config_hash": identity["config_hash"], "environment_hash": identity["environment_hash"],
-        "toolchains_hash": manifest["evidence"]["toolchains_hash"],
-        "run_start_commit": provenance["run_start_commit"],
-        "graph_digest": provenance["graph_digest"], "toolchains": by_toolchain,
-    }
-    evidence["evidence_hash"] = _digest(evidence)
-    directory = pathlib.Path(workspace) / "green-evidence"
-    directory.mkdir(parents=True, exist_ok=True)
-    destination = directory / ("task-%s.json" % task_id)
-    temporary = destination.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-                         encoding="utf-8")
-    os.replace(temporary, destination)
-    return destination
-
-
-def _valid_green_tests(workspace: pathlib.Path, root: pathlib.Path,
-                       manifest: dict[str, Any]) -> dict[str, set[str]]:
-    provenance = manifest.get("evidence", {}).get("graph_provenance", {})
-    if not provenance.get("complete") or provenance.get("kind") != "run_start":
-        return {}
-    output: dict[str, set[str]] = {}
-    directory = workspace / "green-evidence"
-    if not directory.is_dir():
-        return output
-    for path in sorted(directory.glob("task-*.json")):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-            signature = record.pop("evidence_hash", None)
-            if (record.get("schema_version") != 1 or not isinstance(signature, str)
-                    or _digest(record) != signature
-                    or not isinstance(record.get("candidate_commit"), str)
-                    or not _COMMIT.fullmatch(record["candidate_commit"])
-                    or not isinstance(record.get("tree_hash"), str)
-                    or not (re.fullmatch(r"[0-9a-f]{64}", record["tree_hash"])
-                            or re.fullmatch(r"commit:[0-9a-f]{7,64}\+sha256:[0-9a-f]{64}", record["tree_hash"]))
-                    or record.get("config_hash") != manifest["identity"]["config_hash"]
-                    or record.get("environment_hash") != manifest["identity"]["environment_hash"]
-                    or record.get("toolchains_hash") != manifest["evidence"]["toolchains_hash"]
-                    or record.get("run_start_commit") != provenance.get("run_start_commit")
-                    or record.get("graph_digest") != provenance.get("graph_digest")):
-                continue
-            toolchains = record.get("toolchains")
-            if not isinstance(toolchains, dict):
-                continue
-            for identifier, item in toolchains.items():
-                tests = item.get("tests") if isinstance(item, dict) else None
-                inputs = item.get("inputs") if isinstance(item, dict) else None
-                if not isinstance(tests, list) or not isinstance(inputs, dict):
-                    continue
-                for test in tests:
-                    expected = inputs.get(test)
-                    if (not isinstance(expected, dict) or not expected
-                            or any(_file_hash(root, source) != digest
-                                   for source, digest in expected.items())):
-                        continue
-                    output.setdefault(identifier, set()).add(test)
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            continue
-    return output
-
-
-def _subtract_green_tests(workspace: pathlib.Path, root: pathlib.Path,
-                          manifest: dict[str, Any], descriptors: list[dict[str, Any]]) -> list[dict[str, str]]:
-    green = _valid_green_tests(workspace, root, manifest)
-    if not green:
-        return []
-    import test_impact
-    by_id = {str(item["id"]): item for item in descriptors}
-    removed: list[dict[str, str]] = []
-    tests_left: set[str] = set()
-    for command in manifest["commands"]:
-        identifier = command["toolchain_id"]
-        descriptor = by_id.get(identifier, {})
-        command_tests = command.get("tests", [])
-        eligible = green.get(identifier, set())
-        subtract = sorted(set(command_tests) & eligible) if command.get("full_suite") is False else []
-        if not subtract:
-            tests_left.update(command_tests)
-            continue
-        remaining = sorted(set(command_tests) - set(subtract))
-        command["tests"] = remaining
-        if remaining:
-            command["argv"] = test_impact.affected_argv(
-                descriptor.get("commands", {}).get("test", {}).get("argv", []),
-                descriptor.get("red_adapter"), remaining)
-            tests_left.update(remaining)
-        else:
-            command["skip_tests"] = True
-            command["argv"] = []
-        removed.extend({"toolchain_id": identifier, "test": test} for test in subtract)
-    manifest["tests"] = sorted(tests_left)
-    return removed
+    finally:
+        if owns_root:
+            test_dependency_cache.cleanup_owned_root(cache_root)
 
 
 def capture_workspace_inputs(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
@@ -643,31 +506,26 @@ def capture_workspace_inputs(workspace: str, selection: list[str], mode: str) ->
             "environment_hash": environment_hash, "task_scope": scope,
             "test_paths": [path for path in test_paths if "test" in pathlib.PurePosixPath(path).name.lower()],
             "files": files}
-    run_start_commit = base
-    run_start_path = pathlib.Path(workspace) / "base-commit.txt"
-    if run_start_path.is_file():
-        run_start_commit = run_start_path.read_text(encoding="utf-8").strip()
-    diff["run_start_commit"] = run_start_commit
     phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
     return {
         "root": root, "plan": plan, "descriptors": descriptors,
         "head": head, "base": base, "base_tree": base_tree, "files": files,
         "test_paths": test_paths, "tree_id": tree_id, "config_hash": config_hash,
         "environment_hash": environment_hash, "diff": diff, "policy": policy,
-        "run_start_commit": run_start_commit, "phase": phase,
+        "phase": phase,
     }
 
 
 def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
     """Create a candidate-bound manifest after graph-independent preflight."""
-    import test_impact
-
     inputs = capture_workspace_inputs(workspace, selection, mode)
+    scripts = pathlib.Path(__file__).resolve().parent
+    sys.path.insert(0, str(scripts))
+    import test_impact
     root = inputs["root"]
     diff = inputs["diff"]
     descriptors = inputs["descriptors"]
     policy = inputs["policy"]
-    run_start_commit = inputs["run_start_commit"]
     phase = inputs["phase"]
     files = inputs["files"]
     head = inputs["head"]
@@ -675,27 +533,24 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
     config_hash = inputs["config_hash"]
     environment_hash = inputs["environment_hash"]
     preflight_result = test_impact.preflight(diff, descriptors, policy, phase)
+    impact_diagnostics: list[dict[str, Any]] = []
     if not preflight_result["requires_graph"]:
         reasons = sorted({reason for reason in preflight_result["toolchain_reasons"].values()
                           if reason is not None})
         graph, graph_provenance = None, {"complete": False,
             "diagnostics": ["graph acquisition skipped during preflight", *reasons]}
     else:
-        changed_paths = sorted({path for item in files
-                                for path in (item.get("path"), item.get("old_path"), item.get("new_path"))
-                                if path})
-        graph, graph_provenance = _run_start_graph(pathlib.Path(workspace),
-                                                    changed_paths,
-                                                    run_start_commit, policy)
-        if graph is not None:
-            diff["run_start_tree_hash"] = graph["base_tree_hash"]
+        graph, graph_provenance = _graph_evidence(root, inputs["base"], inputs["base_tree"],
+                                                  head, tree_id, files, policy, impact_diagnostics)
     manifest = test_impact.select(diff, graph, descriptors, policy, preflight_result, phase)
     manifest["evidence"]["graph_provenance"] = graph_provenance
-    green_subtractions: list[dict[str, str]] = []
-    if phase == "integration" and graph is not None:
-        green_subtractions = _subtract_green_tests(pathlib.Path(workspace), root,
-                                                   manifest, descriptors)
-    manifest["evidence"]["green_subtractions"] = green_subtractions
+    manifest["evidence"]["workspace_input_hash"] = _workspace_input_hash(
+        inputs, selection, mode, graph_provenance)
+    if impact_diagnostics:
+        diagnostics_path = pathlib.Path(workspace) / "impact-diagnostics.json"
+        diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+        diagnostics_path.write_text(json.dumps(impact_diagnostics, ensure_ascii=False,
+                                              sort_keys=True, indent=2) + "\n", encoding="utf-8")
     manifest["selection_hash"] = _digest({key: value for key, value in manifest.items()
                                            if key != "selection_hash"})
     manifest = validate_manifest(manifest)
@@ -711,3 +566,42 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
     if not matches(record, candidate):
         raise ValueError("generated impact manifest does not match its candidate")
     return manifest
+
+
+def _workspace_input_hash(inputs: dict[str, Any], selection: list[str], mode: str,
+                          graph_provenance: dict[str, Any]) -> str:
+    """Hash the selector's graph-independent inputs plus identities used for selection."""
+    return _digest({
+        "selection": selection, "mode": mode, "diff": inputs["diff"],
+        "plan": inputs["plan"], "descriptors": inputs["descriptors"],
+        "policy": inputs["policy"], "phase": inputs["phase"],
+        "extractor_identity_hash": graph_provenance.get("extractor_identity_hash"),
+        "adapter_identity_hash": graph_provenance.get("adapter_identity_hash"),
+    })
+
+
+def verify_workspace_manifest(workspace: str, selection: list[str], mode: str,
+                              manifest: dict[str, Any]) -> None:
+    """Validate the same sealed selection against current inputs without graph work."""
+    manifest = validate_manifest(manifest)
+    if not isinstance(manifest["evidence"].get("workspace_input_hash"), str):
+        raise ValueError("impact manifest has no retained workspace input identity")
+    inputs = capture_workspace_inputs(workspace, selection, mode)
+    provenance = manifest["evidence"]["graph_provenance"]
+    if provenance.get("complete"):
+        scripts = pathlib.Path(__file__).resolve().parent
+        sys.path.insert(0, str(scripts))
+        import test_dependency_graph
+        graph_policy = inputs["policy"].get("graphify", {})
+        versions = graph_policy.get("version_allowlist", [])
+        if len(versions) != 1:
+            raise ValueError("Graphify version policy changed after impact selection")
+        extractor = test_dependency_graph.extractor_identity(versions[0])
+        extractor_hash = _digest(extractor)
+        adapter_hash = hashlib.sha256(pathlib.Path(test_dependency_graph.__file__).read_bytes()).hexdigest()
+        if (extractor_hash != provenance.get("extractor_identity_hash")
+                or adapter_hash != provenance.get("adapter_identity_hash")):
+            raise ValueError("extractor or adapter identity changed after impact selection")
+    actual_hash = _workspace_input_hash(inputs, selection, mode, provenance)
+    if actual_hash != manifest["evidence"]["workspace_input_hash"]:
+        raise ValueError("candidate, plan, commands, environment, policy, or selection inputs changed")

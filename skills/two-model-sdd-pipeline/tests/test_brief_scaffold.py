@@ -7,7 +7,6 @@ import sys
 import tempfile
 import unittest
 import ctypes
-import sqlite3
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 
@@ -53,52 +52,16 @@ class BriefScaffoldTestBase(unittest.TestCase):
 
 
 class TestBriefScaffold(BriefScaffoldTestBase):
-    def _write_graph_cache(self, edges):
-        cache = self.ws / "graph-context.sqlite3"
-        db = sqlite3.connect(cache)
-        db.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        db.execute("CREATE TABLE edges (relation TEXT NOT NULL, source TEXT NOT NULL, target TEXT NOT NULL, PRIMARY KEY (relation, source, target))")
-        metadata = {
-            "schema_version": "1", "graph_digest": "a" * 64,
-            "source_commit": "b" * 40, "source_tree": "c" * 40,
-            "complete": "true", "diagnostics": "[]",
-        }
-        db.executemany("INSERT INTO metadata VALUES (?, ?)", metadata.items())
-        db.executemany("INSERT INTO edges VALUES ('imports', ?, ?)", edges)
-        db.commit()
-        db.close()
-
-    def test_brief_includes_only_the_current_task_graph_slice_without_graphify(self):
+    def test_brief_contains_no_graph_context_even_if_legacy_cache_exists(self):
         self.write_plan(plan_with(dict(FULL_TASK, touches=["src/api.py"])))
-        edges = [("src/api.py", "src/core.py"),
-                 ("tests/test_api.py", "src/api.py"),
-                 ("src/unrelated.py", "src/other.py")]
-        self._write_graph_cache(edges)
+        (self.ws / "graph-context.sqlite3").write_bytes(b"legacy cache")
 
         result = run_scaffold(self.ws, 3)
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         brief = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
-        self.assertIn("## Graph context (script-derived)", brief)
-        self.assertIn("src/core.py", brief)
-        self.assertIn("tests/test_api.py", brief)
-        self.assertNotIn("src/unrelated.py", brief)
-
-    def test_brief_bounds_graph_context_and_reports_truncation(self):
-        self.write_plan(plan_with(FULL_TASK))
-        edges = [("tests/test_%03d.py" % index, "lib/export.dart")
-                 for index in range(150)]
-        self._write_graph_cache(edges)
-
-        result = run_scaffold(self.ws, 3)
-
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        brief = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
-        graph_section = brief.split("## Graph context (script-derived)", 1)[1].split(
-            "## RED order", 1)[0]
-        self.assertLessEqual(len(graph_section.encode("utf-8")), 12_100)
-        self.assertIn("truncated", graph_section.lower())
-        self.assertLessEqual(len(graph_section.splitlines()), 102)
+        self.assertNotIn("Graph context", brief)
+        self.assertNotIn("src/core.py", brief)
 
     def test_brief_uses_worktree_relative_workspace_for_runner_commands(self):
         project = self._tmp / "project with spaces"

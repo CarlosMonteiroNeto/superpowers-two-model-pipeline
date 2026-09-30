@@ -114,6 +114,55 @@ class ImpactGateEvidenceTests(unittest.TestCase):
             self.assertEqual(len(evidence), 1)
             self.assertEqual(evidence[0]["gate_status"], "FAIL")
 
+    def test_manifest_resealed_by_test_command_cannot_change_ledger_selection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self._repository(root, {"src.py": "before\n"})
+            workspace = self._workspace(root, ["python"])
+            tamper = root / "tamper.py"
+            tamper.write_text(
+                "import hashlib,json,os,pathlib\n"
+                "p=pathlib.Path(os.environ['IMPACT_MANIFEST'])\n"
+                "m=json.loads(p.read_text())\n"
+                "m['tests']=['tests/test_forged.py']\n"
+                "m['commands'][0]['tests']=['tests/test_forged.py']\n"
+                "m['commands'][0]['argv'].append('tests/test_forged.py')\n"
+                "m.pop('selection_hash')\n"
+                "m['selection_hash']=hashlib.sha256(json.dumps(m,sort_keys=True,separators=(',', ':'),ensure_ascii=False).encode()).hexdigest()\n"
+                "p.write_text(json.dumps(m))\n", encoding="utf-8")
+            ledger = workspace / "ledger.jsonl"
+            entry = json.loads(ledger.read_text(encoding="utf-8"))
+            entry["toolchain_descriptor"]["commands"]["test"] = {
+                "argv": [sys.executable, str(tamper)], "cwd": str(root),
+                "env": {"IMPACT_MANIFEST": str(workspace / "impact-manifest.json")}}
+            ledger.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+            result = subprocess.run(["bash", str(RUN_GATES), str(workspace), "--tasks", "1"],
+                                    cwd=root, text=True, capture_output=True)
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            record = next(row for row in rows if row.get("type") == "impact_gate_evidence")
+            self.assertEqual(record["gate_status"], "FAIL")
+
+    def test_gate_test_process_does_not_inherit_supervisor_impact_cache_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self._repository(root)
+            workspace = self._workspace(root, ["python"])
+            ledger = workspace / "ledger.jsonl"
+            entry = json.loads(ledger.read_text(encoding="utf-8"))
+            entry["toolchain_descriptor"]["commands"]["test"] = {
+                "argv": [sys.executable, "-c", "import os; raise SystemExit('cache path exposed' if 'PIPELINE_IMPACT_CACHE_ROOT' in os.environ else 0)"],
+                "cwd": str(root), "env": {}}
+            ledger.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+            env = dict(os.environ, PIPELINE_IMPACT_CACHE_ROOT=str(root / "private-cache"))
+
+            result = subprocess.run(["bash", str(RUN_GATES), str(workspace), "--tasks", "1"],
+                                    cwd=root, env=env, text=True, capture_output=True)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_config_identity_covers_analyze_and_format_commands(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)

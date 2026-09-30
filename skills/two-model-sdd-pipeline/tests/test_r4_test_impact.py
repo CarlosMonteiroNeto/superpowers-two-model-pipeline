@@ -71,25 +71,6 @@ def policy_fixture():
 
 
 class TestImpactSelectionTests(unittest.TestCase):
-    def test_run_start_graph_identity_can_differ_from_this_gate_base(self):
-        selector = load_selector(self)
-        diff, graph, toolchains = request_fixture()
-        run_start = "9" * 40
-        run_tree = "commit:" + run_start + "+sha256:" + "8" * 64
-        diff["run_start_commit"] = run_start
-        diff["run_start_tree_hash"] = run_tree
-        graph["base_commit"] = run_start
-        graph["base_tree_hash"] = run_tree
-        graph["provenance"] = {"kind": "run_start", "run_start_commit": run_start,
-                               "run_start_tree_hash": run_tree}
-
-        result = selector.select(diff, graph, toolchains, policy_fixture())
-
-        self.assertEqual(result["mode"], "affected")
-        self.assertEqual(result["tests"], [
-            "integration/test_contract.py", "tests/test_api.py", "tests/test_calculator.py",
-        ])
-
     def test_transitive_consumers_contracts_and_integration_tests_are_selected(self):
         selector = load_selector(self)
         diff, graph, toolchains = request_fixture()

@@ -12,6 +12,7 @@ import importlib.util
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -325,6 +326,36 @@ def _read_graphify_graph(root: pathlib.Path, output_root: pathlib.Path) -> dict[
             or not graph_path.resolve().is_relative_to(output_root.resolve())):
         raise ValueError("Graphify output path escapes the disposable snapshot")
     return json.loads(graph_path.read_text(encoding="utf-8"))
+
+
+def extractor_identity(expected_version: str) -> dict[str, Any]:
+    """Identify the installed extractor before a cached result can be trusted."""
+    graphify = shutil.which("graphify")
+    if graphify is None:
+        return {"available": False, "version": None, "diagnostic": "Graphify executable is unavailable"}
+    executable = pathlib.Path(graphify).resolve()
+    try:
+        binary_digest = hashlib.sha256(executable.read_bytes()).hexdigest()
+        result = subprocess.run([graphify, "--version"], shell=False, capture_output=True,
+                                text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"available": False, "version": None,
+                "diagnostic": "Graphify identity check failed: " + str(exc)}
+    match = re.search(r"\bgraphify\s+(\d+\.\d+\.\d+)\b", result.stdout or "", re.IGNORECASE)
+    version = match.group(1) if result.returncode == 0 and match is not None else None
+    policy = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    graphify_policy = policy.get("graphify", {})
+    available = version == expected_version and version in graphify_policy.get("version_allowlist", [])
+    return {
+        "available": available,
+        "path": str(executable),
+        "binary_sha256": binary_digest,
+        "version": version,
+        "expected_version": expected_version,
+        "schema_version": graphify_policy.get("schema_version"),
+        "flags": ["extract", "--code-only", "--no-cluster"],
+        "diagnostic": "" if available else "installed Graphify version is missing or not allowlisted",
+    }
 
 
 def build(snapshot: pathlib.Path, expected_version: str) -> dict[str, Any]:

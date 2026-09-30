@@ -57,6 +57,7 @@ command -v "$OPENCODE_BIN" >/dev/null 2>&1 || {
 }
 unset DISPATCH_PRESTART_MARKER
 unset PIPELINE_SCOPE_GRANT_KEY
+unset PIPELINE_IMPACT_CACHE_ROOT
 
 mkdir -p "$(dirname "$log")"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)

@@ -105,16 +105,16 @@ class TestTwoModelCacheAwareResume(unittest.TestCase):
         The legacy worker/reviewer knowledge-graph stages remain absent.
         """
         text = self.skill.read_text(encoding="utf-8")
-        lower = text.lower()
+        lower = " ".join(text.lower().split())
         self.assertIn("candidate-bound test impact gates (r4)", lower)
         pre_r4 = lower.split("candidate-bound test impact gates (r4)", 1)[0]
         self.assertNotIn("graphify", pre_r4)
         self.assertNotIn("graphify-update", lower)
         self.assertNotIn("graphify-subgraph", lower)
-        self.assertIn("run-local sqlite index", lower)
-        self.assertIn("100 lines and 12,000 bytes", lower)
-        self.assertIn("graphify update", lower)
-        self.assertIn("local publication skips it", lower)
+        self.assertIn("private external run cache", lower)
+        self.assertIn("input identities", lower)
+        self.assertIn("is not skipped", lower)
+        self.assertNotIn("graphify update", lower)
 
     def test_coder_runs_unbounded_until_green(self):
         """The Coder loop has no round budget: coder-gate retries until the

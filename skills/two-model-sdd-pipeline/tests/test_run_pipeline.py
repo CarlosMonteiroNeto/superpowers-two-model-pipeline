@@ -276,6 +276,26 @@ exit 0
 
 
 class TestRunPipelineFlow(RunPipelineTestBase):
+    def test_supervisor_provides_and_cleans_run_scoped_external_impact_cache(self):
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate()
+        captured = self._tmp / "impact-cache-root.txt"
+        task_run = write_stub(
+            self.stub_dir, "task-run-cache-capture",
+            'printf "%s" "${PIPELINE_IMPACT_CACHE_ROOT:-MISSING}" > "${CACHE_CAPTURE:?}"\nexit 7\n',
+        )
+
+        result = self.run_pipeline(
+            "--no-push", "--max-parallel", "1", TASK_RUN_BIN=task_run,
+            CACHE_CAPTURE=str(captured),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        cache_root = pathlib.Path(captured.read_text(encoding="utf-8"))
+        self.assertNotEqual(str(cache_root), "MISSING")
+        self.assertNotIn(str(self.repo.resolve()), str(cache_root.resolve()))
+        self.assertFalse(cache_root.exists(), "run teardown must remove only its owned cache root")
+
     def test_detached_head_blocks_before_any_agent_dispatch(self):
         self.write_plan([dict(FULL_TASK)])
         self.write_gate()
@@ -316,12 +336,10 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         for want in ("brief_ready", "task_complete", "final_review"):
             self.assertIn(want, ledger_text)
         self.assertTrue((ws / "closing-review.diff").exists())
-        self.assertTrue((ws / "graph-context.sqlite3").is_file(),
-                        "run-start graph preparation must precede task dispatch")
+        self.assertFalse((ws / "graph-context.sqlite3").exists(),
+                         "planning runs must not build or retain a graph context")
         first_brief = (ws / "task-1-brief.md").read_text(encoding="utf-8")
-        self.assertIn("## Graph context (script-derived)", first_brief)
-        self.assertIn("Status: unavailable", first_brief,
-                      "Go-only fixture has no supported graph evidence and must fall back safely")
+        self.assertNotIn("Graph context", first_brief)
         canonical_plan = self.plan.read_text(encoding="utf-8")
         self.assertNotIn("graph_digest", canonical_plan,
                          "derived graph metadata must stay out of the planner-authored plan")

@@ -200,32 +200,23 @@ retention is 30 days (configurable).
   manipulation, interruptibility, springs, momentum, materials,
   typography, reduced motion), and the revisor checks them.
 
-**Candidate-bound test impact (R4).** After canonical plan validation,
-`run-pipeline` refreshes and reads the allowlisted raw Graphify AST import graph
-once from the recorded run-start commit. Scripts store an immutable run-local
-SQLite index and per-task sidecars; the authored plan stays unchanged, and its
-author never receives graph payload. `brief-scaffold` reads only the current
-task slice and adds a coder-only graph context section capped at 100 lines and
-12,000 bytes. Corrective tasks reuse the same index and query their own
-`touches`.
+**Candidate-bound test impact (R4).** Task and integration gates select only
+tests proven affected by local imports in candidate-bound Graphify AST
+graphs. Full-suite conditions are classified before graph access. Eligible
+gates cache complete normalized evidence outside checkouts by snapshot content,
+repository, extractor, adapter, and policy identity; raw extraction stays in
+disposable snapshots. The supervisor removes its private cache at run teardown.
+No graph fields enter `plan.json`, and briefs/reviews receive no graph context.
+Missing, unsupported, unresolved, or uncertain graph evidence runs each
+configured full test suite. Integration uses the exact pre-wave commit and
+never skips tests just because task Green passed. Baseline and closing gates
+run complete suites; analysis and formatting keep their ledgered scope.
 
-Task and integration gates query only the cached dependency neighborhood
-reachable from the actual diff; they do not invoke Graphify per gate. Missing,
-stale, incomplete, unsupported, or uncertain graph evidence runs each
-configured full test suite. Integration may omit a selected test that already
-passed task Green only while the test's inputs, command configuration, and
-environment match the recorded evidence. Changed relevant inputs put it back
-in the selection. Baseline and closing gates always run complete suites; the
-closing run catches interactions that appeared after the run-start graph.
-Gate manifests bind graph provenance, actual base/head diffs, and executed
-argv; a candidate change during verification prevents PASS.
-
-For `pull_request` publication, tracked Graphify project-view output refreshes
-once before closing verification and final review. The refresh blocks when
-`graphify-out/` already has user changes, commits only refreshed tracked graph
-files, and publication verifies the reviewed HEAD. Local publication skips
-this refresh. The merged project view is not used for directional impact
-evidence; only the isolated raw AST graph selects tests.
+The gate validates a sealed manifest before commands, then verifies the same
+evidence after execution by recapturing input identities only. It does not
+re-extract or reselect. Candidate, plan, command, environment, policy,
+extractor, adapter, or manifest drift prevents PASS. Graphs are not updated or
+published.
 
 **Corollary — script-decided routing.** If a check can be performed by a
 script, the script performs it *and* routes straight to the next step,

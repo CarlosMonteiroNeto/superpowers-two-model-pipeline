@@ -53,7 +53,7 @@ fi
 if [ "$impact_manifest_created" = "1" ]; then
   export PIPELINE_IMPACT_MANIFEST="$ws/impact-manifest.json"
   rm -f "$ws/run-gates-executed.json"
-  if ! impact_expected_hash=$(python3 - "$SCRIPT_DIR" "$PIPELINE_IMPACT_MANIFEST" "${PIPELINE_GATE_PHASE:-task}" <<'PY'
+  if ! impact_expected_hash=$(python3 - "$SCRIPT_DIR" "$PIPELINE_IMPACT_MANIFEST" "${PIPELINE_GATE_PHASE:-task}" "$impact_mode" "${@:2}" <<'PY'
 import json, pathlib, sys
 sys.path.insert(0, sys.argv[1])
 import gate_evidence
@@ -63,6 +63,8 @@ if phase not in ("task", "integration", "baseline", "closing"):
     raise SystemExit("invalid gate phase")
 if phase in ("baseline", "closing") and any(not item.get("full_suite") for item in manifest["commands"]):
     raise SystemExit("baseline and closing phases require complete configured suites")
+mode, selection = sys.argv[4], sys.argv[5:]
+gate_evidence.verify_workspace_manifest(str(pathlib.Path(sys.argv[2]).parent), selection, mode, manifest)
 print(manifest["selection_hash"])
 PY
   ); then
@@ -70,6 +72,19 @@ PY
     exit 3
   fi
   export PIPELINE_IMPACT_EXPECTED_HASH="$impact_expected_hash"
+  impact_manifest_seal=$(python3 - "$PIPELINE_IMPACT_MANIFEST" <<'PY'
+import hashlib, pathlib, sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+  )
+  impact_sealed_record=$(python3 - "$PIPELINE_IMPACT_MANIFEST" <<'PY'
+import json, pathlib, sys
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(json.dumps({"selection_hash": manifest["selection_hash"],
+                  "identity": manifest["identity"], "mode": manifest["mode"]},
+                 sort_keys=True, separators=(",", ":")))
+PY
+  )
 fi
 
 if [ $# -eq 2 ] && [[ "$1" != --* ]] && [ -f "$ws/ledger.jsonl" ]; then
@@ -82,27 +97,25 @@ else
   python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" "$@" || run_rc=$?
 fi
 if [ "$impact_manifest_created" = "1" ]; then
-  before_manifest="$ws/.impact-manifest.before.json"
   candidate_stable=1
-  cp "$ws/impact-manifest.json" "$before_manifest"
-  if ! python3 - "$SCRIPT_DIR" "$ws" "$impact_mode" "${@:2}" "$before_manifest" <<'PY'
+  if ! python3 - "$SCRIPT_DIR" "$ws" "$impact_mode" "$impact_manifest_seal" "${@:2}" <<'PY'
 import json, pathlib, sys
+import hashlib
 sys.path.insert(0, sys.argv[1])
 import gate_evidence
-workspace, mode, before_path = sys.argv[2], sys.argv[3], sys.argv[-1]
-selection = sys.argv[4:-1]
-before = json.loads(pathlib.Path(before_path).read_text(encoding="utf-8"))
-after = gate_evidence.create_workspace_manifest(workspace, selection, mode)
-if before["selection_hash"] != after["selection_hash"]:
-    raise SystemExit("candidate, impact selection, or gate configuration changed while commands ran")
+workspace, mode, expected_digest = sys.argv[2], sys.argv[3], sys.argv[4]
+manifest_path = pathlib.Path(workspace) / "impact-manifest.json"
+if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != expected_digest:
+    raise ValueError("impact manifest changed after the pre-execution seal")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+selection = sys.argv[5:]
+gate_evidence.verify_workspace_manifest(workspace, selection, mode, manifest)
 PY
   then
     echo "RUN-GATES: candidate changed during verification; refusing to record PASS" >&2
     run_rc=3
     candidate_stable=0
-    cp "$before_manifest" "$ws/impact-manifest.json"
   fi
-  rm -f "$before_manifest"
 fi
 if [ "$impact_manifest_created" = "1" ]; then
   phase=${PIPELINE_GATE_PHASE:-task}
@@ -140,24 +153,21 @@ if [ "$impact_manifest_created" = "1" ]; then
   case "$phase" in task|integration|closing|baseline) ;; *) echo "RUN-GATES: invalid gate phase" >&2; exit 3 ;; esac
   task_id="-"
   if [ "${1:-}" = "--tasks" ] && [ $# -eq 2 ]; then task_id=$2; fi
-  if ! python3 - "$SCRIPT_DIR" "$ws/impact-manifest.json" "$ws/ledger.jsonl" "$phase" "$task_id" "$run_rc" <<'PY'
+  if ! python3 - "$SCRIPT_DIR" "$ws/impact-manifest.json" "$ws/ledger.jsonl" "$phase" "$task_id" "$run_rc" "$impact_sealed_record" <<'PY'
 import hashlib, json, os, pathlib, shutil, subprocess, sys
-script_dir, manifest_path, ledger, phase, task_id, gate_rc = sys.argv[1:]
+script_dir, manifest_path, ledger, phase, task_id, gate_rc, sealed_json = sys.argv[1:]
 ws = pathlib.Path(manifest_path).parent
 manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
-if phase == "task" and gate_rc == "0" and task_id != "-":
-    sys.path.insert(0, script_dir)
-    import gate_evidence
-    gate_evidence.record_green_evidence(ws, task_id, gate_evidence.validate_manifest(manifest))
-identity = manifest["identity"]
+sealed = json.loads(sealed_json)
+identity = sealed["identity"]
 kind = "impact_gate_evidence"
-summary = "{} gate status={} mode={}".format(phase, "PASS" if gate_rc == "0" else "FAIL", manifest["mode"])
+summary = "{} gate status={} mode={}".format(phase, "PASS" if gate_rc == "0" else "FAIL", sealed["mode"])
 execution_path = pathlib.Path(ws) / "run-gates-executed.json"
 execution_hash = hashlib.sha256(execution_path.read_bytes()).hexdigest() if execution_path.is_file() else "0" * 64
 args = [os.environ.get("BASH_BIN") or shutil.which("bash") or "bash",
         str(pathlib.Path(script_dir) / "ledger-append"), ledger, kind, task_id, summary,
-        "selection_hash=" + manifest["selection_hash"],
-        "impact_selection_hash=" + manifest["selection_hash"],
+        "selection_hash=" + sealed["selection_hash"],
+        "impact_selection_hash=" + sealed["selection_hash"],
         "executed_argv_hash=" + execution_hash,
         "candidate_commit=" + identity["head_commit"], "tree_hash=" + identity["tree_hash"],
         "config_hash=" + identity["config_hash"], "environment_hash=" + identity["environment_hash"],
