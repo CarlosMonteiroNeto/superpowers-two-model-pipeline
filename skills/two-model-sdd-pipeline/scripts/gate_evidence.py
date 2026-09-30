@@ -1,0 +1,607 @@
+"""Candidate-bound impact manifests and gate evidence matching."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+from typing import Any
+
+
+_HASH = re.compile(r"^[0-9a-f]{64}$")
+_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
+
+
+def _digest(value: Any) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Reject malformed or tampered test-impact selector output."""
+    if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
+        raise ValueError("impact manifest has an unsupported schema")
+    required = {"schema_version", "mode", "scope_paths", "tests", "commands",
+                "reasons", "reasons_detail", "gaps", "identity", "evidence",
+                "selection_hash"}
+    if set(manifest) != required:
+        raise ValueError("impact manifest fields do not match the selector contract")
+    identity = manifest.get("identity")
+    evidence = manifest.get("evidence")
+    if not isinstance(identity, dict) or not isinstance(evidence, dict):
+        raise ValueError("impact manifest identity and evidence are required")
+    for field in ("base_commit", "head_commit"):
+        if not isinstance(identity.get(field), str) or not _COMMIT.fullmatch(identity[field]):
+            raise ValueError("impact manifest has an invalid %s" % field)
+    for field in ("base_tree_hash", "tree_hash", "config_hash", "environment_hash"):
+        if not isinstance(identity.get(field), str) or not _HASH.fullmatch(identity[field]):
+            # test_impact also accepts explicit tree identity wrappers.
+            value = identity.get(field)
+            valid_wrapped = isinstance(value, str) and (
+                (value.startswith("tree:sha256:") and _HASH.fullmatch(value[len("tree:sha256:"):]))
+                or (re.fullmatch(r"commit:[0-9a-f]{7,64}\+sha256:[0-9a-f]{64}", value) is not None)
+            )
+            if field not in ("base_tree_hash", "tree_hash") or not valid_wrapped:
+                raise ValueError("impact manifest has an invalid %s" % field)
+    if not isinstance(identity.get("policy_version"), str) or not identity["policy_version"]:
+        raise ValueError("impact manifest policy version is missing")
+    for field in ("diff_hash", "graph_hash", "toolchains_hash", "policy_hash"):
+        if not isinstance(evidence.get(field), str) or not _HASH.fullmatch(evidence[field]):
+            raise ValueError("impact manifest has invalid %s" % field)
+    if "workspace_input_hash" in evidence and (
+            not isinstance(evidence["workspace_input_hash"], str)
+            or not _HASH.fullmatch(evidence["workspace_input_hash"])):
+        raise ValueError("impact manifest has invalid workspace input identity")
+    provenance = evidence.get("graph_provenance")
+    if not isinstance(provenance, dict) or not isinstance(provenance.get("complete"), bool):
+        raise ValueError("impact manifest graph provenance is missing")
+    if provenance["complete"]:
+        if (provenance.get("base_commit") != identity.get("base_commit")
+                or provenance.get("candidate_commit") != identity.get("head_commit")
+                or provenance.get("candidate_tree_hash") != identity.get("tree_hash")
+                or not isinstance(provenance.get("graphify_version"), str)):
+            raise ValueError("impact manifest graph provenance does not match its candidate")
+        for side in ("base", "candidate"):
+            item = provenance.get(side)
+            if (not isinstance(item, dict) or item.get("complete") is not True
+                    or not isinstance(item.get("graph_digest"), str) or not _HASH.fullmatch(item["graph_digest"])
+                    or not isinstance(item.get("source_inventory_hash"), str)
+                    or not _HASH.fullmatch(item["source_inventory_hash"])):
+                raise ValueError("impact manifest has incomplete %s graph provenance" % side)
+    for field in ("scope_paths", "tests", "commands", "reasons", "reasons_detail", "gaps"):
+        if not isinstance(manifest.get(field), list):
+            raise ValueError("impact manifest %s must be an array" % field)
+    selection = {key: value for key, value in manifest.items() if key != "selection_hash"}
+    if not isinstance(manifest.get("selection_hash"), str) or not _HASH.fullmatch(manifest["selection_hash"]):
+        raise ValueError("impact manifest selection hash is malformed")
+    if _digest(selection) != manifest["selection_hash"]:
+        raise ValueError("impact manifest selection hash does not match its contents")
+    return manifest
+
+
+def matches(record: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    """Return whether gate evidence proves this exact tree/config/impact set."""
+    if not isinstance(record, dict) or not isinstance(candidate, dict):
+        return False
+    manifest = candidate.get("impact_manifest")
+    try:
+        validate_manifest(manifest)
+    except (TypeError, ValueError):
+        return False
+    identity = manifest["identity"]
+    expected = {
+        "candidate_commit": candidate.get("commit"),
+        "tree_hash": candidate.get("tree_hash"),
+        "config_hash": candidate.get("config_hash"),
+        "environment_hash": candidate.get("environment_hash"),
+        "impact_selection_hash": manifest["selection_hash"],
+    }
+    if (identity["head_commit"] != expected["candidate_commit"]
+            or identity["tree_hash"] != expected["tree_hash"]
+            or identity["config_hash"] != expected["config_hash"]
+            or identity["environment_hash"] != expected["environment_hash"]):
+        return False
+    return all(record.get(key) == value for key, value in expected.items())
+
+
+def _git(root: pathlib.Path, *args: str, binary: bool = False):
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+    if result.returncode:
+        raise ValueError("cannot derive impact from repository state: " + result.stderr.decode("utf-8", "replace").strip())
+    return result.stdout if binary else result.stdout.decode("utf-8", "replace").strip()
+
+
+def _safe_repo_path(value: str) -> pathlib.PurePosixPath:
+    path = pathlib.PurePosixPath(value)
+    if (path.is_absolute() or not value or "\\" in value
+            or re.match(r"^[A-Za-z]:", value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise ValueError("unsafe path in Git snapshot: " + repr(value))
+    return path
+
+
+def _git_tree_files(root: pathlib.Path, commit: str) -> list[tuple[str, str, str]]:
+    raw = _git(root, "ls-tree", "-rz", "--full-tree", commit, binary=True)
+    records = []
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        metadata, name = record.split(b"\t", 1)
+        mode, kind, blob = metadata.decode("ascii").split(" ")
+        path = name.decode("utf-8", "strict")
+        _safe_repo_path(path)
+        if kind != "blob" or mode not in ("100644", "100755"):
+            raise ValueError("Git snapshot contains a non-regular source path")
+        records.append((mode, blob, path))
+    return records
+
+
+def _write_snapshot_file(root: pathlib.Path, relative: str, content: bytes) -> None:
+    rel = _safe_repo_path(relative)
+    target = root.joinpath(*rel.parts)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+
+
+def _git_blob_map(root: pathlib.Path, object_ids: list[str]) -> dict[str, bytes]:
+    if not object_ids:
+        return {}
+    result = subprocess.run(["git", "-C", str(root), "cat-file", "--batch"],
+                            input=("\n".join(object_ids) + "\n").encode("ascii"),
+                            capture_output=True, check=True)
+    data = result.stdout
+    cursor = 0
+    blobs: dict[str, bytes] = {}
+    for expected in object_ids:
+        end = data.find(b"\n", cursor)
+        if end < 0:
+            raise ValueError("Git returned a truncated object header")
+        fields = data[cursor:end].decode("ascii").split(" ")
+        if len(fields) != 3 or fields[0] != expected or fields[1] != "blob":
+            raise ValueError("Git returned a non-blob snapshot object")
+        size = int(fields[2])
+        cursor = end + 1
+        blob_end = cursor + size
+        if blob_end >= len(data) or data[blob_end:blob_end + 1] != b"\n":
+            raise ValueError("Git returned a truncated blob")
+        blobs[expected] = data[cursor:blob_end]
+        cursor = blob_end + 1
+    if cursor != len(data):
+        raise ValueError("Git returned unexpected snapshot object data")
+    return blobs
+
+
+def _make_snapshot(snapshot: pathlib.Path, base_files: list[tuple[str, str, str]],
+                   changes: list[dict[str, str]], candidate: bool,
+                   blobs: dict[str, bytes], root: pathlib.Path) -> None:
+    snapshot.mkdir(parents=True)
+    if not candidate:
+        for _mode, blob, path in base_files:
+            _write_snapshot_file(snapshot, path, blobs[blob])
+        return
+    removed = set()
+    added = set()
+    for item in changes:
+        status = item["status"]
+        if status == "deleted":
+            removed.add(item["path"])
+        elif status == "renamed":
+            removed.add(item["old_path"])
+            added.add(item["new_path"])
+        else:
+            added.add(item["path"])
+    for _mode, blob, path in base_files:
+        if path in removed or path in added:
+            continue
+        _write_snapshot_file(snapshot, path, blobs[blob])
+    for relative in sorted(added):
+        rel = _safe_repo_path(relative)
+        source = root.joinpath(*rel.parts)
+        if not source.is_file() or source.is_symlink():
+            raise ValueError("candidate snapshot has a missing or non-regular changed path: " + relative)
+        _write_snapshot_file(snapshot, relative, source.read_bytes())
+
+
+def _extractor_input_path(path: str) -> bool:
+    rel = _safe_repo_path(path)
+    if any(part.startswith(".") or part in {"graphify-out", "__pycache__", ".dart_tool",
+                                             "build", "dist", ".venv", "venv"}
+           for part in rel.parts):
+        return False
+    name = rel.name
+    return (rel.suffix.lower() in {".py", ".dart"}
+            or name in {"pyproject.toml", "setup.cfg", "Pipfile", "pubspec.yaml"}
+            or (name.startswith("requirements") and name.endswith(".txt")))
+
+
+def _snapshot_input_records(root: pathlib.Path, base_files: list[tuple[str, str, str]],
+                            changes: list[dict[str, str]], blobs: dict[str, bytes],
+                            candidate: bool) -> list[tuple[str, str, bytes]]:
+    removed: set[str] = set()
+    added: set[str] = set()
+    if candidate:
+        for item in changes:
+            if item["status"] == "deleted":
+                removed.add(item["path"])
+            elif item["status"] == "renamed":
+                removed.add(item["old_path"])
+                added.add(item["new_path"])
+            else:
+                added.add(item["path"])
+    records: dict[str, tuple[str, bytes]] = {}
+    for _mode, blob, path in base_files:
+        if not _extractor_input_path(path) or (candidate and path in removed | added):
+            continue
+        # Graphify consumes file contents; executable permission does not
+        # change AST extraction, so both Git and worktree files share identity.
+        records[path] = ("regular", blobs[blob])
+    if candidate:
+        for path in sorted(added):
+            if not _extractor_input_path(path):
+                continue
+            relative = _safe_repo_path(path)
+            source = root.joinpath(*relative.parts)
+            if not source.is_file() or source.is_symlink():
+                raise ValueError("candidate extractor input is missing or not a regular file: " + path)
+            records[path] = ("regular", source.read_bytes())
+    return [(records[path][0], path, records[path][1]) for path in sorted(records)]
+
+
+def _make_extractor_snapshot(snapshot: pathlib.Path, records: list[tuple[str, str, bytes]]) -> None:
+    snapshot.mkdir(parents=True)
+    for _mode, path, content in records:
+        _write_snapshot_file(snapshot, path, content)
+
+
+def _repository_namespace(root: pathlib.Path) -> str:
+    try:
+        remote = _git(root, "config", "--get", "remote.origin.url")
+        if remote:
+            return remote
+    except ValueError:
+        pass
+    common = pathlib.Path(_git(root, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = root / common
+    return str(common.resolve())
+
+
+def _graph_evidence(root: pathlib.Path, base_commit: str, base_tree: str, head: str,
+                    tree_id: str, files: list[dict[str, str]], policy: dict[str, Any],
+                    diagnostics: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    scripts = pathlib.Path(__file__).resolve().parent
+    sys.path.insert(0, str(scripts))
+    import test_dependency_graph
+    import test_dependency_cache
+
+    graph_policy = policy.get("graphify") if isinstance(policy, dict) else None
+    versions = graph_policy.get("version_allowlist") if isinstance(graph_policy, dict) else None
+    if not isinstance(versions, list) or len(versions) != 1 or not isinstance(versions[0], str):
+        return None, {"complete": False, "diagnostics": ["Graphify version policy is missing or ambiguous"]}
+    provenance: dict[str, Any] = {"graphify_version": versions[0], "base": {}, "candidate": {}}
+    extractor = test_dependency_graph.extractor_identity(versions[0])
+    provenance["extractor_identity_hash"] = _digest(extractor)
+    provenance["adapter_identity_hash"] = hashlib.sha256(
+        pathlib.Path(test_dependency_graph.__file__).read_bytes()).hexdigest()
+    if extractor.get("available") is not True:
+        provenance["diagnostics"] = [extractor.get("diagnostic") or "Graphify installation is not trusted"]
+        return None, provenance
+    configured_root = os.environ.get("PIPELINE_IMPACT_CACHE_ROOT")
+    cache_root = pathlib.Path(configured_root) if configured_root else None
+    owns_root = not (cache_root is not None and test_dependency_cache.is_owned_root(cache_root))
+    if owns_root:
+        cache_root = test_dependency_cache.create_owned_root()
+    try:
+        base_files = _git_tree_files(root, base_commit)
+        relevant = [(mode, blob, path) for mode, blob, path in base_files if _extractor_input_path(path)]
+        blobs = _git_blob_map(root, sorted({blob for _mode, blob, _path in relevant}))
+        snapshots = [
+            _snapshot_input_records(root, relevant, files, blobs, candidate=False),
+            _snapshot_input_records(root, relevant, files, blobs, candidate=True),
+        ]
+        adapter_digest = hashlib.sha256(pathlib.Path(test_dependency_graph.__file__).read_bytes()).hexdigest()
+        policy_digest = _digest(policy)
+        namespace = _repository_namespace(root)
+        cached: list[dict[str, Any]] = []
+        for name, records in zip(("base", "candidate"), snapshots):
+            inventory = [{"path": path, "sha256": hashlib.sha256(content).hexdigest(), "mode": mode}
+                         for mode, path, content in records]
+            resolution_inputs = [item for item in inventory
+                                 if pathlib.PurePosixPath(item["path"]).name in {
+                                     "pyproject.toml", "setup.cfg", "Pipfile", "pubspec.yaml"}
+                                 or (pathlib.PurePosixPath(item["path"]).name.startswith("requirements")
+                                     and pathlib.PurePosixPath(item["path"]).name.endswith(".txt"))]
+            key = test_dependency_cache.make_key({
+                "repository_namespace": namespace,
+                "snapshot_inventory": inventory,
+                "resolution_inputs": resolution_inputs,
+                "extractor_identity": extractor,
+                "adapter_identity": adapter_digest,
+                "policy_identity": {"digest": policy_digest},
+            })
+
+            def build_snapshot(records=records):
+                with tempfile.TemporaryDirectory(prefix="r4-impact-snapshot-") as temporary:
+                    snapshot = pathlib.Path(temporary) / "source"
+                    _make_extractor_snapshot(snapshot, records)
+                    return test_dependency_graph.build(snapshot, versions[0])
+
+            cache_status: dict[str, Any] = {}
+            result = test_dependency_cache.get_or_build(cache_root, key, build_snapshot, cache_status)
+            if diagnostics is not None:
+                diagnostics.append({"snapshot": name, **cache_status})
+            cached.append(result)
+            provenance[name] = {
+                "complete": result.get("complete") is True,
+                "graph_digest": result.get("graph_digest"),
+                "source_inventory_hash": result.get("source_inventory_hash"),
+                "graphify_version": result.get("graphify_version"),
+                "diagnostics": result.get("diagnostics", []),
+            }
+        valid = all(result.get("complete") is True
+                    and result.get("graphify_version") == versions[0]
+                    and isinstance(result.get("graph_digest"), str)
+                    and _HASH.fullmatch(result["graph_digest"])
+                    and isinstance(result.get("source_inventory_hash"), str)
+                    and _HASH.fullmatch(result["source_inventory_hash"])
+                    and isinstance(result.get("reverse_edges"), dict)
+                    for result in cached)
+        if not valid:
+            provenance["complete"] = False
+            return None, provenance
+        edges: dict[str, set[str]] = {}
+        for result in cached:
+            for source, targets in result["reverse_edges"].items():
+                edges.setdefault(source, set()).update(targets)
+        graph = {"version": 1, "base_commit": base_commit,
+                 "base_tree_hash": "commit:%s+sha256:%s" % (base_commit, _digest(base_tree)),
+                 "reverse_edges": {key: sorted(value) for key, value in sorted(edges.items())}}
+        provenance["complete"] = True
+        provenance["base_commit"] = base_commit
+        provenance["base_tree_hash"] = "commit:%s+sha256:%s" % (base_commit, _digest(base_tree))
+        provenance["candidate_commit"] = head
+        provenance["candidate_tree_hash"] = tree_id
+        graph["provenance"] = provenance
+        return graph, provenance
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
+        provenance["complete"] = False
+        provenance["diagnostics"] = ["Graphify snapshots unavailable: " + str(exc)]
+        return None, provenance
+    finally:
+        if owns_root:
+            test_dependency_cache.cleanup_owned_root(cache_root)
+
+
+def capture_workspace_inputs(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
+    """Create a conservative manifest from current Git state and ledger commands.
+
+    Dependency evidence is extracted only from disposable Git base/candidate
+    snapshots. A caller cannot supply a graph or test path list to this function.
+    """
+    scripts = pathlib.Path(__file__).resolve().parent
+    sys.path.insert(0, str(scripts))
+    import test_impact
+    import toolchain_gate
+
+    try:
+        root_value = _git(pathlib.Path(workspace).resolve(), "rev-parse", "--show-toplevel")
+    except ValueError:
+        # Pipeline workspaces can be explicitly placed outside the checkout
+        # (legacy/test layouts). The running gate's cwd is the supervisor's
+        # active candidate checkout, so use it as the source of Git identity.
+        root_value = _git(pathlib.Path.cwd(), "rev-parse", "--show-toplevel")
+    root = pathlib.Path(root_value).resolve()
+    plan_path = pathlib.Path(workspace) / "plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8")) if plan_path.is_file() else {"tasks": []}
+    if mode == "tasks":
+        try:
+            toolchain_ids = list(dict.fromkeys(toolchain_gate.task_toolchain_id(workspace, task) for task in selection))
+        except toolchain_gate.GateContractError as exc:
+            legacy_entries = toolchain_gate.load_gate_entries(workspace)
+            if ("no explicit toolchain_id" not in str(exc) or len(legacy_entries) != 1
+                    or "toolchain_descriptor" in legacy_entries[0]):
+                raise
+            entries = legacy_entries
+            toolchain_ids = [str(entries[0].get("toolchain_id") or entries[0].get("lang") or "legacy")]
+            mode = "legacy-task"
+        scope = sorted({path for task_id in selection for task in plan["tasks"]
+                        if isinstance(task, dict) and str(task.get("id")) == str(task_id)
+                        for path in task.get("touches", []) if isinstance(path, str)})
+    elif mode == "toolchains":
+        toolchain_ids = list(dict.fromkeys(selection))
+        required_ids = sorted({toolchain_gate.task_toolchain_id(workspace, str(task.get("id")))
+                               for task in plan.get("tasks", []) if isinstance(task, dict)
+                               and task.get("id") is not None})
+        if sorted(toolchain_ids) != required_ids:
+            raise ValueError("--toolchains must cover every toolchain in the supervisor-owned plan; use --tasks for task scope")
+        scope = sorted({path for task in plan.get("tasks", []) if isinstance(task, dict)
+                        and task.get("toolchain_id") in toolchain_ids
+                        for path in task.get("touches", []) if isinstance(path, str)})
+    else:
+        entries = toolchain_gate.load_gate_entries(workspace)
+        if len(entries) != 1:
+            raise ValueError("legacy impact requires exactly one gate entry")
+        toolchain_ids = [str(entries[0].get("toolchain_id") or entries[0].get("lang") or "legacy")]
+        scope = []
+
+    descriptors = []
+    for identifier in toolchain_ids:
+        if mode in ("legacy", "legacy-task"):
+            entry = entries[0]
+        else:
+            entry = toolchain_gate.gate_for_toolchain(workspace, identifier)
+        descriptor = toolchain_gate._descriptor(entry)
+        commands = {name: toolchain_gate.command_spec(entry, name)
+                    for name in ("test", "analyze", "format")}
+        commands = {name: ({**command, "cwd": command.get("cwd") or str(root)}) if command else None
+                    for name, command in commands.items()}
+        test = commands["test"]
+        if test is None:
+            raise ValueError("toolchain %s has no configured test command" % identifier)
+        language = descriptor.get("language") or entry.get("lang")
+        descriptors.append({"id": identifier, "descriptor": descriptor,
+                            "language": language, "red_adapter": descriptor.get("red_adapter"),
+                            "commands": commands})
+
+    head = _git(root, "rev-parse", "HEAD")
+    requested_base = os.environ.get("PIPELINE_IMPACT_BASE_COMMIT") or head
+    base = _git(root, "rev-parse", "--verify", requested_base + "^{commit}")
+    _git(root, "merge-base", "--is-ancestor", base, head)
+    base_tree = _git(root, "rev-parse", base + "^{tree}")
+    raw = _git(root, "diff", "--name-status", "-z", base, binary=True).split(b"\0")
+    files: list[dict[str, str]] = []
+    index = 0
+    while index < len(raw) and raw[index]:
+        status = raw[index].decode("ascii", "strict")
+        index += 1
+        if status.startswith("R") or status.startswith("C"):
+            if index + 1 >= len(raw):
+                raise ValueError("malformed Git rename/copy status")
+            old_path, new_path = raw[index].decode("utf-8"), raw[index + 1].decode("utf-8")
+            index += 2
+            if status.startswith("R"):
+                files.append({"status": "renamed", "old_path": old_path, "new_path": new_path})
+            else:
+                files.extend(({"status": "deleted", "path": old_path}, {"status": "added", "path": new_path}))
+        else:
+            if index >= len(raw):
+                raise ValueError("malformed Git name-status output")
+            path = raw[index].decode("utf-8")
+            index += 1
+            state = {"A": "added", "M": "modified", "D": "deleted", "T": "modified"}.get(status[:1])
+            if state is None:
+                raise ValueError("unknown Git change status: %s" % status)
+            files.append({"status": state, "path": path})
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "-z", binary=True).split(b"\0")
+    for raw_path in untracked:
+        if raw_path:
+            files.append({"status": "added", "path": raw_path.decode("utf-8")})
+    tracked_paths = _git(root, "ls-files", "-z", binary=True).split(b"\0")
+    test_paths = sorted({path.decode("utf-8") for path in tracked_paths if path}
+                        | {item["path"] for item in files if item.get("status") != "deleted"}
+                        | {item["new_path"] for item in files if item.get("status") == "renamed"})
+    tree_digest = hashlib.sha256()
+    tree_digest.update(_git(root, "diff", "--binary", base, binary=True))
+    for item in sorted(files, key=lambda value: (value.get("path", value.get("old_path", "")), value["status"])):
+        for name in (item.get("path"), item.get("new_path")):
+            if name and (root / pathlib.PurePosixPath(name)).is_file():
+                tree_digest.update(name.encode("utf-8"))
+                tree_digest.update((root / pathlib.PurePosixPath(name)).read_bytes())
+    tree_id = "commit:%s+sha256:%s" % (head, tree_digest.hexdigest())
+    policy_path = scripts.parent / "toolchains" / "test-impact-rules.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    config_hash = _digest({"manifest_version": "r4-impact-gates-2", "plan": plan,
+                           "toolchains": descriptors, "policy": policy})
+    environment_hash = _digest({"python": sys.version, "platform": sys.platform,
+                                 "path": os.environ.get("PATH", "")})
+    diff = {"base_commit": base, "head_commit": head,
+            "base_tree_hash": "commit:%s+sha256:%s" % (base, _digest(base_tree)),
+            "tree_hash": tree_id, "config_hash": config_hash,
+            "environment_hash": environment_hash, "task_scope": scope,
+            "test_paths": [path for path in test_paths if "test" in pathlib.PurePosixPath(path).name.lower()],
+            "files": files}
+    phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
+    return {
+        "root": root, "plan": plan, "descriptors": descriptors,
+        "head": head, "base": base, "base_tree": base_tree, "files": files,
+        "test_paths": test_paths, "tree_id": tree_id, "config_hash": config_hash,
+        "environment_hash": environment_hash, "diff": diff, "policy": policy,
+        "phase": phase,
+    }
+
+
+def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -> dict[str, Any]:
+    """Create a candidate-bound manifest after graph-independent preflight."""
+    inputs = capture_workspace_inputs(workspace, selection, mode)
+    scripts = pathlib.Path(__file__).resolve().parent
+    sys.path.insert(0, str(scripts))
+    import test_impact
+    root = inputs["root"]
+    diff = inputs["diff"]
+    descriptors = inputs["descriptors"]
+    policy = inputs["policy"]
+    phase = inputs["phase"]
+    files = inputs["files"]
+    head = inputs["head"]
+    tree_id = inputs["tree_id"]
+    config_hash = inputs["config_hash"]
+    environment_hash = inputs["environment_hash"]
+    preflight_result = test_impact.preflight(diff, descriptors, policy, phase)
+    impact_diagnostics: list[dict[str, Any]] = []
+    if not preflight_result["requires_graph"]:
+        reasons = sorted({reason for reason in preflight_result["toolchain_reasons"].values()
+                          if reason is not None})
+        graph, graph_provenance = None, {"complete": False,
+            "diagnostics": ["graph acquisition skipped during preflight", *reasons]}
+    else:
+        graph, graph_provenance = _graph_evidence(root, inputs["base"], inputs["base_tree"],
+                                                  head, tree_id, files, policy, impact_diagnostics)
+    manifest = test_impact.select(diff, graph, descriptors, policy, preflight_result, phase)
+    manifest["evidence"]["graph_provenance"] = graph_provenance
+    manifest["evidence"]["workspace_input_hash"] = _workspace_input_hash(
+        inputs, selection, mode, graph_provenance)
+    if impact_diagnostics:
+        diagnostics_path = pathlib.Path(workspace) / "impact-diagnostics.json"
+        diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+        diagnostics_path.write_text(json.dumps(impact_diagnostics, ensure_ascii=False,
+                                              sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    manifest["selection_hash"] = _digest({key: value for key, value in manifest.items()
+                                           if key != "selection_hash"})
+    manifest = validate_manifest(manifest)
+    destination = pathlib.Path(workspace) / "impact-manifest.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, destination)
+    candidate = {"commit": head, "tree_hash": tree_id, "config_hash": config_hash,
+                 "environment_hash": environment_hash, "impact_manifest": manifest}
+    record = {"candidate_commit": head, "tree_hash": tree_id, "config_hash": config_hash,
+              "environment_hash": environment_hash, "impact_selection_hash": manifest["selection_hash"]}
+    if not matches(record, candidate):
+        raise ValueError("generated impact manifest does not match its candidate")
+    return manifest
+
+
+def _workspace_input_hash(inputs: dict[str, Any], selection: list[str], mode: str,
+                          graph_provenance: dict[str, Any]) -> str:
+    """Hash the selector's graph-independent inputs plus identities used for selection."""
+    return _digest({
+        "selection": selection, "mode": mode, "diff": inputs["diff"],
+        "plan": inputs["plan"], "descriptors": inputs["descriptors"],
+        "policy": inputs["policy"], "phase": inputs["phase"],
+        "extractor_identity_hash": graph_provenance.get("extractor_identity_hash"),
+        "adapter_identity_hash": graph_provenance.get("adapter_identity_hash"),
+    })
+
+
+def verify_workspace_manifest(workspace: str, selection: list[str], mode: str,
+                              manifest: dict[str, Any]) -> None:
+    """Validate the same sealed selection against current inputs without graph work."""
+    manifest = validate_manifest(manifest)
+    if not isinstance(manifest["evidence"].get("workspace_input_hash"), str):
+        raise ValueError("impact manifest has no retained workspace input identity")
+    inputs = capture_workspace_inputs(workspace, selection, mode)
+    provenance = manifest["evidence"]["graph_provenance"]
+    if provenance.get("complete"):
+        scripts = pathlib.Path(__file__).resolve().parent
+        sys.path.insert(0, str(scripts))
+        import test_dependency_graph
+        graph_policy = inputs["policy"].get("graphify", {})
+        versions = graph_policy.get("version_allowlist", [])
+        if len(versions) != 1:
+            raise ValueError("Graphify version policy changed after impact selection")
+        extractor = test_dependency_graph.extractor_identity(versions[0])
+        extractor_hash = _digest(extractor)
+        adapter_hash = hashlib.sha256(pathlib.Path(test_dependency_graph.__file__).read_bytes()).hexdigest()
+        if (extractor_hash != provenance.get("extractor_identity_hash")
+                or adapter_hash != provenance.get("adapter_identity_hash")):
+            raise ValueError("extractor or adapter identity changed after impact selection")
+    actual_hash = _workspace_input_hash(inputs, selection, mode, provenance)
+    if actual_hash != manifest["evidence"]["workspace_input_hash"]:
+        raise ValueError("candidate, plan, commands, environment, policy, or selection inputs changed")

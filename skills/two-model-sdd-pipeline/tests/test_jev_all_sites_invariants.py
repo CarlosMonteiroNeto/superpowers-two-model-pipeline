@@ -12,16 +12,18 @@ class Site4AllSitesInvariantTests(unittest.TestCase):
         package = (GENERIC / "scripts" / "review-package").read_text(encoding="utf-8")
         self.assertIn("review-guidance", package)
         self.assertEqual(package.count("review-guidance"), 1)
-        self.assertIn("two-model-reviewer", (GENERIC / "scripts" / "coder-gate").read_text(encoding="utf-8"))
+        self.assertIn("review-dispatch", (GENERIC / "scripts" / "coder-gate").read_text(encoding="utf-8"))
         green = (FLUTTER / "scripts" / "green-gate").read_text(encoding="utf-8")
         self.assertIn("two-model-sdd-pipeline/scripts/review-package", green)
-        self.assertIn("two-model-reviewer", green)
+        self.assertIn("review-dispatch", green)
 
     def test_review_dispatch_and_verdict_pipeline_are_retained(self):
         for path in (GENERIC / "scripts" / "coder-gate", FLUTTER / "scripts" / "green-gate"):
             text = path.read_text(encoding="utf-8")
-            self.assertIn("--agent two-model-reviewer", text)
-            self.assertIn("--prompt-file", text)
+            self.assertIn("review-dispatch", text)
+        shared = (GENERIC / "scripts" / "review-dispatch").read_text(encoding="utf-8")
+        self.assertIn("--agent two-model-reviewer", shared)
+        self.assertIn("--prompt-file", shared)
         parse = (GENERIC / "scripts" / "parse-review").read_text(encoding="utf-8")
         self.assertIn("parse_review", parse)
 

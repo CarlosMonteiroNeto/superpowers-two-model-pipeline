@@ -34,5 +34,13 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(result["url"],"https://example.invalid/pr/13")
         self.assertEqual(run.call_args_list[-1].args[0], ["gh","pr","create","--fill","--base","release"])
 
+    def test_publication_refuses_head_different_from_reviewed_candidate(self):
+        with mock.patch.object(publication.subprocess, "run", return_value=subprocess.CompletedProcess(
+                ["git", "rev-parse", "HEAD"], 0, "f" * 40 + "\n", "")) as run:
+            with self.assertRaisesRegex(ValueError, "HEAD changed"):
+                publication.publish("repo", "feature", "main", "pull_request",
+                                    expected_head="a" * 40)
+        self.assertEqual(run.call_count, 1)
+
 
 if __name__=="__main__": unittest.main()

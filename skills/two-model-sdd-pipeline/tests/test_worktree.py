@@ -60,6 +60,16 @@ class WorktreeTest(unittest.TestCase):
         self.assertIn("worktree_alloc",
                       (self.ws / "ledger.jsonl").read_text(encoding="utf-8"))
 
+    def test_alloc_does_not_copy_legacy_graph_context_into_worker_checkout(self):
+        (self.ws / "graph-context.sqlite3").write_bytes(b"run-start graph cache")
+
+        result = self.run_it("worktree-alloc", 3)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        wt_ws = self.repo / ".superpowers" / "two-model" / "worktrees" / "task-3" / ".superpowers" / "two-model" / "plan"
+        self.assertFalse((wt_ws / "graph-context.sqlite3").exists())
+        self.assertFalse((wt_ws / "graph-task-context").exists())
+
     def test_alloc_leaves_integration_tree_clean(self):
         self.run_it("worktree-alloc", 3)
         out = subprocess.run(["git", "-C", str(self.repo), "status", "--porcelain"],

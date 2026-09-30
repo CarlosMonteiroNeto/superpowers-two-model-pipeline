@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
 # Bounded retry wrapper for the headless dispatch launcher (ADR-0001/D11).
-# A transient opencode start-up failure (provider timeout rc=124, dropped
-# connection, ...) used to stop the whole task: red-gate ledgered
-# dispatch_interrupted and exited, coder-gate's fix loop blocked, task-run
-# blocked on the corrective path. This wrapper retries those transient codes a
-# bounded number of times; permanent verdicts pass through unchanged - a hiccup
-# never burns a task, a genuine blocker still surfaces with its original code.
+# Only an adapter-confirmed pre-start failure is retried. OpenCode confirms it
+# with a wrapper-owned marker; raw worker exit code 5 is ambiguous. A provider
+# timeout or dropped connection after a worker might have started remains
+# ambiguous and must be reconciled instead of silently replayed.
 #
-# retryable = any exit code not in {0, 2, 3}:
+# retryable = exit code 5, positively classified before worker start:
 #   0  dispatched                - success, do not retry
 #   2  usage / missing prompt    - caller bug, retrying would fail identically
 #   3  wrong-agent refusal       - a mode: subagent definition; permanent
-#   everything else              - opencode's own exit code; retry
+#   everything else              - ambiguous or terminal; preserve the result
 #
 # Usage: dispatch-retry <dispatch args...>
 #   All arguments are forwarded verbatim to DISPATCH_BIN, so the wrapper is
@@ -44,27 +42,51 @@ args=("$@")
 # argument list is copied first and never modified.
 task=""
 log=""
+agent=""
+prompt=""
+resume_session="-"
 i=0
 while [ $i -lt ${#args[@]} ]; do
   case "${args[$i]}" in
     --task) task=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
     --log) log=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
+    --agent) agent=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
+    --prompt-file) prompt=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
+    --continue) resume_session=${args[$((i + 1))]:-}; i=$((i + 2)) ;;
     *) i=$((i + 1)) ;;
   esac
 done
+
+# One reservation covers this external operator invocation and any transport
+# retries performed by this wrapper. Reviewers and directors never spend it.
+if [ "$backend" = opencode ] && [[ "$agent" == two-model-coder* ]] && [ -n "$task" ] && [ -n "$log" ]; then
+  budget_ws=$(dirname "$log")
+fi
 
 attempt=0
 rc=1
 while [ "$attempt" -lt "$MAX_TRIES" ]; do
   attempt=$((attempt + 1))
+  if [ "$backend" = opencode ] && [[ "$agent" == two-model-coder* ]] && [ -n "$task" ] && [ -n "$log" ] && [ -f "$budget_ws/.pipeline-identity.json" ]; then
+    python3 "$SCRIPT_DIR/dispatch_budget.py" reserve-opencode "$budget_ws" "$task" "$prompt" "$resume_session" \
+      || { echo "DISPATCH-RETRY: coder dispatch budget requires director assessment" >&2; exit 7; }
+  fi
   set +e
-  "$DISPATCH_BIN" "${args[@]}"
+  marker=$(mktemp)
+  rm -f "$marker"
+  DISPATCH_PRESTART_MARKER="$marker" "$DISPATCH_BIN" "${args[@]}"
   rc=$?
   set -e
+  prestart_confirmed=0
+  if [ "$backend" = opencode ] && [ "$rc" -eq 5 ] && [ -f "$marker" ]; then prestart_confirmed=1; fi
+  rm -f "$marker"
+  if [ "$backend" = opencode ] && [[ "$agent" == two-model-coder* ]] && [ -n "$task" ] && [ -n "$log" ] && [ -f "$budget_ws/.pipeline-identity.json" ] && [ "$prestart_confirmed" -eq 1 ]; then
+    python3 "$SCRIPT_DIR/dispatch_budget.py" release-opencode "$budget_ws" "$task" "$prompt" "$resume_session"
+  fi
   if [ "$backend" = "codex" ]; then
     [ "$rc" -eq 5 ] || break
   else
-    case "$rc" in 0|2|3) break ;; esac
+    [ "$prestart_confirmed" -eq 1 ] || break
   fi
   [ "$attempt" -lt "$MAX_TRIES" ] || break
   # Ledger the failed attempt (best effort, like the rest of the retry): a

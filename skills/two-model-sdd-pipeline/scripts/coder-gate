@@ -18,8 +18,9 @@
 # The RED check here is an artifact check, not a re-run — the operador owns
 # the RED/GREEN execution.
 #
-# The loop is UNBOUNDED: the operador keeps iterating (fix prompt + resume)
-# until the gate passes. There is no round budget and no hand-back for help.
+# The operator may iterate internally, while external dispatches are bounded
+# by the durable [5,3,3] family budget and return for director assessment at
+# each exhausted cycle.
 #
 # Chained by red-gate immediately after the first dispatch. Safe to call
 # again standalone on manual resume (e.g. after a crashed session).
@@ -91,24 +92,23 @@ base=$("$GIT_BIN" rev-parse HEAD)
 review_state="$ws/task-$task-review-state.json"
 review_pkg="$ws/task-$task-review-package.diff"
 if [ -f "$review_state" ]; then
-  read -r saved_base saved_candidate < <(python3 - "$review_state" <<'PY'
+  read -r saved_base saved_candidate saved_status < <(python3 - "$review_state" <<'PY'
 import json,sys
 try:
- d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""), d.get("candidate_commit", ""))
-except Exception: print("", "")
+ d=json.load(open(sys.argv[1],encoding="utf-8")); print(d.get("base_commit", ""), d.get("candidate_commit", ""), d.get("status", "review_pending"))
+except Exception: print("", "", "")
 PY
 )
+  saved_base=${saved_base%$'\r'}
+  saved_candidate=${saved_candidate%$'\r'}
   current=$("$GIT_BIN" rev-parse HEAD)
-  if [ -n "$saved_base" ] && [ "$saved_candidate" = "$current" ] && [ -s "$review_pkg" ]; then
+  saved_status=${saved_status%$'\r'}
+  if [ "$saved_status" != correction_started ] && [ -n "$saved_base" ] && [ "$saved_candidate" = "$current" ] && [ -s "$review_pkg" ]; then
     if [ "$pipeline_backend" = "codex" ]; then
       echo "CODER-GATE: candidate $saved_candidate awaits normalized Codex review" >&2
       exit 0
     fi
-    DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
-    if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
-      --prompt-file "$review_pkg" --log "$ws/task-$task-reviewer.log"; then
-      "$SCRIPT_DIR/ledger-append" "$ledger" review_dispatched "$task" "review resumed for candidate $saved_candidate" candidate="$saved_candidate"
-      rm -f "$review_state"
+    if "$SCRIPT_DIR/review-dispatch" --legacy "$ws" "$task" "$review_pkg"; then
       exit 0
     else
       echo "CODER-GATE: reviewer dispatch remains pending for candidate $saved_candidate" >&2
@@ -310,7 +310,7 @@ PY
     else
       RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
       gate_status=0
-      "$RUN_GATES_BIN" "$ws" --toolchains "$task_toolchain" || gate_status=$?
+      PIPELINE_GATE_PHASE=task "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
       if [ "$gate_status" -eq 0 ]; then
         passed=1
       fi
@@ -319,10 +319,10 @@ PY
     RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
     if [ -n "$task_toolchain" ]; then
       gate_status=0
-      "$RUN_GATES_BIN" "$ws" --toolchains "$task_toolchain" || gate_status=$?
+      PIPELINE_GATE_PHASE=task "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
     else
       gate_status=0
-      "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
+      PIPELINE_GATE_PHASE=task "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
     fi
     if [ "$gate_status" -eq 0 ]; then
       passed=1
@@ -430,13 +430,9 @@ PY
         echo "CODER-GATE: committed candidate $candidate is ready for normalized Codex review"
         exit 0
       fi
-      DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
-      if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
-        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
-        "$SCRIPT_DIR/ledger-append" "$ledger" review_dispatched "$task" "review dispatched for candidate $candidate" candidate="$candidate"
-        rm -f "$review_state"
+      if "$SCRIPT_DIR/review-dispatch" --legacy "$ws" "$task" "$pkg"; then
+        :
       else
-        "$SCRIPT_DIR/ledger-append" "$ledger" review_pending "$task" "reviewer dispatch failed; candidate $candidate remains pending" candidate="$candidate"
         echo "CODER-GATE: reviewer dispatch failed; candidate remains review_pending" >&2
         exit 5
       fi
@@ -494,12 +490,35 @@ FIXEOF
   [ -f "$session_file" ] && session=$(cat "$session_file")
   DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
 
+  if [ -f "$ws/dispatch-budget.json" ]; then
+    budget_limit=$(python3 - "$SCRIPT_DIR" "$ws" "$task" <<'PY'
+import json,pathlib,sys
+sys.path.insert(0,sys.argv[1]); import dispatch_budget
+ws=pathlib.Path(sys.argv[2]); task=sys.argv[3]
+identity=json.loads((ws/".pipeline-identity.json").read_text(encoding="utf-8"))
+items={str(t["id"]):t for t in json.loads((ws/"plan.json").read_text(encoding="utf-8"))["tasks"]}
+item=items[task]; seen=set()
+while item.get("corrects") is not None:
+ p=str(item["corrects"])
+ if p in seen or p not in items: raise ValueError("invalid task family")
+ seen.add(p); item=items[p]
+result=dispatch_budget.status(identity["run_id"],item["id"],state_path=str(ws/"dispatch-budget.json"))
+print("assess" if result["director_required"] else "continue")
+PY
+) || { echo "CODER-GATE: cannot inspect dispatch budget" >&2; exit 4; }
+    if [ "$budget_limit" = assess ]; then
+      "$SCRIPT_DIR/ledger-append" "$ledger" budget_exhausted "$task" \
+        "coder cycle exhausted; director assessment required"
+      exit 7
+    fi
+  fi
+
   if [ -n "$session" ]; then
-    "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$task" \
+    "$DISPATCH_RETRY_BIN" --backend "$pipeline_backend" --agent "$coder_agent" --task "$task" \
       --continue "$session" --prompt-file "$fix_prompt" --log "$log"
   else
     echo "CODER-GATE: no session recorded - dispatching fresh (context reset)" >&2
-    "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$task" \
+    "$DISPATCH_RETRY_BIN" --backend "$pipeline_backend" --agent "$coder_agent" --task "$task" \
       --prompt-file "$fix_prompt" --log "$log"
   fi
   # loop: re-check the gate on the resumed session's output.

@@ -27,6 +27,13 @@ def load(test, filename, function):
 
 
 class CodexDispatchTests(unittest.TestCase):
+    def test_worker_environment_excludes_supervisor_impact_cache(self):
+        module = load(self, "codex_dispatch.py", "_worker_environment")
+        with mock.patch.dict(os.environ, {"PIPELINE_IMPACT_CACHE_ROOT": "private-cache"}):
+            env = module._worker_environment({"env": {"WORKER_FLAG": "yes"}})
+        self.assertNotIn("PIPELINE_IMPACT_CACHE_ROOT", env)
+        self.assertEqual(env["WORKER_FLAG"], "yes")
+
     def test_director_schema_is_selected_by_episode_mode(self):
         module = load(self, "codex_dispatch.py", "_structured_schema_path")
         correction = module._structured_schema_path({"role":"director","episode_id":"run-family-2-correction"}, {})

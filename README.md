@@ -200,6 +200,24 @@ retention is 30 days (configurable).
   manipulation, interruptibility, springs, momentum, materials,
   typography, reduced motion), and the revisor checks them.
 
+**Candidate-bound test impact (R4).** Task and integration gates select only
+tests proven affected by local imports in candidate-bound Graphify AST
+graphs. Full-suite conditions are classified before graph access. Eligible
+gates cache complete normalized evidence outside checkouts by snapshot content,
+repository, extractor, adapter, and policy identity; raw extraction stays in
+disposable snapshots. The supervisor removes its private cache at run teardown.
+No graph fields enter `plan.json`, and briefs/reviews receive no graph context.
+Missing, unsupported, unresolved, or uncertain graph evidence runs each
+configured full test suite. Integration uses the exact pre-wave commit and
+never skips tests just because task Green passed. Baseline and closing gates
+run complete suites; analysis and formatting keep their ledgered scope.
+
+The gate validates a sealed manifest before commands, then verifies the same
+evidence after execution by recapturing input identities only. It does not
+re-extract or reselect. Candidate, plan, command, environment, policy,
+extractor, adapter, or manifest drift prevents PASS. Graphs are not updated or
+published.
+
 **Corollary — script-decided routing.** If a check can be performed by a
 script, the script performs it *and* routes straight to the next step,
 without waiting for an LLM to read the result and approve it. This applies
@@ -298,7 +316,7 @@ subagent-mode agents cannot be targeted headlessly by `opencode run
 | `harness-project prepare --project DIR --backend NAME` (two-model) | Enrolls a first-use project or resolves its pin; reports changed paths before an optional accepted upgrade, and keeps the pin during a resume | exit 0 ready; 2 invalid state; 3 operational failure; 4 upgrade decision required |
 | `brief-scaffold WORKSPACE TASK` (two-model) | Scaffold the task brief mechanically from the plan (statement, acceptance, spec_refs, machine-readable RED instructions). No LLM | exit 0 wrote; 1 plan unreadable; 2 usage |
 | `coder-agent-for LANG` (two-model) | Maps a `resolve-toolchain` lang to the operador variant (`two-model-coder-{python,node,rust,go}`) | agent name on stdout; 0 |
-| `run-gates WS TEST ANALYZE` (two-model) | Generic green approval: full suite + analysis through `cmd` | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
+| `run-gates WS TEST ANALYZE` (two-model) | Generic green approval; task/integration gates use validated candidate-bound affected test paths when Graphify evidence is complete, otherwise the full suite; baseline/closing always run full suite; analysis/format scope is unchanged | exit 0 green; 1 tests failed; 2 analysis failed; 3 usage |
 | `orient-llm [REPO]` | Brainstorming pre-flight: locate and print this repo's `README.md` so the agent is oriented before work starts | exit 0 printed; 1 missing (gate — stop); 2 usage |
 | `pkg-score PACKAGE` | Fetch pub.dev + GitHub, compute the corrected Quality Score | JSON + gate verdict (AUTO_APPROVE / DEVELOPER_DECISION / AUTO_REJECT) |
 | `template-search CATEGORY` | Search GitHub for project templates (stars descending, 3-AUTO_APPROVE stop; fallback to generic ≥70 with the specific 50–69 group) | JSON list of candidates with scores |
@@ -552,6 +570,44 @@ skills/two-model-sdd-pipeline/tests/run-tests.sh
 Additional harness contract suites live under `tests/` (packaging, sync,
 plugin loading, shell lint).
 
-## 19. License
+## 19. Dispatch cost and verification evidence
+
+The R4 policy bounds coder dispatches and selects task/integration checks from
+the verified impact manifest; final closing reruns all configured suites for
+affected toolchains. See [the bounded-dispatch and affected-verification ADR](docs/superpowers/adr/2026-09-25-affected-verification-and-bounded-dispatch.md).
+This supersedes ADR-0007's historical unbounded retry policy and the full-suite
+per-merge part of ADR-0012. Those records are retained as history.
+
+Use `dispatch-audit --inventory FILE --policy FILE --output FILE` for a
+version-1 inventory containing `repo`,
+`base`, `head` and `call_sites`. Each call site records `file`, `line`, `role`,
+`trigger`, `frequency`, `budget`, `termination`, `decision` (`keep`, `remove`
+or `merge`) and `justification`. The audit examines newly added script lines,
+rejecting mechanical model routing, semantic calls absent from the inventory,
+and call-bearing loops without a bounded exit. Python loops are discovered from
+the syntax tree, including one-line suites. A `while` bound needs a finite
+integer counter initialization and a matching monotonic update on every
+iteration; `break` and nested-loop exits do not establish a bound. Unknown frequency, budget or
+termination is rejected. The audit recognizes finite literal ranges and
+simple counted loops, and fails closed when it cannot prove a bound. Its report
+is static evidence, not a semantic review.
+
+`dispatch_metrics.summarize(records)` reports semantic invocations, backend
+model turns, transport retries, Jev calls, input/output/cached tokens, latency
+and escaped-defect observations independently. It accepts normalized records
+from either backend. A field that the record does not expose remains `null`;
+the aggregator never estimates token use from prompt size or invocation
+counts. `compare_cost` requires complete token, latency and escaped-defect
+evidence. It reports measured usage reductions separately from monetary cost:
+without an explicit pricing model, it never authorizes a savings claim. Any
+increased usage dimension is reported as a tradeoff, not a reduction. Fewer
+invocations alone are insufficient.
+
+R4 acceptance uses offline Codex/OpenCode fixtures, regression/quality gates,
+and complete configured suites during round closing. The report binds the
+candidate commit and runtime versions and lists measured metrics and unknowns;
+fixture results do not imply live-backend certification.
+
+## 20. License
 
 MIT — see LICENSE. Upstream: https://github.com/obra/superpowers

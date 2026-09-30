@@ -30,6 +30,32 @@ def load(test):
 
 
 class PlanTransactionTests(unittest.TestCase):
+    def test_budget_assessment_can_preserve_an_unchanged_viable_plan(self):
+        transaction = load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            repo = pathlib.Path(temp) / "repo"; repo.mkdir(); git(repo, "init", "-q")
+            git(repo, "config", "user.email", "test@example.invalid")
+            git(repo, "config", "user.name", "test")
+            (repo / "docs").mkdir(); (repo / "docs" / "spec.md").write_text("# Contract\n", encoding="utf-8")
+            path = repo / "plan.json"
+            plan = {"version": 1, "title": "Fixture", "spec_doc": "docs/spec.md", "global_constraints": ["Safe"],
+                    "tasks": [{"id": 1, "title": "First", "summary": "Existing", "spec_refs": ["docs/spec.md#Contract"],
+                               "touches": ["src/a.py"], "depends_on": [], "acceptance": ["Works"],
+                               "interfaces": {"produces": [], "consumes": []},
+                               "verification": {"new_test_files": ["tests/test_a.py"]}}]}
+            path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+            git(repo, "add", "-A"); git(repo, "commit", "-qm", "plan")
+            before = git(repo, "rev-parse", "HEAD").stdout.strip()
+            proposal = {"mode": "arbitration", "decision": "amend", "reason": "next cycle remains viable",
+                        "source_plan_hash": hashlib.sha256(path.read_bytes()).hexdigest(), "target_task": 1,
+                        "proposal": {"field_changes": {"title": "First", "summary": "Existing",
+                                                       "touches": ["src/a.py"], "acceptance": ["Works"]}}}
+            manifest = {"repository_root": str(repo), "plan_path": str(path), "run_id": "run-a",
+                        "ledger_path": str(repo / "ledger.jsonl")}
+            result = transaction.apply_director_proposal(proposal, manifest)
+            self.assertEqual(result["commit"], before)
+            self.assertEqual(git(repo, "rev-parse", "HEAD").stdout.strip(), before)
+
     def test_plan_transaction_ledger_entry_matches_pipeline_ledger_contract(self):
         transaction=load(self)
         with tempfile.TemporaryDirectory() as temp:

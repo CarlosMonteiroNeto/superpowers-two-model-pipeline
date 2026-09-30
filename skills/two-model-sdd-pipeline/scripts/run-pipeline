@@ -120,6 +120,17 @@ if [ ! -f "$WS/target-branch.txt" ]; then
   target_branch=${PIPELINE_TARGET_BRANCH:-$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf main)}
   printf '%s\n' "$target_branch" > "$WS/target-branch.txt" || { echo "RUN-PIPELINE: cannot record target branch" >&2; exit 1; }
 fi
+# R4: one supervisor-owned evidence cache is shared with gate subprocesses for
+# this run. Workers receive neither the path nor authority to publish entries.
+PIPELINE_IMPACT_CACHE_ROOT=$(python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import test_dependency_cache; print(test_dependency_cache.create_owned_root())' "$SCRIPT_DIR") \
+  || { echo "RUN-PIPELINE: cannot create private impact cache" >&2; exit 2; }
+[ -n "$PIPELINE_IMPACT_CACHE_ROOT" ] || { echo "RUN-PIPELINE: private impact cache path is empty" >&2; exit 2; }
+export PIPELINE_IMPACT_CACHE_ROOT
+cleanup_impact_cache() {
+  python3 -c 'import sys; sys.path.insert(0,sys.argv[1]); import test_dependency_cache; test_dependency_cache.cleanup_owned_root(sys.argv[2])' \
+    "$SCRIPT_DIR" "$PIPELINE_IMPACT_CACHE_ROOT" >/dev/null 2>&1 || true
+}
+trap cleanup_impact_cache EXIT
 DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/dispatch}"
 # CODER_GATE is a legacy alias; the orchestrator and this script now share the
 # single CODER_GATE_BIN name.
@@ -309,6 +320,43 @@ fi
 # --- plan completeness (no EXPAND: brainstorming owns task authoring) ---
 tasks_usable || block "plan has no usable tasks (every task needs acceptance) - complete it before running"
 
+# Capture supervisor-owned complete-suite evidence before any coder can alter
+# the candidate. An unsupported adapter is a hard preflight blocker; an
+# ordinary pre-existing test failure is recorded and remains non-green.
+baseline_file="$WS/supervisor/baseline-evidence.json"
+if [ ! -f "$baseline_file" ]; then
+  baseline_mode=$(python3 - "$WS/plan.json" "$LEDGER" <<'PY'
+import json,sys
+plan=json.load(open(sys.argv[1],encoding="utf-8")); tasks=plan.get("tasks",[])
+ids={str(t.get("toolchain_id")) for t in tasks if isinstance(t,dict) and t.get("toolchain_id")}
+if tasks and all(isinstance(t,dict) and t.get("toolchain_id") for t in tasks): print("toolchains")
+elif not ids:
+ rows=[json.loads(line) for line in open(sys.argv[2],encoding="utf-8") if line.strip()]
+ gates=[row for row in rows if row.get("type")=="gate"]
+ print("legacy" if len(gates)==1 and "toolchain_descriptor" not in gates[0] else "unavailable")
+else: print("unavailable")
+PY
+)
+  baseline_rc=0
+  case "$baseline_mode" in
+    toolchains)
+      mapfile -t baseline_toolchains < <(python3 - "$WS/plan.json" <<'PY'
+import json,sys
+plan=json.load(open(sys.argv[1],encoding="utf-8"))
+print("\n".join(sorted({str(t["toolchain_id"]) for t in plan["tasks"]})))
+PY
+)
+      PIPELINE_GATE_PHASE=baseline "$SCRIPT_DIR/run-gates" "$WS" --toolchains "${baseline_toolchains[@]}" || baseline_rc=$? ;;
+    legacy) PIPELINE_GATE_PHASE=baseline "$SCRIPT_DIR/run-gates" "$WS" --legacy || baseline_rc=$? ;;
+    *) baseline_rc=3 ;;
+  esac
+  if [ ! -f "$baseline_file" ]; then
+    "$SCRIPT_DIR/ledger-append" "$LEDGER" baseline_evidence_unavailable "-" \
+      "pre-code complete-suite evidence unavailable; inherited failures cannot be waived" "gate_status=$baseline_rc" \
+      || block "cannot record unavailable baseline evidence"
+  fi
+fi
+
 # --- main loop ---
 # The per-task lifecycle (orchestrator + REVIEW/CORRECTIVE/ARBITRATE) lives in
 # task-run, shared by the serial runner and the wave path (the H2 lesson:
@@ -488,6 +536,15 @@ refresh_plan_snapshot || block "plan refresh failed before closing"
 check_total_fresh
 total=$(total_now)
 cd "$ROOT" || block "cannot cd to $ROOT"
+publication=local
+if [ "$NO_PUSH" -eq 0 ]; then
+  if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
+    publication=${PIPELINE_PUBLICATION:-}
+    case "$publication" in local|pull_request) ;; *) block "Codex run requires explicit local or pull_request publication policy" ;; esac
+  else
+    publication=pull_request
+  fi
+fi
 base=$(cat "$WS/base-commit.txt")
 target_branch=$(cat "$WS/target-branch.txt")
 target_commit=$(git rev-parse --verify "$target_branch^{commit}" 2>/dev/null) \
@@ -527,6 +584,8 @@ if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
     "$SCRIPT_DIR/pipeline-workspace" --refresh "$PLAN" >/dev/null || block "plan refresh failed after closing reopen"
     rerun=("$PLAN" --max-parallel "$MAX_PARALLEL")
     [ "$NO_PUSH" -eq 0 ] || rerun+=(--no-push)
+    cleanup_impact_cache
+    trap - EXIT
     exec "$SCRIPT_DIR/run-pipeline" "${rerun[@]}"
   fi
   [ "$verdict" = APPROVED ] || block "director closing verdict is $verdict; no publication allowed"
@@ -540,13 +599,11 @@ else
   ledger final_review "-" "diretor closing complete"
 fi
 if [ "${PIPELINE_BACKEND:-opencode}" = codex ]; then
-  publication=${PIPELINE_PUBLICATION:-}
-  [ "$NO_PUSH" -eq 0 ] || publication=local
-  case "$publication" in local|pull_request) ;; *) block "Codex run requires explicit local or pull_request publication policy" ;; esac
   branch=$(git branch --show-current) || block "cannot determine branch"
   [ -n "$branch" ] || block "detached HEAD - select an integration branch"
   python3 "$SCRIPT_DIR/publication.py" --repository "$ROOT" --branch "$branch" \
-    --target "$target_branch" --policy "$publication" || block "publication failed; run remains resumable"
+    --target "$target_branch" --policy "$publication" --expected-head "$candidate" \
+    || block "publication failed; run remains resumable"
   say "closing complete under $publication policy"
   exit 0
 fi
@@ -556,6 +613,8 @@ if [ "$NO_PUSH" -eq 1 ]; then
 fi
 branch=$(git branch --show-current) || block "cannot determine branch"
 [ -n "$branch" ] || block "detached HEAD - push manually"
+current_head=$(git rev-parse HEAD) || block "cannot verify the approved candidate HEAD"
+[ "$current_head" = "$candidate" ] || block "HEAD changed after closing/final review approval"
 git push -u origin "$branch" || block "push rejected - investigate, force-push only on explicit request"
 if command -v gh >/dev/null 2>&1; then
   gh pr create --fill --base main 2>/dev/null \

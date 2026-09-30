@@ -2,7 +2,7 @@
   "version": 1,
   "title": "R4: Bounded dispatch and affected verification",
   "date": "2026-09-25",
-  "status": "planned_not_implemented",
+  "status": "in_progress",
   "round_id": "R4",
   "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
   "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
@@ -27,25 +27,33 @@
     {
       "round": "R1",
       "plan": "docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "58810ac",
+      "evidence": "Git history: R1 closure commit 58810ac (Complete R1 immutable harness foundation)."
     },
     {
       "round": "R2",
       "plan": "docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "4383bba",
+      "evidence": "Git history: R2 closure commit 4383bba (close r2 worker runtime round)."
     },
     {
       "round": "R3",
       "plan": "docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "6cddf38",
+      "acceptance_commit": "abe4bc5",
+      "evidence": "docs/testing/codex-pipeline-support-matrix.md; committed offline acceptance bound to 6cddf38."
     }
   ],
   "execution_handoff": {
-    "implementation_authorized": false,
-    "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
+    "implementation_authorized": true,
+    "model_selection": "Confirmed by the user for this run: Codex; operator/reviewer gpt-6-luna at medium reasoning; director follows reviewer.",
     "bootstrap": "Use the accepted R3 shared runner from a pinned bundle outside worker edits.",
-    "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
-    "drift_check": "Before execution compare exact paths, schemas, interface signatures and prerequisites with accepted predecessor commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
+    "publication": "Confirmed local-only; do not push or create a pull request.",
+    "drift_check": "Verified R1/R2 closure commits and R3 committed source/acceptance evidence; R4 file paths and interfaces match the current source tree at abe4bc5.",
+    "concurrency": "Confirmed serial execution (max_parallel=1)."
   },
   "scheduling": {
     "task_ids": "Local to this round; depends_on never names another round's task ID.",
@@ -113,13 +121,16 @@
       "spec_refs": [
         "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
         "roadmap.md#d10--affected-tests-per-task-complete-suite-at-closing",
-        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions",
+        "docs/superpowers/specs/2026-09-30-r4-trusted-impact-gates-design.md#graphify-decision"
       ],
       "touches": [
         "skills/two-model-sdd-pipeline/scripts/test_impact.py",
         "skills/two-model-sdd-pipeline/scripts/select-tests",
         "skills/two-model-sdd-pipeline/schemas/test-impact.schema.json",
-        "skills/two-model-sdd-pipeline/toolchains/test-impact-rules.json"
+        "skills/two-model-sdd-pipeline/toolchains/test-impact-rules.json",
+        "skills/two-model-sdd-pipeline/scripts/test_dependency_graph.py",
+        "skills/two-model-sdd-pipeline/tests/test_r4_dependency_graph.py"
       ],
       "depends_on": [],
       "acceptance": [
@@ -127,7 +138,8 @@
         "Include affected consumers, contracts and integration checks. A changed production path with no match is an explicit gap requiring broader tests.",
         "Missing/stale graph, unknown language, dependency/build/test configuration, shared infrastructure or generated contract changes expand to full suite. Do not infer completeness from file-name proximity.",
         "Provide initial Python unittest and Flutter/Dart rules with demonstrable mappings; unsupported Node/Rust/Go configurations retain full-suite descriptors until adapter evidence exists.",
-        "Use deterministic traversal and stable output; reject unsafe argv/path selectors and malformed graphs. Cover cycles, renames, deleted tests, transitive imports and shared-code changes."
+        "Use deterministic traversal and stable output; reject unsafe argv/path selectors and malformed graphs. Cover cycles, renames, deleted tests, transitive imports and shared-code changes.",
+        "Build a fresh Graphify 0.9.50 raw AST graph from an isolated baseline/candidate snapshot with `--no-cluster`; use only validated AST-origin imports/imports_from, validate source inventory and Dart/package/ Python module resolution, and fail closed to complete suites for missing/untrusted evidence. The old Graphify knowledge/context stage remains excluded."
       ],
       "interfaces": {
         "produces": [
@@ -141,7 +153,8 @@
       "verification": {
         "new_test_files": [
           "skills/two-model-sdd-pipeline/tests/test_r4_test_impact.py",
-          "skills/two-model-sdd-pipeline/tests/test_r4_impact_fallbacks.py"
+          "skills/two-model-sdd-pipeline/tests/test_r4_impact_fallbacks.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_dependency_graph.py"
         ],
         "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
         "additional_checks": [
@@ -202,7 +215,8 @@
       "spec_refs": [
         "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md#15-shared-backend-transition-and-round-1-contract",
         "roadmap.md#d10--affected-tests-per-task-complete-suite-at-closing",
-        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions"
+        "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#confirmed-decisions",
+        "docs/superpowers/specs/2026-09-30-r4-trusted-impact-gates-design.md#graphify-decision"
       ],
       "touches": [
         "skills/two-model-sdd-pipeline/scripts/run-gates",
@@ -210,7 +224,11 @@
         "skills/two-model-sdd-pipeline/scripts/final-gate",
         "skills/two-model-sdd-pipeline/scripts/gate_evidence.py",
         "skills/flutter-app-pipeline/scripts/gate-entry",
-        "skills/two-model-sdd-pipeline/prompts/core-operator.md"
+        "skills/two-model-sdd-pipeline/prompts/core-operator.md",
+        "skills/two-model-sdd-pipeline/scripts/test_dependency_graph.py",
+        "skills/two-model-sdd-pipeline/scripts/toolchain_gate.py",
+        "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_evidence.py",
+        "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_execution.py"
       ],
       "depends_on": [
         1,
@@ -223,7 +241,8 @@
         "Closing requires every configured suite for every affected toolchain. Cache reuse needs identical tree/environment/commands/config; otherwise rerun.",
         "Final new regressions block completion/publication and reopen work. Proven pre-existing failures require a valid candidate-bound user waiver; preserve a non-green, explicitly waived completion status. Unknown impact broadens test selection.",
         "Update operator guidance to focused iteration and script-owned verification, explicitly overriding upstream pre-commit full-suite language only under this verified policy.",
-        "Fixtures simulate cross-task regression, stale evidence, configuration changes, no test matches, mixed toolchains and final failure."
+        "Fixtures simulate cross-task regression, stale evidence, configuration changes, no test matches, mixed toolchains and final failure.",
+        "Task/integration gates execute only validated manifest test argv for the exact candidate; baseline/closing execute full suites. Graphify or candidate drift rejects selective PASS, while analysis/format scope and the user checkout graphify-out remain untouched."
       ],
       "interfaces": {
         "produces": [
@@ -237,7 +256,9 @@
       "verification": {
         "new_test_files": [
           "skills/two-model-sdd-pipeline/tests/test_r4_impact_gate_wiring.py",
-          "skills/two-model-sdd-pipeline/tests/test_r4_final_suite.py"
+          "skills/two-model-sdd-pipeline/tests/test_r4_final_suite.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_evidence.py",
+          "skills/two-model-sdd-pipeline/tests/test_r4_graphify_gate_execution.py"
         ],
         "command": "python3 -m unittest discover -s skills/two-model-sdd-pipeline/tests -p 'test_r4_*.py' -v",
         "additional_checks": [

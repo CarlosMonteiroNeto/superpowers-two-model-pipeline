@@ -669,3 +669,25 @@ All tasks complete:
 [Rulings exported] [doc-check] [workspace deleted] [push + PR]
 Use superpowers:finishing-a-development-branch.
 ```
+
+
+## Candidate-bound test impact gates (R4)
+
+`run-gates` classifies full-suite conditions before graph access. If impact
+selection remains eligible, it extracts normalized dependency evidence from
+disposable base/candidate snapshots and caches complete results by exact
+content, extractor, adapter, repository, and policy identity in a private
+external run cache. The cache is shared across gate attempts by the supervisor
+and removed at teardown; direct gates use a disposable cache. Cache hits do not
+reuse a prior gate approval. Missing, stale, incomplete, unsupported, or
+uncertain evidence selects each configured full test suite.
+
+The planner, coder, and reviewer receive no graph context or graph fields in
+`plan.json`. The script selects impacted tests from the task diff and ledgered
+toolchain commands. A test that already passed during a task is not skipped in
+later integration gates. `run-gates` validates the sealed manifest immediately
+before execution and verifies the same retained evidence afterward using only
+input identities; it does not extract or reselect after tests. Candidate,
+plan, toolchain, command, policy, extractor, adapter, environment, or manifest
+drift prevents PASS. Baseline and closing gates always run full suites. Graph
+artifacts are neither published nor included in prompts or commits.

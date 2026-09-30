@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Read an impact request and write its deterministic selection manifest."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import sys
+import tempfile
+
+import test_impact
+
+
+def _atomic_json(path: pathlib.Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".select-tests-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--request", required=True, help="JSON request with diff, graph, and executable toolchains")
+    parser.add_argument("--output", required=True, help="path for the JSON impact manifest")
+    args = parser.parse_args(argv)
+    try:
+        request = json.loads(pathlib.Path(args.request).read_text(encoding="utf-8"))
+        if not isinstance(request, dict):
+            raise ValueError("request must be a JSON object")
+        unknown = set(request) - {"diff", "graph", "toolchains"}
+        if unknown:
+            raise ValueError("request has unsupported fields: " + ", ".join(sorted(unknown)))
+        rules_path = pathlib.Path(__file__).resolve().parent.parent / "toolchains" / "test-impact-rules.json"
+        policy = json.loads(rules_path.read_text(encoding="utf-8"))
+        result = test_impact.select(request.get("diff"), request.get("graph"), request.get("toolchains"), policy)
+        output = pathlib.Path(args.output).resolve()
+        _atomic_json(output, result)
+        print(str(output))
+        return 0
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print("select-tests: %s" % exc, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

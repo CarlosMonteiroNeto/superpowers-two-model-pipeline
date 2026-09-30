@@ -1,0 +1,12 @@
+{
+  "base": "473c4e8",
+  "changed_script_files": [
+    "skills/two-model-sdd-pipeline/scripts/dispatch-audit",
+    "skills/two-model-sdd-pipeline/scripts/dispatch_metrics.py"
+  ],
+  "findings": [],
+  "head": "d1fed3b1b632c73f21ff886c67b9714ea04e3162",
+  "observed_call_sites": 0,
+  "status": "passed",
+  "version": 1
+}

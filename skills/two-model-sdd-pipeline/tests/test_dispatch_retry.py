@@ -1,16 +1,4 @@
-"""Regression module for the bounded dispatch retry (D11/rec #2).
-
-A transient opencode failure (provider timeout rc=124, dropped connection)
-used to stop the whole task: red-gate ledgered dispatch_interrupted and
-exited, coder-gate's fix loop blocked, task-run blocked on the corrective
-path. dispatch-retry wraps the launcher so those transient codes are retried
-a bounded number of times before the original verdict survives.
-
-These tests stub DISPATCH_BIN with a deterministic counter stub and prove the
-wrapper's contract: transient codes retry, permanent codes (0 = dispatched,
-2 = usage/missing prompt, 3 = wrong-agent refusal) pass through unchanged,
-only the final attempt's code is returned, and failed attempts are ledgered.
-"""
+"""Regression checks for bounded confirmed pre-start dispatch retries."""
 
 import os
 import pathlib
@@ -44,6 +32,14 @@ def run_script(script, args, env_extra):
 
 
 class DispatchRetryTest(unittest.TestCase):
+    def test_opencode_adapter_marks_missing_executable_prestart(self):
+        prompt = self.ws / "brief.md"
+        prompt.write_text("brief", encoding="utf-8")
+        result = run_script("dispatch-opencode", ["--agent", "two-model-coder-python",
+            "--task", "1", "--prompt-file", str(prompt), "--log", str(self.ws / "coder.log")],
+            {"OPENCODE_BIN": "definitely-missing-opencode-r4"})
+        self.assertEqual(result.returncode, 5)
+
     def setUp(self):
         self._tmp = pathlib.Path(tempfile.mkdtemp(prefix="dispatch-retry-"))
         self.stub_dir = self._tmp / "stubs"
@@ -58,15 +54,19 @@ class DispatchRetryTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def dispatch_stub(self, fails=0, fail_exit="1", ok_exit="0"):
+    def dispatch_stub(self, fails=0, fail_exit="1", ok_exit="0", prestart=False):
         count = str(self.count_file).replace("\\", "/")
         return write_stub(self.stub_dir, "dispatch", """
 echo "$*" >> "{out}"
 n=$(cat "{count}" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "{count}"
-if [ "$n" -le {fails} ]; then exit {fail_exit}; fi
+if [ "$n" -le {fails} ]; then
+  {mark}
+  exit {fail_exit}
+fi
 exit {ok_exit}
 """.format(out=str(self.out_log).replace("\\", "/"), count=count,
-           fails=fails, fail_exit=fail_exit, ok_exit=ok_exit))
+           fails=fails, fail_exit=fail_exit, ok_exit=ok_exit,
+           mark='[ -n "${DISPATCH_PRESTART_MARKER:-}" ] && : > "$DISPATCH_PRESTART_MARKER"' if prestart else ':'))
 
     def calls(self):
         return int(self.count_file.read_text(encoding="utf-8"))
@@ -78,9 +78,9 @@ exit {ok_exit}
                 self.ledger.read_text(encoding="utf-8").splitlines()
                 if '"type":' in line]
 
-    def run_it(self, *args, fails=0, fail_exit="1", ok_exit="0", **env_extra):
+    def run_it(self, *args, fails=0, fail_exit="1", ok_exit="0", prestart=False, **env_extra):
         env = {"DISPATCH_BIN": self.dispatch_stub(
-            fails=fails, fail_exit=fail_exit, ok_exit=ok_exit)}
+            fails=fails, fail_exit=fail_exit, ok_exit=ok_exit, prestart=prestart)}
         env.update(env_extra)
         return run_script("dispatch-retry", list(args), env)
 
@@ -94,12 +94,12 @@ exit {ok_exit}
     def test_transient_failure_retries_until_success_and_ledgers(self):
         r = self.run_it("--task", "7", "--log",
                         str(self.ws / "task-7-coder.log"),
-                        fails=2, fail_exit="124", ok_exit="0")
+                        fails=2, fail_exit="5", ok_exit="0", prestart=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 3)
         self.assertEqual(
             self.ledger_types().count("dispatch_retry"), 2)
-        self.assertIn("124", self.ledger.read_text(encoding="utf-8"))
+        self.assertIn("5", self.ledger.read_text(encoding="utf-8"))
 
     def test_usage_exit_is_not_retried(self):
         r = self.run_it("--task", "1", "--log",
@@ -127,20 +127,34 @@ exit {ok_exit}
         self.assertEqual(r.returncode, 6, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 1)
 
+    def test_opencode_does_not_retry_ambiguous_timeout(self):
+        r = self.run_it("--backend", "opencode", "--task", "2", "--log",
+                        str(self.ws / "task-2-coder.log"),
+                        fails=1, fail_exit="124", ok_exit="0")
+        self.assertEqual(r.returncode, 124, r.stdout + r.stderr)
+        self.assertEqual(self.calls(), 1)
+
+    def test_opencode_started_worker_exit_five_is_not_prestart(self):
+        r = self.run_it("--backend", "opencode", "--task", "2", "--log",
+                        str(self.ws / "task-2-coder.log"),
+                        fails=1, fail_exit="5", ok_exit="0")
+        self.assertEqual(r.returncode, 5)
+        self.assertEqual(self.calls(), 1)
+
     def test_gives_up_after_max_tries_preserving_last_code(self):
         r = self.run_it("--task", "1", "--log",
                         str(self.ws / "task-1-coder.log"),
-                        fails=99, fail_exit="124", ok_exit="0")
-        self.assertEqual(r.returncode, 124, r.stdout + r.stderr)
+                        fails=99, fail_exit="5", ok_exit="0", prestart=True)
+        self.assertEqual(r.returncode, 5, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 3)
         self.assertEqual(self.ledger_types().count("dispatch_retry"), 2)
 
     def test_max_tries_override_is_respected(self):
         r = self.run_it("--task", "1", "--log",
                         str(self.ws / "task-1-coder.log"),
-                        fails=99, fail_exit="1", ok_exit="0",
+                        fails=99, fail_exit="5", ok_exit="0", prestart=True,
                         DISPATCH_MAX_TRIES="2")
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 5, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 2)
 
     def test_arguments_forwarded_verbatim(self):
@@ -161,7 +175,7 @@ exit {ok_exit}
         without --task/--log still retries but records nothing."""
         r = self.run_it("--agent", "two-model-coder-go",
                         "--prompt-file", str(self.ws / "brief.md"),
-                        fails=1, fail_exit="124", ok_exit="0")
+                        fails=1, fail_exit="5", ok_exit="0", prestart=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.calls(), 2)
         self.assertEqual(self.ledger_types(), [])

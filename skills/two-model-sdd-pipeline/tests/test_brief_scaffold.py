@@ -52,6 +52,17 @@ class BriefScaffoldTestBase(unittest.TestCase):
 
 
 class TestBriefScaffold(BriefScaffoldTestBase):
+    def test_brief_contains_no_graph_context_even_if_legacy_cache_exists(self):
+        self.write_plan(plan_with(dict(FULL_TASK, touches=["src/api.py"])))
+        (self.ws / "graph-context.sqlite3").write_bytes(b"legacy cache")
+
+        result = run_scaffold(self.ws, 3)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        brief = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertNotIn("Graph context", brief)
+        self.assertNotIn("src/core.py", brief)
+
     def test_brief_uses_worktree_relative_workspace_for_runner_commands(self):
         project = self._tmp / "project with spaces"
         workspace = project / ".superpowers" / "two-model" / "acceptance"

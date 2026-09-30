@@ -40,6 +40,16 @@ class TestParseReviewWiredInDocs(unittest.TestCase):
         self.assertIn("corrects", skill)
         self.assertIn("same operador session", skill.lower())
 
+    def test_r4_graph_lifecycle_documents_private_cache_and_identity_verification(self):
+        skill = (SKILLS / "two-model-sdd-pipeline" / "SKILL.md").read_text(encoding="utf-8")
+        markdown = (REPO / "README.md").read_text(encoding="utf-8")
+        self.assertIn("private external run cache", " ".join(skill.lower().split()))
+        self.assertIn("no graph context", markdown.lower())
+        self.assertIn("recapturing input identities only", markdown.lower())
+        self.assertIn("not skipped", skill.lower())
+        self.assertIn("closing gates", skill.lower())
+        self.assertNotIn("graphify update", skill.lower())
+        self.assertNotIn("graphify update", markdown.lower())
 
 if __name__ == "__main__":
     unittest.main()

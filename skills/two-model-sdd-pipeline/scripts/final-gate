@@ -7,17 +7,15 @@
 #   2. No task's LAST review_outcome is an unresolved SEND_BACK / ESCALATE.
 #   3. No task_complete carries a blocking parked finding, judged by the
 #      structured PARKED_SEVERITY field (Critical/Important), never by prose.
-#   4. The test and analyze commands recorded in the `gate` ledger entry both
-#      succeed - SKIPPED when the tree is unchanged since the last green
-#      checkpoint (clean `git status` + HEAD == the newest `commit` or
-#      `integrated` ledger sha): the last gate already proved this tree.
+#   4. Every configured test and analyze suite for every task toolchain passes
+#      on the closing candidate. Closing does not reuse task/integration gates.
 #   5. No task's newest `integration_failed` postdates its completion
 #      (`task_complete`/`integrated`): the merge is still unresolved.
 #   6. Every `worktree_alloc` has a matching `worktree_release`: no wave is
 #      still in flight.
 #   7. No leftover `task/<N>` branch: integration never closed the task out.
 #
-# Re-runs every exact toolchain ID referenced by tasks 1..TOTAL from the plan.
+# Runs every exact toolchain ID referenced by tasks 1..TOTAL from the plan.
 # Workspaces without task identities retain the unique legacy gate record.
 #
 # Usage: final-gate WORKSPACE TOTAL_TASKS
@@ -46,25 +44,10 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
 
 blockers=0
+completion_status="completed"
 emit() {
   echo "FINAL-GATE: $1" >&2
   blockers=$((blockers + 1))
-}
-
-# True when the working tree provably matches the last green checkpoint:
-# clean status AND HEAD resolving to the newest `commit` (serial path) or
-# `integrated` (wave path) ledger sha. After integration HEAD is a merge commit,
-# so the `commit` sha alone would never match and the re-run would never be
-# skipped. Anything uncertain (not a repo, no such entries) returns false -
-# re-run instead.
-tree_unchanged_since_green() {
-  [ -z "$(git status --porcelain 2>/dev/null)" ] || return 1
-  full_head=$(git rev-parse HEAD 2>/dev/null) || return 1
-  last_green=$(grep -E '"type": *"(commit|integrated)"' "$ledger" 2>/dev/null \
-    | tail -1 | sed -n 's/.*"commits": *"\([0-9a-fA-F]*\)".*/\1/p')
-  [ -n "$last_green" ] || return 1
-  resolved=$(git rev-parse --verify "$last_green" 2>/dev/null) || return 1
-  [ "$resolved" = "$full_head" ]
 }
 
 for t in $(seq 1 "$total"); do
@@ -119,26 +102,55 @@ if [ -n "$task_branches" ]; then
   emit "unmerged task branch(es) remain: $task_branches"
 fi
 
-skip_rerun=0
-if tree_unchanged_since_green; then
-  echo "FINAL-GATE: tree unchanged since last green commit - skipping test/analyze re-run"
-  skip_rerun=1
-fi
-
-if [ "$skip_rerun" -eq 0 ]; then
-  task_ids=()
-  for t in $(seq 1 "$total"); do task_ids+=("$t"); done
-  if [ -f "$ws/plan.json" ]; then
-    if ! "$RUN_GATES_BIN" "$ws" --tasks "${task_ids[@]}"; then
-      emit "one or more configured test/analyze commands failed"
+task_ids=()
+for t in $(seq 1 "$total"); do task_ids+=("$t"); done
+if [ -f "$ws/plan.json" ]; then
+  cache_valid=0
+  python3 "$SCRIPT_DIR/closing_cache.py" "$ws" && cache_valid=1
+  gate_failed=0
+  if [ "$cache_valid" = "1" ]; then
+    echo "FINAL-GATE: reusing exact candidate-bound closing evidence"
+    if waiver_result=$(python3 "$SCRIPT_DIR/closing_waiver.py" "$ws"); then
+      completion_status="completed_with_waived_baseline"
+      echo "FINAL-GATE: completed_with_waived_baseline (non-green; exact pre-existing failures explicitly approved)"
+    elif ! python3 - "$ws/supervisor/current-evidence.json" <<'PY'
+import json,sys
+evidence=json.load(open(sys.argv[1],encoding="utf-8"))
+raise SystemExit(0 if all(suite["raw_result"]["status"]=="completed" and suite["raw_result"]["exit_code"]==0 for suite in evidence["suites"]) else 1)
+PY
+    then
+      gate_failed=1
     fi
-  elif ! "$RUN_GATES_BIN" "$ws" --legacy; then
-    emit "legacy test/analyze command failed"
+  elif ! PIPELINE_GATE_PHASE=closing "$RUN_GATES_BIN" "$ws" --tasks "${task_ids[@]}"; then
+    gate_failed=1
   fi
+  if [ "$gate_failed" = "1" ]; then
+    waiver_result=$(python3 "$SCRIPT_DIR/closing_waiver.py" "$ws" || true)
+    if [ -n "$waiver_result" ] && python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).get("status")=="completed_with_waived_baseline" else 1)' "$waiver_result"; then
+      completion_status="completed_with_waived_baseline"
+      echo "FINAL-GATE: completed_with_waived_baseline (non-green; exact pre-existing failures explicitly approved)"
+    else
+      emit "one or more configured test/analyze commands failed and no candidate-bound baseline waiver is valid"
+      for t in "${task_ids[@]}"; do
+        "$SCRIPT_DIR/ledger-append" "$ledger" integration_failed "$t" \
+          "closing candidate verification failed; task reopened" || emit "could not record reopened task $t"
+      done
+    fi
+  fi
+elif ! PIPELINE_GATE_PHASE=closing "$RUN_GATES_BIN" "$ws" --legacy; then
+  emit "legacy test/analyze command failed"
+  for t in $(seq 1 "$total"); do
+    "$SCRIPT_DIR/ledger-append" "$ledger" integration_failed "$t" \
+      "closing candidate verification failed; task reopened" || emit "could not record reopened task $t"
+  done
 fi
 
 if [ "$blockers" -eq 0 ]; then
-  echo "FINAL-GATE: mechanically ready for holistic review"
+  if [ "$completion_status" = "completed_with_waived_baseline" ]; then
+    printf '{"status":"%s"}\n' "$completion_status" > "$ws/supervisor/completion-status.json"
+  else
+    echo "FINAL-GATE: mechanically ready for holistic review"
+  fi
   exit 0
 fi
 

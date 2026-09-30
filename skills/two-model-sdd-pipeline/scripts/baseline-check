@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Check baseline evidence or a final user waiver from JSON files.
+
+Usage: baseline-check capture RESULTS.json BASELINE.json
+       baseline-check compare BASELINE.json CURRENT.json
+       baseline-check waive WAIVER.json CANDIDATE.json
+Exit 0: green, inherited-only comparison, or valid waiver.
+Exit 1: blocked comparison. Exit 2: invalid input or rejected waiver.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+from baseline_failures import compare, validate_evidence, validate_waiver
+
+
+def _capture(source: Path, destination: Path) -> dict:
+    evidence = validate_evidence(json.loads(source.read_text(encoding="utf-8")))
+    recorded = {**evidence, "captured_at_utc": datetime.now(timezone.utc).isoformat()}
+    # Build the complete record first, then publish only if no record exists.
+    # The caller must invoke capture before changed-code verification starts.
+    payload = json.dumps(recorded, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=destination.parent,
+                                         prefix=".baseline-", suffix=".tmp", delete=False) as stream:
+            temp_path = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temp_path, destination)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+    return recorded
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 4 or argv[1] not in ("capture", "compare", "waive"):
+        print("usage: baseline-check {capture|compare|waive} FIRST.json SECOND.json", file=sys.stderr)
+        return 2
+    try:
+        if argv[1] == "capture":
+            result = _capture(Path(argv[2]), Path(argv[3]))
+        else:
+            first = json.loads(Path(argv[2]).read_text(encoding="utf-8"))
+            second = json.loads(Path(argv[3]).read_text(encoding="utf-8"))
+            result = compare(first, second) if argv[1] == "compare" else validate_waiver(first, second)
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        print("BASELINE-CHECK: %s" % exc, file=sys.stderr)
+        return 2
+    print(json.dumps(result, sort_keys=True, ensure_ascii=False))
+    return 1 if result.get("status") == "blocked" else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

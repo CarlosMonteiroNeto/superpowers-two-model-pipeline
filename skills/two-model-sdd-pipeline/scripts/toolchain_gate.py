@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import shlex
 import shutil
 import subprocess
@@ -261,6 +262,83 @@ def _try_match_entry_for_argv(workspace: str, test_value: str, analyze_value: st
         raise
 
 
+def _impact_test_argv(workspace: str, entry: dict[str, Any], spec: dict[str, Any]) -> tuple[list[str], str | None]:
+    manifest_path = os.environ.get("PIPELINE_IMPACT_MANIFEST")
+    if not manifest_path:
+        return list(spec["argv"]), None
+    try:
+        from gate_evidence import validate_manifest
+        import test_impact
+        manifest = validate_manifest(json.loads(Path(manifest_path).read_text(encoding="utf-8")))
+        expected_hash = os.environ.get("PIPELINE_IMPACT_EXPECTED_HASH")
+        if not expected_hash or manifest["selection_hash"] != expected_hash:
+            raise ValueError("persisted impact manifest changed after gate preflight")
+        identity = str(entry.get("toolchain_id") or entry.get("lang") or "legacy")
+        matches = [item for item in manifest["commands"] if item.get("toolchain_id") == identity]
+        if len(matches) != 1:
+            raise ValueError("impact manifest does not contain exactly one command for %s" % identity)
+        command = matches[0]
+        descriptor = _descriptor(entry)
+        language = descriptor.get("language") or entry.get("lang")
+        if spec.get("cwd"):
+            expected_cwd = spec["cwd"]
+        else:
+            result = subprocess.run(["git", "-C", workspace, "rev-parse", "--show-toplevel"],
+                                    capture_output=True, text=True)
+            if result.returncode != 0:
+                raise ValueError("cannot verify the manifest command working directory")
+            expected_cwd = result.stdout.strip()
+        mismatches = []
+        if command.get("language") != language:
+            mismatches.append("language")
+        def normalized_path(value: Any) -> str | None:
+            if not isinstance(value, str) or not value:
+                return None
+            return os.path.normcase(os.path.abspath(os.path.normpath(value)))
+
+        if normalized_path(command.get("cwd")) != normalized_path(expected_cwd):
+            mismatches.append("cwd")
+        if command.get("env") != spec.get("env", {}):
+            mismatches.append("env")
+        if mismatches:
+            raise ValueError("impact manifest toolchain contract differs from the ledger (%s)"
+                             % ", ".join(mismatches))
+        phase = os.environ.get("PIPELINE_GATE_PHASE", "task")
+        if command.get("skip_tests") is True:
+            raise ValueError("impact manifests cannot skip tests using prior Green evidence")
+        full_argv = list(spec["argv"])
+        if command.get("full_suite") is True:
+            if command.get("argv") != full_argv or command.get("tests") != []:
+                raise ValueError("impact manifest full-suite argv differs from the ledger")
+            return full_argv, manifest["selection_hash"]
+        if command.get("full_suite") is not False or not manifest["evidence"]["graph_provenance"].get("complete"):
+            raise ValueError("impact manifest cannot prove a complete affected selection")
+        expected = test_impact.affected_argv(full_argv, descriptor.get("red_adapter"), command.get("tests"))
+        if command.get("argv") != expected:
+            raise ValueError("impact manifest selected argv is not derived from the ledger")
+        if phase in ("baseline", "closing"):
+            return full_argv, manifest["selection_hash"]
+        return expected, manifest["selection_hash"]
+    except (OSError, ValueError, TypeError, KeyError, ImportError) as exc:
+        raise GateContractError("invalid candidate-bound impact manifest: %s" % exc) from exc
+
+
+def _record_executed_command(workspace: str, entry: dict[str, Any], name: str,
+                             argv: list[str], cwd: str, selection_hash: str | None) -> None:
+    path = Path(workspace) / "run-gates-executed.json"
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+        if not isinstance(rows, list):
+            raise ValueError("execution evidence must be a list")
+    except (OSError, ValueError) as exc:
+        raise GateContractError("cannot read gate execution evidence: %s" % exc) from exc
+    rows.append({"toolchain_id": str(entry.get("toolchain_id") or entry.get("lang") or "legacy"),
+                 "command": name, "argv": argv, "cwd": cwd, "selection_hash": selection_hash})
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(rows, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
 def _run_one(workspace: str, entry: dict[str, Any], name: str, log_path: str) -> int | None:
     spec = command_spec(entry, name)
     if spec is None:
@@ -298,17 +376,42 @@ def _run_one(workspace: str, entry: dict[str, Any], name: str, log_path: str) ->
                     cwd = str(mapped)
     env = dict(os.environ)
     env.update(spec["env"])
+    if name == "test":
+        # The dependency cache is supervisor-owned. Test code is untrusted
+        # with respect to later impact selections and must not learn its path.
+        env.pop("PIPELINE_IMPACT_CACHE_ROOT", None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    argv = list(spec["argv"])
+    selection_hash = None
+    if name == "test":
+        argv, selection_hash = _impact_test_argv(workspace, entry, spec)
+        adapter = descriptor.get("red_adapter")
+        evidence_file = log_path + ".report.json"
+        if adapter == "pytest_json_report":
+            if "--json-report" not in argv:
+                argv.append("--json-report")
+            if not any(part.startswith("--json-report-file") for part in argv):
+                argv.append("--json-report-file=" + evidence_file)
+        elif adapter == "flutter_machine" and "--machine" not in argv:
+            argv.append("--machine")
+        elif adapter == "go_test_json" and "test" in argv and "-json" not in argv:
+            argv.insert(argv.index("test") + 1, "-json")
+        elif adapter == "unittest" and "-v" not in argv:
+            argv.append("-v")
+    _record_executed_command(workspace, entry, name, argv, cwd, selection_hash)
     process = subprocess.run(
-        [bash, str(cmd_path), "--full-file", log_path, "--", *spec["argv"]],
+        [bash, str(cmd_path), "--full-file", log_path, "--", *argv],
         cwd=cwd, env=env,
     )
+    if name == "test":
+        Path(log_path + ".exit-code").write_text(str(process.returncode), encoding="ascii")
     return process.returncode
 
 
 def run_gates(workspace: str, entries: list[dict[str, Any]]) -> int:
     Path(workspace).mkdir(parents=True, exist_ok=True)
     multiple = len(entries) > 1
+    result = 0
     for entry in entries:
         identity = str(entry.get("toolchain_id") or entry.get("lang") or "legacy")
         suffix = "-" + "".join(
@@ -319,11 +422,13 @@ def run_gates(workspace: str, entries: list[dict[str, Any]]) -> int:
         test_rc = _run_one(workspace, entry, "test", test_log)
         if test_rc:
             print("RUN-GATES: tests FAILED (see %s)" % test_log, file=sys.stderr)
-            return 1
+            result = max(result, 1)
         analyze_rc = _run_one(workspace, entry, "analyze", analyze_log)
         if analyze_rc:
             print("RUN-GATES: analysis found issues (see %s)" % analyze_log, file=sys.stderr)
-            return 2
+            result = max(result, 2)
+    if result:
+        return result
     print("RUN-GATES: all configured gates passed")
     return 0
 

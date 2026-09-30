@@ -1,0 +1,105 @@
+{
+  "version": "r4-impact-1",
+  "graphify": {
+    "version_allowlist": ["0.9.50"],
+    "schema_version": 1,
+    "command": "extract",
+    "code_only": true,
+    "no_cluster": true,
+    "raw_edges_key": "edges",
+    "node_origin": "ast",
+    "accepted_relations": ["imports", "imports_from"],
+    "require_edge_source_file_match": true
+  },
+  "fallback_globs": {
+    "configuration": [
+      "**/package.json",
+      "package.json",
+      "**/Cargo.toml",
+      "Cargo.toml",
+      "**/go.mod",
+      "go.mod",
+      "**/Makefile",
+      "Makefile",
+      "**/justfile",
+      "justfile",
+      "**/tox.ini",
+      "tox.ini"
+    ],
+    "shared_infrastructure": [
+      ".github/workflows/**",
+      "skills/two-model-sdd-pipeline/scripts/**",
+      "skills/flutter-app-pipeline/scripts/**",
+      "skills/two-model-sdd-pipeline/schemas/**",
+      "skills/two-model-sdd-pipeline/toolchains/**"
+    ],
+    "generated_contracts": [
+      "*.schema.json",
+      "**/*.schema.json",
+      "contracts/generated/**",
+      "**/generated/contracts/**"
+    ]
+  },
+  "languages": {
+    "python": {
+      "supported": true,
+      "adapters": ["pytest_json_report", "unittest"],
+      "source_globs": ["*.py", "**/*.py"],
+      "test_globs": ["test_*.py", "**/test_*.py", "*_test.py", "**/*_test.py"],
+      "test_extensions": [".py"],
+      "configuration_globs": [
+        "pyproject.toml",
+        "**/pyproject.toml",
+        "setup.py",
+        "**/setup.py",
+        "pytest.ini",
+        "**/pytest.ini",
+        "setup.cfg",
+        "**/setup.cfg",
+        "requirements*.txt",
+        "**/requirements*.txt",
+        "Pipfile",
+        "**/Pipfile",
+        "poetry.lock",
+        "**/poetry.lock",
+        "uv.lock",
+        "**/uv.lock"
+      ]
+    },
+    "flutter": {
+      "supported": true,
+      "adapters": ["flutter_machine"],
+      "source_globs": ["*.dart", "**/*.dart"],
+      "test_globs": ["*_test.dart", "**/*_test.dart"],
+      "test_extensions": [".dart"],
+      "configuration_globs": [
+        "pubspec.yaml",
+        "**/pubspec.yaml",
+        "pubspec.lock",
+        "**/pubspec.lock",
+        "analysis_options.yaml",
+        "**/analysis_options.yaml",
+        "l10n.yaml",
+        "**/l10n.yaml"
+      ]
+    },
+    "dart": {
+      "supported": true,
+      "adapters": ["flutter_machine"],
+      "source_globs": ["*.dart", "**/*.dart"],
+      "test_globs": ["*_test.dart", "**/*_test.dart"],
+      "test_extensions": [".dart"],
+      "configuration_globs": [
+        "pubspec.yaml",
+        "**/pubspec.yaml",
+        "pubspec.lock",
+        "**/pubspec.lock",
+        "analysis_options.yaml",
+        "**/analysis_options.yaml"
+      ]
+    },
+    "node": { "supported": false, "adapters": [], "source_globs": [], "test_globs": [], "configuration_globs": [] },
+    "rust": { "supported": false, "adapters": [], "source_globs": [], "test_globs": [], "configuration_globs": [] },
+    "go": { "supported": false, "adapters": [], "source_globs": [], "test_globs": [], "configuration_globs": [] }
+  }
+}

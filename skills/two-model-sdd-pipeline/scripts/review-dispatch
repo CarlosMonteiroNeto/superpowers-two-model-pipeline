@@ -4,6 +4,29 @@
 # operator or changes the committed candidate.
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ "${1:-}" = "--legacy" ] && [ "$#" -eq 4 ]; then
+  ws=$2 task=$3 pkg=$4
+  state="$ws/task-$task-review-state.json"
+  [ -s "$pkg" ] || { echo "review-dispatch: candidate package missing" >&2; exit 4; }
+  candidate=$(git rev-parse HEAD)
+  claim=$(python3 "$SCRIPT_DIR/legacy_review_claim.py" claim "$ws" "$task" "$candidate" "$pkg") || exit 4
+  if [ "$claim" = completed ]; then
+    "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" \
+      "reconciled completed review dispatch for candidate $candidate" candidate="$candidate" || true
+    exit 0
+  fi
+  [ "$claim" = claimed ] || { echo "review-dispatch: candidate review requires reconciliation" >&2; exit 5; }
+  if ! "$SCRIPT_DIR/dispatch-retry" --agent two-model-reviewer --task "$task" \
+      --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
+    "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_pending "$task" \
+      "reviewer dispatch failed; candidate $candidate remains pending" candidate="$candidate" || true
+    exit 5
+  fi
+  python3 "$SCRIPT_DIR/legacy_review_claim.py" complete "$ws" "$task" "$candidate" || exit 5
+  "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" \
+    "review dispatched for candidate $candidate" candidate="$candidate" || true
+  exit 0
+fi
 if [ "${1:-}" = "--build-request" ] && [ "$#" -eq 4 ]; then
   python3 - "$SCRIPT_DIR" "$2" "$3" "$4" <<'PY'
 import sys

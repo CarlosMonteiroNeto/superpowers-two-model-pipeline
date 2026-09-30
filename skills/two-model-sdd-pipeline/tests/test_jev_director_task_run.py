@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import pathlib
 import shutil
@@ -81,6 +82,9 @@ class TaskRunDirectorIntegrationTests(unittest.TestCase):
                 "line": 1,
                 "issue": "the original task needs a corrective task",
                 "fix": "append a scoped corrective task",
+                "correction_scope": "structural",
+                "affected_paths": ["README"],
+                "affected_contracts": ["the director remains authoritative"],
             }] if verdict != "APPROVED" else []),
             "minors": [],
             "summary": "structured review evidence",
@@ -175,6 +179,100 @@ exit 0
         self.assertLess(sequence.index(("corrective", "2", "corrective task for 1")), sequence.index(("commit", "2", "corrective green")))
         self.assertIn(("task_complete", "2", "APPROVED"), sequence)
         self.assertIn(("task_complete", "1", "APPROVED"), sequence)
+
+    def test_in_scope_fix_without_session_dispatches_operator_not_director(self):
+        dispatch, hook, coder_gate = self._write_stubs()
+        self._ledger("gate", "-", "go", "lang=go", "test_cmd=true", "analyze_cmd=true")
+        self._ledger("brief_ready", 1, "brief")
+        self._ledger("red_check", 1, "red")
+        self._ledger("commit", 1, "green", "commits=stub")
+        self._ledger("review_outcome", 1, "SEND_BACK", "findings=1")
+        self._review("SEND_BACK")
+        review_path = self.workspace / "task-1-review.json"
+        review = json.loads(review_path.read_text(encoding="utf-8"))
+        review["findings"][0]["correction_scope"] = "in_scope"
+        review_path.write_text(json.dumps(review), encoding="utf-8")
+        (self.workspace / "task-1-brief.md").write_text("approved brief", encoding="utf-8")
+        env = dict(os.environ, PLAN=str(self.plan), DISPATCH_BIN=dispatch,
+                   DIRECTOR_PROMPT_BIN=hook, CODER_GATE_BIN=coder_gate,
+                   LEDGER_APPEND_BIN=self.append, STUB_DISPATCH_LOG=str(self.dispatch_log),
+                   PLAN_PATH=str(self.plan))
+        result = subprocess.run([BASH, str(SCRIPTS / "task-run"), str(self.workspace), "1", "1"],
+                                cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [line.split("\t") for line in self.dispatch_log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(calls), 1, calls)
+        self.assertEqual(calls[0][0], "two-model-coder-go")
+        self.assertFalse((self.workspace / "task-1-two-model-coder-go-session.txt").exists())
+
+    def test_initial_operator_then_in_scope_fix_uses_two_operator_invocations(self):
+        dispatch, hook, coder_gate = self._write_stubs()
+        self._ledger("gate", "-", "go", "lang=go", "test_cmd=true", "analyze_cmd=true")
+        (self.workspace / "task-1-brief.md").write_text("approved brief", encoding="utf-8")
+        env = dict(os.environ, PLAN=str(self.plan), DISPATCH_BIN=dispatch,
+                   DIRECTOR_PROMPT_BIN=hook, CODER_GATE_BIN=coder_gate,
+                   LEDGER_APPEND_BIN=self.append, STUB_DISPATCH_LOG=str(self.dispatch_log),
+                   PLAN_PATH=str(self.plan), RTK_ENABLED="0")
+        initial = subprocess.run([BASH, str(SCRIPTS / "red-gate"), str(self.workspace), "1"],
+                                 cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(initial.returncode, 0, initial.stdout + initial.stderr)
+        self._ledger("review_outcome", 1, "SEND_BACK", "findings=1")
+        self._review("SEND_BACK")
+        review_path = self.workspace / "task-1-review.json"
+        review = json.loads(review_path.read_text(encoding="utf-8"))
+        review["findings"][0]["correction_scope"] = "in_scope"
+        review_path.write_text(json.dumps(review), encoding="utf-8")
+        result = subprocess.run([BASH, str(SCRIPTS / "task-run"), str(self.workspace), "1", "1"],
+                                cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [line.split("\t") for line in self.dispatch_log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([call[0] for call in calls], ["two-model-coder-go", "two-model-coder-go"])
+
+    def test_ambiguous_direct_fix_crash_blocks_without_redispatch(self):
+        dispatch, hook, coder_gate = self._write_stubs()
+        self._ledger("gate", "-", "go", "lang=go", "test_cmd=true", "analyze_cmd=true")
+        self._ledger("review_outcome", 1, "SEND_BACK", "findings=1")
+        self._ledger("direct_correction_started", 1, "operator intent")
+        env = dict(os.environ, PLAN=str(self.plan), DISPATCH_BIN=dispatch,
+                   DIRECTOR_PROMPT_BIN=hook, CODER_GATE_BIN=coder_gate,
+                   LEDGER_APPEND_BIN=self.append, STUB_DISPATCH_LOG=str(self.dispatch_log),
+                   PLAN_PATH=str(self.plan))
+        result = subprocess.run([BASH, str(SCRIPTS / "task-run"), str(self.workspace), "1", "1"],
+                                cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reconcile", result.stderr.lower())
+        self.assertFalse(self.dispatch_log.exists())
+
+    def test_supervisor_reconciles_recovered_direct_fix_without_redispatch(self):
+        prompt = self.workspace / "task-1-direct-fix.md"
+        prompt.write_text("recover this correction", encoding="utf-8")
+        candidate = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        attempt = subprocess.check_output(["python", str(SCRIPTS / "direct_fix_reconcile.py"),
+                                           "intent", str(self.workspace), "1", str(prompt), candidate], text=True).strip()
+        self._ledger("review_outcome", 1, "SEND_BACK", "findings=1")
+        self._ledger("direct_correction_started", 1, "operator intent", "attempt_id=" + attempt)
+        evidence = self.workspace / "recovered-result.json"
+        evidence.write_text('{"status":"completed"}', encoding="utf-8")
+        intent = json.loads((self.workspace / "task-1-direct-fix-intent.json").read_text(encoding="utf-8"))
+        disposition = dict(intent, issuer="supervisor", decision_id="decision-1",
+                           outcome="completed", evidence_path=str(evidence),
+                           evidence_sha256=hashlib.sha256(evidence.read_bytes()).hexdigest())
+        path = self.workspace / "supervisor-disposition.json"
+        path.write_text(json.dumps(disposition), encoding="utf-8")
+        command = ["python", str(SCRIPTS / "direct_fix_reconcile.py"), "reconcile",
+                   str(self.workspace), "1", str(path)]
+        path.write_text(json.dumps(dict(disposition, attempt_id="other-attempt")), encoding="utf-8")
+        self.assertNotEqual(subprocess.run(command, cwd=self.repo, capture_output=True).returncode, 0)
+        path.write_text(json.dumps(disposition), encoding="utf-8")
+        subprocess.run(command, cwd=self.repo, check=True, capture_output=True)
+        subprocess.run(command, cwd=self.repo, check=True, capture_output=True)
+        events = [json.loads(line) for line in (self.workspace / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(sum(e["type"] == "direct_correction_dispatched" for e in events), 1)
+        route = subprocess.run([BASH, str(SCRIPTS / "route-next"), str(self.workspace), "1", "1"],
+                               cwd=self.repo, capture_output=True, text=True)
+        self.assertEqual(route.returncode, 0, route.stderr)
+        self.assertIn("CODER 1", route.stdout)
+        self.assertFalse(self.dispatch_log.exists())
 
     def test_arbitrate_failure_still_dispatches_one_director_and_keeps_arbitration_sequence(self):
         result = self._run("ESCALATE")

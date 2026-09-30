@@ -276,6 +276,26 @@ exit 0
 
 
 class TestRunPipelineFlow(RunPipelineTestBase):
+    def test_supervisor_provides_and_cleans_run_scoped_external_impact_cache(self):
+        self.write_plan([dict(FULL_TASK)])
+        self.write_gate()
+        captured = self._tmp / "impact-cache-root.txt"
+        task_run = write_stub(
+            self.stub_dir, "task-run-cache-capture",
+            'printf "%s" "${PIPELINE_IMPACT_CACHE_ROOT:-MISSING}" > "${CACHE_CAPTURE:?}"\nexit 7\n',
+        )
+
+        result = self.run_pipeline(
+            "--no-push", "--max-parallel", "1", TASK_RUN_BIN=task_run,
+            CACHE_CAPTURE=str(captured),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        cache_root = pathlib.Path(captured.read_text(encoding="utf-8"))
+        self.assertNotEqual(str(cache_root), "MISSING")
+        self.assertNotIn(str(self.repo.resolve()), str(cache_root.resolve()))
+        self.assertFalse(cache_root.exists(), "run teardown must remove only its owned cache root")
+
     def test_detached_head_blocks_before_any_agent_dispatch(self):
         self.write_plan([dict(FULL_TASK)])
         self.write_gate()
@@ -316,6 +336,13 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         for want in ("brief_ready", "task_complete", "final_review"):
             self.assertIn(want, ledger_text)
         self.assertTrue((ws / "closing-review.diff").exists())
+        self.assertFalse((ws / "graph-context.sqlite3").exists(),
+                         "planning runs must not build or retain a graph context")
+        first_brief = (ws / "task-1-brief.md").read_text(encoding="utf-8")
+        self.assertNotIn("Graph context", first_brief)
+        canonical_plan = self.plan.read_text(encoding="utf-8")
+        self.assertNotIn("graph_digest", canonical_plan,
+                         "derived graph metadata must stay out of the planner-authored plan")
         dcalls = self.dispatch_log.read_text(encoding="utf-8")
         self.assertNotIn("EXPAND", dcalls)
         # Complete plan: exactly one task-generator dispatch, the closing one.
@@ -337,7 +364,10 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.write_plan([dict(FULL_TASK), corrective])
         self.write_gate()
         (self.ws() / "task-1-review.json").write_text(
-            json.dumps({"verdict": "SEND_BACK", "findings": [{"summary": "weak tests"}],
+            json.dumps({"verdict": "SEND_BACK", "findings": [{
+                            "summary": "weak tests", "correction_scope": "structural",
+                            "affected_paths": ["lib/b.go"],
+                            "affected_contracts": ["thing fixed"]}],
                         "minors": [], "summary": "x"}),
             encoding="utf-8")
         self.write_reviewer_log(2, "APPROVED")
@@ -395,7 +425,10 @@ class TestRunPipelineFlow(RunPipelineTestBase):
             "summary": verdict, "findings": "1",
         })
         (self.ws() / "task-1-review.json").write_text(
-            json.dumps({"verdict": verdict, "findings": ["weak"]}),
+            json.dumps({"verdict": verdict, "findings": [{
+                            "summary": "weak", "correction_scope": "structural",
+                            "affected_paths": ["lib/a.go"],
+                            "affected_contracts": ["thing exists"]}]}),
             encoding="utf-8")
         # A stale cross-task session must never be resumed.
         (self.ws() / "task-0-session.txt").write_text(
@@ -479,7 +512,10 @@ class TestRunPipelineFlow(RunPipelineTestBase):
              "summary": "SEND_BACK", "findings": "1"},
         )
         (self.ws() / "task-1-review.json").write_text(
-            json.dumps({"verdict": "SEND_BACK", "findings": [{"summary": "weak"}], "minors": []}),
+            json.dumps({"verdict": "SEND_BACK", "findings": [{
+                            "summary": "weak", "correction_scope": "structural",
+                            "affected_paths": ["lib/a.go"],
+                            "affected_contracts": ["thing exists"]}], "minors": []}),
             encoding="utf-8")
         (self.ws() / "task-1-session.txt").write_text(
             "GENERIC-REVIEWER-SESSION\n", encoding="utf-8")
@@ -577,9 +613,8 @@ class TestRunPipelineFlow(RunPipelineTestBase):
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
 
     def test_max_parallel_1_regression_is_the_serial_path(self):
-        """--max-parallel 1 reproduces the pre-wave serial flow: task-run in
-        the repo root + route-next advance, no worktrees and no integrate.
-        The ledger (type, task) sequence is the pre-change serial order."""
+        """--max-parallel 1 keeps the serial task lifecycle and records the
+        R4 baseline and impact evidence at their required boundaries."""
         self.write_plan([dict(FULL_TASK)])
         self.write_gate()
         r = self.run_pipeline(
@@ -598,15 +633,15 @@ class TestRunPipelineFlow(RunPipelineTestBase):
             if line.strip()
         ]
         seq = [(e["type"], str(e.get("task"))) for e in entries]
-        self.assertEqual(seq, [
-            ("gate", "-"),
-            ("brief_ready", "1"),
-            ("red_check", "1"),
-            ("commit", "1"),
-            ("review_outcome", "1"),
-            ("task_complete", "1"),
-            ("final_review", "-"),
-        ])
+        self.assertEqual([t for t, _ in seq if t not in {
+            "baseline_evidence_unavailable", "impact_gate_evidence"}], [
+                "gate", "brief_ready", "red_check", "commit",
+                "review_outcome", "task_complete", "final_review",
+            ])
+        self.assertLess(seq.index(("baseline_evidence_unavailable", "-")),
+                        seq.index(("brief_ready", "1")))
+        self.assertLess(seq.index(("task_complete", "1")),
+                        seq.index(("impact_gate_evidence", "1")))
         for wave_type in ("worktree_alloc", "worktree_release", "integrated",
                           "integration_failed"):
             self.assertNotIn(wave_type, [t for t, _ in seq])

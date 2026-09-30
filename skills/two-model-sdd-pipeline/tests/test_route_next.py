@@ -136,6 +136,11 @@ class TestRouteNextWrapUp(RouteNextTestBase):
 
 class TestRouteNextFixAndEscalation(RouteNextTestBase):
     def test_review_send_back_emits_corrective(self):
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [{"id": 3, "touches": ["src/a.py"],
+            "acceptance": ["expected value"]}]}), encoding="utf-8")
+        (self.ws / "task-3-review.json").write_text(json.dumps({"verdict": "SEND_BACK", "findings": [{
+            "correction_scope": "structural", "affected_paths": ["src/a.py"],
+            "affected_contracts": ["expected value"]}]}), encoding="utf-8")
         self.ledger([
             entry("brief_ready", 3, "task"),
             entry("red_check", 3, "RED"),
@@ -145,6 +150,48 @@ class TestRouteNextFixAndEscalation(RouteNextTestBase):
         ])
         r = run_route(self.ws, 3)
         self.assert_action(r, "CORRECTIVE 3")
+
+    def test_review_send_back_in_scope_emits_direct_fix(self):
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [{"id": 3, "touches": ["src/a.py"],
+            "acceptance": ["expected value"]}]}), encoding="utf-8")
+        (self.ws / "task-3-review.json").write_text(json.dumps({"verdict": "SEND_BACK", "findings": [{
+            "correction_scope": "in_scope", "affected_paths": ["src/a.py"],
+            "affected_contracts": ["expected value"]}]}), encoding="utf-8")
+        self.ledger([entry("review_outcome", 3, "SEND_BACK")])
+        self.assert_action(run_route(self.ws, 3), "DIRECT_FIX 3")
+
+    def test_review_send_back_without_metadata_blocks(self):
+        self.ledger([entry("review_outcome", 3, "SEND_BACK")])
+        result = run_route(self.ws, 3)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_scope_violation_during_direct_fix_escalates_to_director(self):
+        self.ledger([entry("review_outcome", 3, "SEND_BACK"),
+                     entry("direct_correction_started", 3, "direct fix"),
+                     entry("red_check", 3, "RED"),
+                     entry("scope_violation", 3, "outside approved scope")])
+        self.assert_action(run_route(self.ws, 3), "ARBITRATE 3")
+
+    def test_interrupted_direct_fix_requires_reconciliation_before_dispatch(self):
+        self.ledger([entry("review_outcome", 3, "SEND_BACK"),
+                     entry("direct_correction_started", 3, "direct fix")])
+        self.assert_action(run_route(self.ws, 3), "DIRECT_FIX_RECONCILE 3")
+
+    def test_dispatched_direct_fix_resumes_coder_without_new_director(self):
+        self.ledger([entry("review_outcome", 3, "SEND_BACK"),
+                     entry("direct_correction_started", 3, "direct fix"),
+                     entry("direct_correction_dispatched", 3, "operator returned")])
+        self.assert_action(run_route(self.ws, 3), "CODER 3")
+
+    def test_budget_exhaustion_routes_to_director_once(self):
+        self.ledger([entry("red_check", 3, "RED"),
+                     entry("budget_exhausted", 3, "cycle exhausted")])
+        self.assert_action(run_route(self.ws, 3), "BUDGET_ASSESS 3")
+        self.ledger([entry("red_check", 3, "RED"),
+                     entry("budget_exhausted", 3, "cycle exhausted"),
+                     entry("budget_cycle_assessed", 3, "cycle allowed")])
+        (self.ws / "ledger-task-3.jsonl").unlink(missing_ok=True)
+        self.assert_action(run_route(self.ws, 3), "BRIEF 3")
 
     def test_review_escalate_emits_arbitrate(self):
         self.ledger([

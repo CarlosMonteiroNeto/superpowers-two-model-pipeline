@@ -225,14 +225,38 @@ class RouteNextPartitionRegressionTest(unittest.TestCase):
         self.assertEqual(r2.stdout.strip(), r1.stdout.strip())
 
     def test_send_back_regression_across_split(self):
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [{
+            "id": 3,
+            "title": "Partitioned route regression",
+            "summary": "Preserve SEND_BACK routing after ledger split.",
+            "acceptance": ["Both pre-split and partitioned routing emit CORRECTIVE 3."],
+            "touches": ["skills/two-model-sdd-pipeline/scripts/route-next"],
+        }]}), encoding="utf-8")
+        (self.ws / "task-3-review.json").write_text(json.dumps({
+            "verdict": "SEND_BACK",
+            "findings": [{
+                "severity": "Important",
+                "file": "skills/two-model-sdd-pipeline/scripts/route-next",
+                "line": 226,
+                "issue": "The corrective route must remain available after ledger partitioning.",
+                "fix": "Keep SEND_BACK routing deterministic across both ledger layouts.",
+                "correction_scope": "in_scope",
+                "affected_paths": ["skills/two-model-sdd-pipeline/scripts/route-next"],
+                "affected_contracts": ["route-next action contract"],
+            }],
+            "minors": [],
+            "summary": "Preserve deterministic corrective routing.",
+        }), encoding="utf-8")
         entries = [
             *self.scenario(3),
-            entry("review_outcome", 3, "SEND_BACK", findings="1"),
+            entry("review_outcome", 3, "SEND_BACK", findings="1", severity="Important"),
         ]
         write_global_ledger(self.ws, entries)
         r1 = run_route(self.ws, 3)
+        self.assertEqual(r1.returncode, 0, r1.stdout + r1.stderr)
         self.assertEqual(r1.stdout.strip(), "CORRECTIVE 3")
         r2 = run_route(self.ws, 3)
+        self.assertEqual(r2.returncode, 0, r2.stdout + r2.stderr)
         self.assertEqual(r2.stdout.strip(), "CORRECTIVE 3")
 
 

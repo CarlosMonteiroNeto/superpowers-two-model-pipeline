@@ -146,11 +146,46 @@ review_verdict=$(printf '%s' "$last_review" | sed -n 's/.*"summary": *"\([^"]*\)
 # entries AFTER that ruling (equivalently all entries when there is no ruling).
 esc_last=-1
 res_last=-1
+direct_last=-1
+direct_dispatched_last=-1
+budget_last=-1
 cur_brief=0
 cur_red=0
 cur_commit=0
 cur_esc=0
 cur_verdict="-"
+review_action() {
+  local answer budget_state
+  [ -f "$ws/task-$task-review.json" ] && [ -f "$ws/plan.json" ] || {
+    echo "ROUTE-NEXT: review or plan missing for correction" >&2; exit 1;
+  }
+  answer=$(python3 "$SCRIPT_DIR/correction_policy.py" "$ws/task-$task-review.json" "$ws/plan.json" "$task" "$ws")
+  case "$answer" in
+    coder)
+      budget_state=$(python3 - "$SCRIPT_DIR" "$ws" "$task" <<'PY'
+import json,pathlib,sys
+sys.path.insert(0,sys.argv[1])
+import dispatch_budget
+ws=pathlib.Path(sys.argv[2]); task=sys.argv[3]
+identity_path=ws/".pipeline-identity.json"
+if not identity_path.is_file(): print("available"); raise SystemExit(0)
+identity=json.loads(identity_path.read_text(encoding="utf-8"))
+plan=json.loads((ws/"plan.json").read_text(encoding="utf-8"))
+items={str(x["id"]):x for x in plan["tasks"]}
+item=items[task]; seen=set()
+while item.get("corrects") is not None:
+    key=str(item["corrects"])
+    if key in seen or key not in items: raise ValueError("invalid task family")
+    seen.add(key); item=items[key]
+status=dispatch_budget.status(identity["run_id"],item["id"],state_path=str(ws/"dispatch-budget.json"))
+print("assessment" if status["director_required"] else "available")
+PY
+) || { echo "ROUTE-NEXT: cannot read dispatch budget" >&2; exit 1; }
+      if [ "$budget_state" = assessment ]; then echo "BUDGET_ASSESS $task"; else echo "DIRECT_FIX $task"; fi ;;
+    director) echo "CORRECTIVE $task" ;;
+    *) echo "ROUTE-NEXT: malformed correction metadata" >&2; exit 1 ;;
+  esac
+}
 ordering=$(printf '%s\n' "$task_entries" | python3 -c '
 import json, sys
 entries = []
@@ -164,15 +199,21 @@ for i, raw in enumerate(sys.stdin):
         continue
     if isinstance(ev, dict):
         entries.append((i, ev))
-esc_last = res_last = -1
+esc_last = res_last = direct_last = direct_dispatched_last = budget_last = -1
 for i, ev in entries:
     t = ev.get("type")
     if t in ("escalated", "scope_violation"):
         esc_last = i
     elif t == "review_outcome" and ev.get("summary") == "ESCALATE":
         esc_last = i
-    elif t == "arbitrate_resolved":
+    elif t in ("arbitrate_resolved", "budget_cycle_assessed"):
         res_last = i
+    elif t == "direct_correction_started":
+        res_last = direct_last = i
+    elif t == "direct_correction_dispatched":
+        direct_dispatched_last = i
+    elif t == "budget_exhausted":
+        budget_last = i
 cur_brief = cur_red = cur_commit = cur_esc = 0
 cur_verdict = "-"
 for i, ev in entries:
@@ -189,10 +230,10 @@ for i, ev in entries:
         cur_esc = 1
     elif t == "review_outcome":
         cur_verdict = ev.get("summary") or "-"
-print(esc_last, res_last, cur_brief, cur_red, cur_commit, cur_esc, cur_verdict)
+print(esc_last, res_last, direct_last, direct_dispatched_last, budget_last, cur_brief, cur_red, cur_commit, cur_esc, cur_verdict)
 ' 2>/dev/null || true)
 if [ -n "$ordering" ]; then
-  read -r esc_last res_last cur_brief cur_red cur_commit cur_esc cur_verdict <<< "$ordering"
+  read -r esc_last res_last direct_last direct_dispatched_last budget_last cur_brief cur_red cur_commit cur_esc cur_verdict <<< "$ordering"
 fi
 
 next_task=$((task + 1))
@@ -210,11 +251,19 @@ if [ "$has_complete" -ge 1 ]; then
   exit 0
 fi
 
+if [ "$budget_last" -gt "$res_last" ]; then
+  echo "BUDGET_ASSESS $task"
+  exit 0
+fi
+
 # F3 attempt boundary: for an incomplete task, a resolved arbitration starts a
 # new execution attempt. A re-escalation after the ruling is a bounded human
 # blocker (a silent Strategic-tier spend is worse).
 if [ "$res_last" -ge 0 ]; then
   if [ "$esc_last" -gt "$res_last" ]; then
+    if [ "$direct_last" -eq "$res_last" ]; then
+      echo "ARBITRATE $task"; exit 0
+    fi
     echo "ROUTE-NEXT: arbitration did not resolve task $task" >&2
     exit 1
   fi
@@ -224,7 +273,7 @@ if [ "$res_last" -ge 0 ]; then
       if [ "$task" -ge "$total" ]; then echo "FINAL_REVIEW"; else echo "NEXT $next_task"; fi
       exit 0 ;;
     SEND_BACK)
-      echo "CORRECTIVE $task"; exit 0 ;;
+      review_action; exit 0 ;;
     ESCALATE)
       echo "ARBITRATE $task"; exit 0 ;;
     "-") ;;
@@ -232,6 +281,14 @@ if [ "$res_last" -ge 0 ]; then
       echo "ROUTE-NEXT: unknown review verdict: $cur_verdict" >&2
       exit 1 ;;
   esac
+  if [ "$direct_last" -eq "$res_last" ] && [ "$cur_verdict" = - ] && [ "$cur_commit" -eq 0 ]; then
+    if [ "$direct_dispatched_last" -lt "$direct_last" ]; then
+      echo "DIRECT_FIX_RECONCILE $task"
+    else
+      echo "CODER $task"
+    fi
+    exit 0
+  fi
   if [ "$cur_esc" -ge 1 ] && [ "$cur_commit" -eq 0 ]; then
     echo "ARBITRATE $task"; exit 0
   fi
@@ -255,7 +312,7 @@ if [ -n "$review_verdict" ]; then
       if [ "$task" -ge "$total" ]; then echo "FINAL_REVIEW"; else echo "NEXT $next_task"; fi
       exit 0 ;;
     SEND_BACK)
-      echo "CORRECTIVE $task"
+      review_action
       exit 0 ;;
     ESCALATE)
       echo "ARBITRATE $task"

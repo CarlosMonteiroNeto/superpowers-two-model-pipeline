@@ -31,11 +31,18 @@ class TestFlutterAppPipelineSkill(unittest.TestCase):
         text = self.skill.read_text(encoding="utf-8")
         self.assertIn("writing-plans", text)
 
-    def test_no_graphify_in_process(self):
-        """The knowledge graph is fully out of the pipeline: no stage
-        invokes it, so the skill must not mention graphify anywhere."""
-        text = self.skill.read_text(encoding="utf-8")
-        self.assertNotIn("graphify", text.lower())
+    def test_graphify_is_limited_to_candidate_bound_test_impact(self):
+        """R4 permits only disposable AST import extraction for test impact;
+        the removed knowledge-graph context stage remains absent."""
+        text = self.skill.read_text(encoding="utf-8").lower()
+        marker = "## candidate-bound test impact gates (r4)"
+        self.assertIn(marker, text)
+        prior, r4 = text.split(marker, 1)
+        self.assertIn("no graph context", prior)
+        self.assertNotIn("graph-publication", prior)
+        self.assertIn("graphify ast import extractor", " ".join(r4.split()))
+        self.assertNotIn("graphify-update", r4)
+        self.assertNotIn("graphify-subgraph", r4)
 
     def test_rtk_compression_invariant(self):
         text = self.skill.read_text(encoding="utf-8")

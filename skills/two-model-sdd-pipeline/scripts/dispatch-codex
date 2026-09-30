@@ -15,6 +15,7 @@ PIPELINE_SCRIPTS_DIR="$SCRIPT_DIR" PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHON
 import hashlib, json, os, pathlib, subprocess, sys, tempfile
 import codex_dispatch
 import dispatch_contract
+import dispatch_budget
 
 mode, request_path, runtime_path = sys.argv[1:4]
 args = sys.argv[4:]
@@ -64,7 +65,11 @@ def build_operator_request(v, runtime):
     # generated Windows brief before the provider is launched.
     prompt_text=prompt.read_text(encoding="utf-8")
     prompt_hash=hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
-    dispatch_id=hashlib.sha256("\0".join((run_id,str(task),"operator",plan_hash,prompt_hash)).encode()).hexdigest()[:32]
+    # Rewritten briefs or fix prompts represent new external invocations even
+    # when their text is unchanged. A crash replay keeps the same prompt file
+    # timestamp, so it retains the reservation identity.
+    dispatch_id=hashlib.sha256("\0".join((run_id,str(task),"operator",plan_hash,prompt_hash,
+                                           str(prompt.stat().st_mtime_ns))).encode()).hexdigest()[:32]
     attempt_root=pathlib.Path(runtime["attempt_root"])
     evidence=attempt_root/"published"/("operator-"+dispatch_id)
     req={"version":1,"backend":"codex","run_id":run_id,"dispatch_id":dispatch_id,
@@ -78,21 +83,42 @@ def build_operator_request(v, runtime):
     req=dispatch_contract.validate_request(req)
     return req, ws
 
+def reserve_operator_budget(request, runtime, workspace):
+    if request.get("role") != "operator":
+        return None
+    identity={key:request[key] for key in ("run_id","task_family","task_id","role","dispatch_id")}
+    budget_path=str(workspace/"dispatch-budget.json")
+    limits=runtime.get("manifest",{}).get("coder_cycle_limits",dispatch_budget.DEFAULT_POLICY["cycle_allowances"])
+    policy={"cycle_allowances":limits,"max_cycles":len(limits),"require_assessment":True}
+    try:
+        with open(workspace/"ledger.jsonl",encoding="utf-8") as handle:
+            policy["director_assessments"]=sum(1 for line in handle if (lambda e:e.get("type")=="budget_cycle_assessed" and str(e.get("task_family"))==str(request["task_family"]))(json.loads(line)))
+    except FileNotFoundError:
+        policy["director_assessments"]=0
+    dispatch_budget.reserve(identity,policy,state_path=budget_path)
+    return identity,budget_path
+
 try:
     with open(runtime_path, encoding="utf-8") as f: runtime=json.load(f)
     if not isinstance(runtime, dict):
         raise ValueError("runtime envelope must be an object")
     if not isinstance(runtime.get("process_registry"), list):
         runtime["process_registry"] = []
+    budget_recorded=None
     if mode == "request":
         with open(request_path, encoding="utf-8") as f: request=json.load(f)
+        workspace=pathlib.Path(request["evidence_paths"]["prompt_path"]).parent
+        budget_recorded=reserve_operator_budget(request,runtime,workspace)
+        dispatch_entered=True
         result=codex_dispatch.run_dispatch(request, runtime)
         codex_dispatch.publish_requested_result(request, result)
     else:
         values=parse_operator_args(args)
         request, workspace=build_operator_request(values,runtime)
+        budget_recorded=reserve_operator_budget(request,runtime,workspace)
         if values.get("--continue"):
             runtime["resume"]=True; runtime["resume_session_id"]=values["--continue"]
+        dispatch_entered=True
         result=codex_dispatch.run_dispatch(request,runtime)
         codex_dispatch.publish_requested_result(request,result)
         status=result["final_output"]["status"]
@@ -119,6 +145,14 @@ except KeyboardInterrupt:
     raise SystemExit(130)
 except Exception as exc:
     print("dispatch-codex: " + str(exc), file=sys.stderr)
+    # The process may have started before registration failed. Only an adapter
+    # launch error proves pre-start; all other entered-dispatch failures retain
+    # their reservation for reconciliation.
+    if ("budget_recorded" in locals() and budget_recorded and
+            (not locals().get("dispatch_entered") or
+             isinstance(exc, codex_dispatch.codex_process.ProcessLaunchError))):
+        budget_identity,budget_path=budget_recorded
+        dispatch_budget.record_prestart_failure(budget_identity,state_path=budget_path)
     if isinstance(exc, codex_dispatch.codex_process.ProcessLaunchError):
         raise SystemExit(5)
     if isinstance(exc, TimeoutError):

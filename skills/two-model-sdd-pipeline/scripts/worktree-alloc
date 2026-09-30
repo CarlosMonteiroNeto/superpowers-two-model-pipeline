@@ -121,6 +121,7 @@ mkdir -p "$wt_ws"
 printf '*\n' > "$root/.superpowers/two-model/.gitignore"
 printf '*\n' > "$wt/.superpowers/two-model/.gitignore"
 cp -f "$ws/plan.json" "$wt_ws/plan.json"
+if [ -f "$ws/base-commit.txt" ]; then cp -f "$ws/base-commit.txt" "$wt_ws/base-commit.txt"; fi
 mkdir -p "$(dirname "$owner_file")"
 python3 - "$owner_file" "$root" "$ws" "$wt" "$branch" "$run_id" "$task" "$base" <<'PY'
 import json, os, sys, tempfile

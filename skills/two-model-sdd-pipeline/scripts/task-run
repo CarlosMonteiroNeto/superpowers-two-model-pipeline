@@ -343,12 +343,12 @@ print(max(cands) if cands else '')
         orig_session=$(cat "$WS/task-$n-$coder_agent-session.txt" 2>/dev/null || true)
         DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
         if [ -n "$orig_session" ]; then
-          "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$m" \
+          "$DISPATCH_RETRY_BIN" --backend "${PIPELINE_BACKEND:-opencode}" --agent "$coder_agent" --task "$m" \
             --continue "$orig_session" --prompt-file "$WS/task-$m-brief.md" \
             --log "$WS/task-$m-coder.log" \
             || block "operador dispatch failed for corrective task $m"
         else
-          "$DISPATCH_RETRY_BIN" --agent "$coder_agent" --task "$m" \
+          "$DISPATCH_RETRY_BIN" --backend "${PIPELINE_BACKEND:-opencode}" --agent "$coder_agent" --task "$m" \
             --prompt-file "$WS/task-$m-brief.md" \
             --log "$WS/task-$m-coder.log" \
             || block "operador dispatch failed for corrective task $m"
@@ -356,7 +356,7 @@ print(max(cands) if cands else '')
         rc=0
         "$CODER_GATE_BIN" "$WS" "$m" || rc=$?
         case "$rc" in
-          0|2) ;;
+          0|2|7) ;;
           *) block "coder-gate exit $rc on corrective task $m - inspect logs" ;;
         esac
         # Route the corrective task itself (as a normal task) so its revisor
@@ -364,7 +364,75 @@ print(max(cands) if cands else '')
         # stays on the parent and re-emits CORRECTIVE forever.
         task=$m
         ;;
-      ARBITRATE)
+      DIRECT_FIX_RECONCILE)
+        block "direct correction may have started before interruption; reconcile its reservation and worker result before another dispatch"
+        ;;
+      DIRECT_FIX)
+        n=$2
+        findings="$WS/task-$n-review.json"
+        [ -f "$findings" ] || block "no review findings for task $n"
+        # This is a new semantic correction of the same approved task. The
+        # boundary lets route-next ignore the old SEND_BACK after a crash.
+        coder_agent=$("$SCRIPT_DIR/coder-agent-for" "$("$SCRIPT_DIR/task-lang" "$WS" "$n")")
+        session=$(cat "$WS/task-$n-$coder_agent-session.txt" 2>/dev/null || true)
+        fix_prompt="$WS/task-$n-direct-fix.md"
+        cat > "$fix_prompt" <<EOF
+Correct the in-scope findings for task $n. Read the complete current review
+at $findings and the approved task brief at $WS/task-$n-brief.md. Preserve
+the approved paths and contracts. Re-run the relevant RED/GREEN checks and
+report with the operator status contract.
+EOF
+        intent_id=$(python3 "$SCRIPT_DIR/direct_fix_reconcile.py" intent "$WS" "$n" "$fix_prompt" "$(git rev-parse HEAD)") \
+          || block "cannot record direct correction intent"
+        # Keep the reviewed candidate identity for scope grants, but retire its
+        # pending reviewer claim before the operator can change the worktree.
+        # A crash here is safe to replay: no worker has started yet.
+        python3 - "$WS/task-$n-review-state.json" "$(git rev-parse HEAD)" "$intent_id" <<'PY' \
+          || block "cannot advance review state for direct correction"
+import json,os,sys,tempfile
+path,candidate,attempt=sys.argv[1:]
+if os.path.isfile(path):
+    state=json.load(open(path,encoding="utf-8"))
+    expected=state.get("candidate_commit",state.get("identity",{}).get("candidate_commit"))
+    if expected != candidate:
+        raise ValueError("reviewed candidate differs from direct correction base")
+    state["status"]="correction_started"
+    state["correction_attempt_id"]=attempt
+    fd,tmp=tempfile.mkstemp(prefix="review-state-",dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as handle:
+            json.dump(state,handle)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp,path)
+    finally:
+        if os.path.exists(tmp): os.unlink(tmp)
+PY
+        "$SCRIPT_DIR/ledger-append" "$LEDGER" direct_correction_started "$n" \
+            "in-scope findings return to operator" "attempt_id=$intent_id" || block "cannot record direct correction intent"
+        DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
+        if [ -n "$session" ]; then
+          "$DISPATCH_RETRY_BIN" --backend "${PIPELINE_BACKEND:-opencode}" --agent "$coder_agent" --task "$n" \
+            --continue "$session" --prompt-file "$fix_prompt" --log "$WS/task-$n-coder.log" \
+            || block "operator dispatch failed for direct correction task $n"
+        else
+          "$DISPATCH_RETRY_BIN" --backend "${PIPELINE_BACKEND:-opencode}" --agent "$coder_agent" --task "$n" \
+            --prompt-file "$fix_prompt" --log "$WS/task-$n-coder.log" \
+            || block "operator dispatch failed for direct correction task $n"
+        fi
+        "$SCRIPT_DIR/ledger-append" "$LEDGER" direct_correction_dispatched "$n" \
+          "operator returned from direct correction" "attempt_id=$intent_id" || block "cannot record direct correction dispatch"
+        "$SCRIPT_DIR/ledger-append" "$LEDGER" red_check "$n" \
+          "retaining operator-owned RED for in-scope correction" || block "cannot record RED continuation"
+        rc=0
+        "$CODER_GATE_BIN" "$WS" "$n" || rc=$?
+        case "$rc" in
+          0|2|7) ;;
+          *) block "coder-gate exit $rc for direct correction task $n" ;;
+        esac
+        ;;
+      BUDGET_ASSESS|ARBITRATE)
         n=$2
         esc=$(grep -E '"type": *"(escalated|scope_violation)"' "$LEDGER" 2>/dev/null | tail -1 || true)
         if [ -z "$esc" ]; then
@@ -380,6 +448,11 @@ print(max(cands) if cands else '')
           echo "Plan: $PLAN"
           echo "Target task: $target"
           echo "Escalation: ${esc:-none}"
+          if [ "$act" = BUDGET_ASSESS ]; then
+            echo "The configured coder cycle is exhausted. Assess the current blocker and task viability before another external operator invocation."
+            echo "Durable dispatch budget: $WS/dispatch-budget.json"
+            echo "If the approved task remains viable unchanged, return its current title, summary, acceptance and touches in the arbitration proposal; Script CEO records a no-op assessment. If you cannot resolve the blocker, report that honestly so the run pauses."
+          fi
           [ -f "$rev" ] && echo "Review: $rev"
           echo "Rule on task viability: fix the task in the tracked plan, or re-plan. Reply: what changed."
         } > "$baseline"; then
@@ -399,7 +472,32 @@ print(max(cands) if cands else '')
         # Observable resolution (C1): route-next must see that the ruling
         # happened, or it re-emits ARBITRATE on every iteration. The plan hash
         # records whether the diretor actually changed the tracked plan.
-        ledger arbitrate_resolved "$n" "diretor ruled" plan_sha="$(plan_sha)"
+        if [ "$act" = BUDGET_ASSESS ]; then
+          family=$(python3 - "$WS/plan.json" "$n" <<'PY'
+import json,sys
+items={str(t["id"]):t for t in json.load(open(sys.argv[1],encoding="utf-8"))["tasks"]}
+t=items[sys.argv[2]]; seen=set()
+while t.get("corrects") is not None:
+ p=str(t["corrects"])
+ if p in seen or p not in items: raise ValueError("invalid task family")
+ seen.add(p); t=items[p]
+print(t["id"])
+PY
+)
+          "$SCRIPT_DIR/ledger-append" "$LEDGER" budget_cycle_assessed "$n" \
+            "director assessed exhausted coder cycle" "task_family=$family" "plan_sha=$(plan_sha)" || block "cannot record budget assessment"
+          if python3 - "$SCRIPT_DIR" "$WS" "$family" <<'PY'
+import json,sys,pathlib
+sys.path.insert(0,sys.argv[1]); import dispatch_budget
+ws=pathlib.Path(sys.argv[2]); identity=json.loads((ws/".pipeline-identity.json").read_text(encoding="utf-8"))
+raise SystemExit(0 if dispatch_budget.status(identity["run_id"],sys.argv[3],state_path=str(ws/"dispatch-budget.json"))["pause"] else 1)
+PY
+          then
+            block "third coder cycle exhausted and assessed; pause for user"
+          fi
+        else
+          ledger arbitrate_resolved "$n" "diretor ruled" plan_sha="$(plan_sha)"
+        fi
         ;;
       NEXT|FINAL_REVIEW)
         # The orchestrator routed straight to NEXT/FINAL_REVIEW: the task is

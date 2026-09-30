@@ -84,7 +84,7 @@ case "$action" in
     echo "OUTCOME: $action"
     exit 0
     ;;
-  CORRECTIVE*|ARBITRATE*|NEXT*|FINAL_REVIEW*)
+  DIRECT_FIX*|BUDGET_ASSESS*|CORRECTIVE*|ARBITRATE*|NEXT*|FINAL_REVIEW*)
     # These hand control back: the caller arranges the corrective / arbitration.
     # The orchestrator just reports the outcome.
     echo "OUTCOME: $action"
@@ -114,7 +114,7 @@ case "$action" in
     rc=0
     "$RED_GATE_BIN" "$ws" "$task" || rc=$?
     case "$rc" in
-      0|2) ;;
+      0|2|7) ;;
       *)
         echo "ORCHESTRATOR: red-gate exit $rc on task $task - interrupted or unexpected; not re-routing" >&2
         exit "$rc"
@@ -135,7 +135,7 @@ case "$action" in
     rc=0
     "$CODER_GATE_BIN" "$ws" "$task" || rc=$?
     case "$rc" in
-      0|2) ;;
+      0|2|7) ;;
       *)
         echo "ORCHESTRATOR: coder-gate exit $rc on task $task - interrupted or unexpected; not re-routing" >&2
         exit "$rc"
@@ -241,6 +241,8 @@ try:
 except Exception: print("", "")
 PY
 )
+      saved_base=${saved_base%$'\r'}
+      saved_candidate=${saved_candidate%$'\r'}
       [ "$candidate" = "$saved_candidate" ] || { echo "ORCHESTRATOR: pending review candidate changed; refusing retry" >&2; exit 1; }
       pkg="$ws/task-$task-review-package.diff"
       [ -n "$saved_base" ] || { echo "ORCHESTRATOR: pending review base missing" >&2; exit 1; }
@@ -259,11 +261,8 @@ fd,tmp=tempfile.mkstemp(dir=os.path.dirname(state),prefix="review-state-")
 with os.fdopen(fd,"w",encoding="utf-8") as f: json.dump(d,f); f.write("\n")
 os.replace(tmp,state)
 PY
-      DISPATCH_RETRY_BIN="${DISPATCH_RETRY_BIN:-$SCRIPT_DIR/dispatch-retry}"
-      if "$DISPATCH_RETRY_BIN" --agent two-model-reviewer --task "$task" \
-        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
-        "$SCRIPT_DIR/ledger-append" "$ws/ledger.jsonl" review_dispatched "$task" "review resumed for candidate $candidate" candidate="$candidate"
-        rm -f "$state"
+      if "$SCRIPT_DIR/review-dispatch" --legacy "$ws" "$task" "$pkg"; then
+        :
       else
         echo "ORCHESTRATOR: reviewer dispatch remains pending for candidate $candidate" >&2
         exit 5

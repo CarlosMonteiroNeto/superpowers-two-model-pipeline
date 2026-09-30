@@ -169,18 +169,11 @@ PY
     codex)
       echo "GREEN-GATE: committed candidate $candidate is ready for normalized Codex review" ;;
     opencode)
-      DISPATCH_BIN="${DISPATCH_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/dispatch}"
-      if ! "$DISPATCH_BIN" --agent two-model-reviewer --task "$task" \
-        --prompt-file "$pkg" --log "$ws/task-$task-reviewer.log"; then
-        if [ -n "$ledger" ]; then
-          LEDGER_APPEND="$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/ledger-append"
-          "$LEDGER_APPEND" "$ledger" review_pending "$task" \
-            "reviewer dispatch failed; candidate $($GIT_BIN rev-parse HEAD) remains pending"
-        fi
+      if ! "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/review-dispatch" --legacy "$ws" "$task" "$pkg"; then
         echo "GREEN-GATE: reviewer dispatch failed; committed candidate remains review_pending" >&2
         exit 5
       fi
-      rm -f "$review_state" ;;
+      ;;
     *) echo "GREEN-GATE: unsupported backend $pipeline_backend" >&2; exit 4 ;;
   esac
 fi

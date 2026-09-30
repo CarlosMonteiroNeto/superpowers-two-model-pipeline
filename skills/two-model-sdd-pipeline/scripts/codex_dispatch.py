@@ -114,6 +114,16 @@ def normalized_output_and_hash(role, payload, output_schema):
     return normalized,digest
 
 
+def _worker_environment(runtime):
+    """Build the model process environment without supervisor cache access."""
+    env = dict(os.environ)
+    if isinstance(runtime.get("env"), dict):
+        env.update(runtime["env"])
+    env.pop("PIPELINE_IMPACT_CACHE_ROOT", None)
+    env.pop("PIPELINE_SCOPE_GRANT_KEY", None)
+    return env
+
+
 def run_dispatch(request, runtime):
     req = dispatch_contract.validate_request(request)
     if req["backend"] != "codex": raise ValueError("Codex dispatch requires backend=codex")
@@ -212,8 +222,7 @@ def run_dispatch(request, runtime):
                  "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown"))}
     codex_sessions.store_session(identity, lifecycle)
     try:
-        env=dict(os.environ)
-        if isinstance(runtime.get("env"),dict): env.update(runtime["env"])
+        env=_worker_environment(runtime)
         env["PIPELINE_ROLE_POLICY"]=str(policy_path)
         env["CODEX_SKILL_ROOT"]=str(pathlib.Path(__file__).resolve().parent.parent)
         captured = codex_process.run_owned(args, cwd, prompt, runtime.get("timeout"), env, on_start=register_process)

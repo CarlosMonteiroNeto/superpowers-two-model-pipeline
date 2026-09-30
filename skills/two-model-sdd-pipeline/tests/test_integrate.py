@@ -503,15 +503,19 @@ class IntegrateTest(unittest.TestCase):
         self.shard_complete(1)
         self.shard_complete(2)
         counter = self._tmp / "gate-count"
+        base_capture = self._tmp / "impact-base"
+        expected_base = git(self.repo, "rev-parse", "HEAD").stdout.strip()
         stub = write_stub(
             self.stub_dir, "gate-count",
             "n=$(cat \"%s\" 2>/dev/null || echo 0)\n"
             "n=$((n+1))\n"
             "printf '%%s' \"$n\" > \"%s\"\n"
+            "printf '%%s' \"${PIPELINE_IMPACT_BASE_COMMIT:-}\" > \"$GATE_BASE_CAPTURE\"\n"
             "exit 0\n" % (counter, counter))
-        r = self.run_integrate(1, 2, RUN_GATES_BIN=stub)
+        r = self.run_integrate(1, 2, RUN_GATES_BIN=stub, GATE_BASE_CAPTURE=str(base_capture))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(counter.read_text(encoding="utf-8").strip(), "1")
+        self.assertEqual(base_capture.read_text(encoding="utf-8").strip(), expected_base)
         self.assertEqual(
             sorted(str(e["task"]) for e in self.entries("integrated")), ["1", "2"])
         self.assertTrue((self.repo / "lib" / "task1.go").is_file())
@@ -573,12 +577,9 @@ class IntegrateTest(unittest.TestCase):
         self.assertNotIn("task/1", self.branches())
         self.assertIn("task/2", self.branches())
 
-    def test_ff_equivalent_merge_skips_green_gate(self):
-        """ADR-0013: when HEAD is an ancestor of task/N and the branch tip's
-        tree equals the tree green-gate already validated (recorded as `tree=`
-        on the shard's commit entry), the post-merge suite is redundant and
-        must be skipped, ledgered `integrate_suite_skipped`; the merge still
-        lands, commits, and releases the worktree."""
+    def test_ff_equivalent_merge_reruns_gate_for_integrated_candidate(self):
+        """A tree-equivalent isolated worktree result is not reusable as
+        integration evidence; the merged candidate must run the gate again."""
         self.alloc(1)
         self.task_commit(1, "lib/task1.go", "package lib\n")
         self.shard_complete(1)
@@ -594,11 +595,10 @@ class IntegrateTest(unittest.TestCase):
         r = self.run_integrate(1, GREEN_GATE_BIN=stub,
                                RUN_GATES_BIN=self.gate_fail())
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertFalse(argv_log.exists(), "green-gate must not run")
-        skipped = self.entries("integrate_suite_skipped")
-        self.assertEqual(len(skipped), 1, self.ledger())
-        self.assertEqual(str(skipped[0]["task"]), "1")
-        self.assertIn(tree, skipped[0]["summary"])
+        self.assertTrue(argv_log.exists(), "green-gate must rerun on the integration candidate")
+        self.assertEqual(argv_log.read_text(encoding="utf-8").strip(),
+                         "--no-commit -w %s -t 1" % self.ws)
+        self.assertNotIn("integrate_suite_skipped", [e["type"] for e in self.ledger()])
         self.assertEqual(len(self.entries("integrated")), 1, self.ledger())
         self.assertTrue((self.repo / "lib" / "task1.go").is_file())
         self.assertNotIn("task/1", self.branches())

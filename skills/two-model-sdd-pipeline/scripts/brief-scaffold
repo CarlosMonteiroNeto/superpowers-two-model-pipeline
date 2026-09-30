@@ -16,6 +16,8 @@ Exit codes: 0 = scaffold written; 1 = plan unreadable;
 """
 import json
 import os
+import pathlib
+import re
 import shlex
 import sys
 
@@ -24,6 +26,7 @@ from pathclass import is_test_path  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCOPED_RUN = os.path.join(HERE, "scoped-run").replace("\\", "/")
+SAFE_REPO_PATH = re.compile(r"^[^\\\x00]+$")
 
 
 def main(argv):

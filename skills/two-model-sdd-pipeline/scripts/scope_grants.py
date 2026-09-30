@@ -2,6 +2,45 @@
 import json
 import os
 import tempfile
+import hashlib
+import hmac
+
+
+_SIGNED_FIELDS = ("path", "run_id", "family_id", "task_id", "attempt_id",
+                  "grant_id", "issuer", "contracts")
+
+
+def _signing_key(value):
+    if not isinstance(value, str):
+        raise ValueError("supervisor signing key is required")
+    try:
+        key = bytes.fromhex(value)
+    except ValueError as exc:
+        raise ValueError("supervisor signing key must be hex") from exc
+    if len(key) < 32:
+        raise ValueError("supervisor signing key must be at least 32 bytes")
+    return key
+
+
+def sign_issued(record, key):
+    """Authenticate the exact fields the correction router will consume."""
+    if record.get("issuer") != "supervisor" or not all(record.get(k) for k in _SIGNED_FIELDS):
+        raise ValueError("incomplete supervisor grant")
+    if not isinstance(record["contracts"], list) or not all(isinstance(x, str) and x for x in record["contracts"]):
+        raise ValueError("invalid supervisor contracts")
+    payload = {name: record[name] for name in _SIGNED_FIELDS}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hmac.new(_signing_key(key), raw, hashlib.sha256).hexdigest()
+
+
+def verify_issued(record, key):
+    if not isinstance(record, dict) or not key:
+        return False
+    try:
+        expected = sign_issued(record, key)
+    except (ValueError, KeyError, TypeError):
+        return False
+    return hmac.compare_digest(expected, str(record.get("signature", "")))
 
 
 def _normal(path):
@@ -94,7 +133,15 @@ def _reserve_registry(path, relative, owner):
         identity = (owner.get("run_id"), str(owner.get("family_id")))
         if existing and (existing.get("run_id"), str(existing.get("family_id"))) != identity:
             raise RuntimeError("path is already owned by another task family: {}".format(relative))
-        records[key] = {"path": relative, "run_id": identity[0], "family_id": identity[1]}
+        record = {"path": relative, "run_id": identity[0], "family_id": identity[1]}
+        if any(owner.get(field) for field in ("task_id", "attempt_id", "grant_id")):
+            if not all(owner.get(field) for field in ("task_id", "attempt_id", "grant_id")):
+                raise ValueError("incomplete supervisor grant identity")
+            record.update(task_id=owner["task_id"], attempt_id=owner["attempt_id"],
+                          grant_id=owner["grant_id"], issuer="supervisor",
+                          contracts=owner.get("contracts", []))
+            record["signature"] = sign_issued(record, os.environ.get("PIPELINE_SCOPE_GRANT_KEY"))
+        records[key] = record
         fd, temp = tempfile.mkstemp(prefix="scope-", dir=os.path.dirname(path))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:

@@ -107,6 +107,7 @@ then echo "INTEGRATE: corrupt or missing ledger; refusing to change Git state" >
 
 RUN_GATES_BIN="${RUN_GATES_BIN:-$script_dir/run-gates}"
 GREEN_GATE_BIN="${GREEN_GATE_BIN:-$script_dir/../../flutter-app-pipeline/scripts/green-gate}"
+GATE_BASE_COMMIT=""
 
 LEGACY_LANG=$(python3 "$script_dir/toolchain_gate.py" legacy-lang "$ws" 2>/dev/null || true)
 
@@ -223,7 +224,7 @@ run_gate() {
     if [ "$LEGACY_LANG" = "flutter" ]; then
       "$GREEN_GATE_BIN" --no-commit || rc=$?
     else
-      "$RUN_GATES_BIN" "$ws" --legacy || rc=$?
+      PIPELINE_GATE_PHASE=integration PIPELINE_IMPACT_BASE_COMMIT="${GATE_BASE_COMMIT:-}" "$RUN_GATES_BIN" "$ws" --legacy || rc=$?
     fi
     return "$rc"
   fi
@@ -252,7 +253,7 @@ run_gate() {
     fi
   done
   if [ "$multiple_toolchains" -eq 1 ] || [ "$structured_toolchains" -eq 1 ]; then
-    "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
+    PIPELINE_GATE_PHASE=integration PIPELINE_IMPACT_BASE_COMMIT="${GATE_BASE_COMMIT:-}" "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
   elif [ "$all_flutter" -eq 1 ]; then
     if [ "${#selected[@]}" -eq 1 ]; then
       "$GREEN_GATE_BIN" --no-commit -w "$ws" -t "${selected[0]}" || rc=$?
@@ -260,9 +261,9 @@ run_gate() {
       "$GREEN_GATE_BIN" --no-commit || rc=$?
     fi
   elif [ -f "$ws/plan.json" ]; then
-    "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
+      PIPELINE_GATE_PHASE=integration PIPELINE_IMPACT_BASE_COMMIT="${GATE_BASE_COMMIT:-}" "$RUN_GATES_BIN" "$ws" --tasks "${selected[@]}" || rc=$?
   else
-    "$RUN_GATES_BIN" "$ws" --legacy || rc=$?
+    PIPELINE_GATE_PHASE=integration PIPELINE_IMPACT_BASE_COMMIT="${GATE_BASE_COMMIT:-}" "$RUN_GATES_BIN" "$ws" --legacy || rc=$?
   fi
   return "$rc"
 }
@@ -339,39 +340,12 @@ PY
   return 0
 }
 
-# merge_one TASK - the per-merge path: merge, (skip or) gate, commit, record.
-# Carries the ADR-0013 skip. Returns non-zero (and ledgers integration_failed)
-# on conflict / red gate / failed commit.
+# merge_one TASK - merge, recompute gates on the candidate, commit, record.
+# Isolated task gate evidence is never reused for an integrated candidate.
 merge_one() {
-  local n=$1 shard gated_tree task_tree suite_skip mrc task_branch
+  local n=$1 mrc task_branch
+  GATE_BASE_COMMIT=$(git rev-parse HEAD)
   task_branch=$(branch_of "$n")
-
-  # Suite-skip precheck (ADR-0013): coder-gate's green-gate validated the exact
-  # tree of task/N's tip (recorded as `tree=` on the shard's `commit` entry).
-  # When HEAD is an ancestor of task/N, the --no-ff merge reproduces that tree
-  # byte-for-byte, so the suite would verify content already verified. Every
-  # condition must hold; anything uncertain runs the gate (the safe default).
-  # Non-Flutter tasks have no `tree=` evidence, so they never skip.
-  suite_skip=0
-  gated_tree=""
-  if [ -z "$(git status --porcelain 2>/dev/null)" ] \
-     && git merge-base --is-ancestor HEAD "$task_branch" 2>/dev/null; then
-    shard="$(shard_of "$n")"
-    gated_tree=$(grep -E '"type": *"commit"' "$shard" 2>/dev/null \
-      | tail -1 | sed -n 's/.*"tree": *"\([0-9a-fA-F]*\)".*/\1/p' || true)
-    task_tree=$(git rev-parse "$task_branch^{tree}" 2>/dev/null || true)
-    if [ -n "$gated_tree" ] && [ "$gated_tree" = "$task_tree" ]; then
-      suite_skip=1
-    fi
-  # Tree-equivalent evidence is sufficient only for legacy gates. A
-  # structured toolchain must be resolved for this exact task before its gate
-  # can be skipped; otherwise a missing task identity could bypass the
-  # fail-closed routing below.
-  if python3 "$script_dir/toolchain_gate.py" task-toolchain "$ws" "$n" >/dev/null 2>&1 \
-     || ! python3 "$script_dir/toolchain_gate.py" legacy-lang "$ws" >/dev/null 2>&1; then
-    suite_skip=0
-  fi
-  fi
 
   if ! git merge --no-commit --no-ff "$task_branch" >/dev/null 2>&1; then
     git merge --abort 2>/dev/null || true
@@ -379,18 +353,12 @@ merge_one() {
     return 1
   fi
 
-  if [ "$suite_skip" = "1" ]; then
-    echo "INTEGRATE: task $n merge is tree-equivalent to its gated commit - skipping the suite"
-    "$script_dir/ledger-append" "$ledger" integrate_suite_skipped "$n" \
-      "ff-equivalent tree=$gated_tree"
-  else
-    local grc=0
-    run_gate "$n" || grc=$?
-    if [ "$grc" -ne 0 ]; then
-      git merge --abort 2>/dev/null || true
-      "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$grc)"
-      return 1
-    fi
+  local grc=0
+  run_gate "$n" || grc=$?
+  if [ "$grc" -ne 0 ]; then
+    git merge --abort 2>/dev/null || true
+    "$script_dir/ledger-append" "$ledger" integration_failed "$n" "gates (rc=$grc)"
+    return 1
   fi
 
   mrc=0
@@ -449,6 +417,7 @@ else
   # Batch: merge the whole wave, gate once, and fall back to the per-merge
   # bisect only when the combined tree is bad.
   base=$(git rev-parse HEAD)
+  GATE_BASE_COMMIT=$base
   batch_ok=1
   batch_shas=()
   for n in $todo; do

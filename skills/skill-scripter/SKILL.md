@@ -53,6 +53,20 @@ A useful sharpening question for this fork: **does this step currently cost a di
 8. **Justify each semantic keeper** in one line, so it does not look forgotten.
 9. **Prioritise** by implementation cost against *recurring* execution cost, where execution cost is measured in tier dispatches first, context tokens second, wall-clock third. A step that fires once per branch weighs far less than one inside the coder retry loop.
 
+10. **Inventory every semantic call site** — including dynamic calls, worker
+    delegation, wrappers and calls assembled from registries. For each site,
+    record the role, trigger, expected frequency, maximum budget, termination
+    entry/condition, and a keep/remove/merge decision. A semantic call that
+    remains must include a concise justification for the judgment it performs;
+    “it is a model call” is not a justification. Treat unknown frequency or
+    termination as an open-loop finding until evidence bounds it.
+11. **Separate observed execution cost from call count.** Record semantic
+    invocations, backend model turns, transport retries, Jev calls, available
+    input/output/cached tokens, latency, and escaped-defect observations as
+    separate fields. Preserve unknown values as `null`; never derive tokens or
+    savings from call counts. Run `skills/two-model-sdd-pipeline/scripts/dispatch-audit`
+    against the changed-script inventory and policy before accepting a plan.
+
 ## Per-candidate specification
 
 Each script candidate needs:
