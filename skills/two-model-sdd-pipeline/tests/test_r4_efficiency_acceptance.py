@@ -92,6 +92,19 @@ class DispatchAuditAcceptanceTests(unittest.TestCase):
         finally:
             temporary.cleanup()
 
+    def test_rejects_single_line_unbounded_dispatch_loop(self):
+        temporary, root, base, head = self._repo("while True: dispatch()\n")
+        try:
+            declared = [{"file": "worker.py", "line": 1, "role": "operator",
+                         "trigger": "task start", "frequency": "each iteration",
+                         "budget": 3, "termination": "bounded by cycle limit",
+                         "decision": "keep", "justification": "semantic work"}]
+            result, report = self._run_audit(root, base, head, declared)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unbounded_dispatch_loop", [x["code"] for x in report["findings"]])
+        finally:
+            temporary.cleanup()
+
     def test_dynamic_call_is_inventoryable_and_explicitly_bounded_loop_passes(self):
         temporary, root, base, head = self._repo(
             "attempt = 0\nmethod = 'dispatch'\nwhile attempt < 3:\n    getattr(worker, method)()\n    attempt += 1\n")

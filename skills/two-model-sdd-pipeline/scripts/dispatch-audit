@@ -170,6 +170,33 @@ def _enclosing_loops(source, line_no):
     return stack
 
 
+def _python_enclosing_loops(source, line_no):
+    try:
+        module = ast.parse("\n".join(source))
+    except SyntaxError as exc:
+        _fail("cannot parse changed Python script for loop audit: %s" % exc)
+    parents = {child: node for node in ast.walk(module) for child in ast.iter_child_nodes(node)}
+    result = {}
+    semantic_names = {"dispatch", "invoke", "run_dispatch", "delegate_worker", "dispatch_worker"}
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call) or node.lineno != line_no:
+            continue
+        function = node.func
+        semantic = (isinstance(function, ast.Name) and function.id in semantic_names)
+        semantic = semantic or (isinstance(function, ast.Call)
+                                and isinstance(function.func, ast.Name)
+                                and function.func.id == "getattr")
+        if not semantic:
+            continue
+        parent = parents.get(node)
+        while parent is not None:
+            if isinstance(parent, (ast.For, ast.While)):
+                indent = len(source[parent.lineno - 1]) - len(source[parent.lineno - 1].lstrip())
+                result[parent.lineno] = (parent.lineno, source[parent.lineno - 1], indent)
+            parent = parents.get(parent)
+    return sorted(result.values(), key=lambda item: (item[2], item[0]))
+
+
 def _loop_body(source, line_no, indent):
     body = []
     for line in source[line_no:]:
@@ -323,8 +350,12 @@ def audit(inventory, policy):
                 elif not site["justification"].strip():
                     findings.append({"code": "missing_semantic_justification", "file": path,
                                      "line": line_no, "message": "semantic call justification is empty"})
-                for header_line, header, indent in _enclosing_loops(code_lines, line_no):
-                    if _unbounded_dispatch_loop(header, _loop_body(code_lines, header_line, indent),
+                enclosing = (_python_enclosing_loops(source, line_no) if python_source
+                             else _enclosing_loops(code_lines, line_no))
+                for header_line, header, indent in enclosing:
+                    body = (code_lines[line_no - 1] if python_source and header_line == line_no
+                            else _loop_body(code_lines, header_line, indent))
+                    if _unbounded_dispatch_loop(header, body,
                                                 python_source, source, header_line):
                         findings.append({"code": "unbounded_dispatch_loop", "file": path,
                                          "line": header_line, "message": "dispatch loop has no visible bounded exit"})
