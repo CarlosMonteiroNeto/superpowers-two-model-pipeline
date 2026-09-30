@@ -47,6 +47,9 @@ PY
     fi
   fi
 fi
+if [ "$impact_manifest_created" = "1" ] && [ "${PIPELINE_GATE_PHASE:-task}" = closing ]; then
+  rm -f "$ws/supervisor/current-evidence.json"
+fi
 if [ $# -eq 2 ] && [[ "$1" != --* ]] && [ -f "$ws/ledger.jsonl" ]; then
   # Preserve the single unstructured legacy gate path. Its command summaries
   # come from the ledger, never directly from the caller's shell arguments.
@@ -57,8 +60,62 @@ else
   python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" "$@" || run_rc=$?
 fi
 if [ "$impact_manifest_created" = "1" ]; then
+  before_manifest="$ws/.impact-manifest.before.json"
+  candidate_stable=1
+  cp "$ws/impact-manifest.json" "$before_manifest"
+  if ! python3 - "$SCRIPT_DIR" "$ws" "$impact_mode" "${@:2}" "$before_manifest" <<'PY'
+import json, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+import gate_evidence
+workspace, mode, before_path = sys.argv[2], sys.argv[3], sys.argv[-1]
+selection = sys.argv[4:-1]
+before = json.loads(pathlib.Path(before_path).read_text(encoding="utf-8"))
+after = gate_evidence.create_workspace_manifest(workspace, selection, mode)
+if before["selection_hash"] != after["selection_hash"]:
+    raise SystemExit("candidate, impact selection, or gate configuration changed while commands ran")
+PY
+  then
+    echo "RUN-GATES: candidate changed during verification; refusing to record PASS" >&2
+    run_rc=3
+    candidate_stable=0
+    cp "$before_manifest" "$ws/impact-manifest.json"
+  fi
+  rm -f "$before_manifest"
+fi
+if [ "$impact_manifest_created" = "1" ]; then
   phase=${PIPELINE_GATE_PHASE:-task}
-  case "$phase" in task|integration|closing) ;; *) echo "RUN-GATES: invalid gate phase" >&2; exit 3 ;; esac
+  if { [ "$phase" = baseline ] || [ "$phase" = closing ]; } && [ "$candidate_stable" = "1" ]; then
+    if ! python3 - "$SCRIPT_DIR" "$ws" "$impact_mode" "$phase" "${@:2}" <<'PY'
+import pathlib,sys
+import hashlib,subprocess
+sys.path.insert(0,sys.argv[1])
+import gate_evidence, suite_evidence, toolchain_gate
+ws,mode,phase=sys.argv[2:5]
+selection=sys.argv[5:]
+manifest=gate_evidence.validate_manifest(__import__("json").loads((pathlib.Path(ws)/"impact-manifest.json").read_text(encoding="utf-8")))
+if mode=="tasks":
+    try: ids=list(dict.fromkeys(toolchain_gate.task_toolchain_id(ws,task) for task in selection))
+    except toolchain_gate.GateContractError:
+        ids=list(dict.fromkeys(item["toolchain_id"] for item in manifest["commands"]))
+elif mode=="toolchains": ids=selection
+else: ids=list(dict.fromkeys(item["toolchain_id"] for item in manifest["commands"]))
+root=__import__("subprocess").check_output(["git","rev-parse","--show-toplevel"],text=True).strip()
+name="baseline-evidence.json" if phase=="baseline" else "current-evidence.json"
+suite_evidence.capture(ws,ids,root,str(pathlib.Path(ws)/"supervisor"/name),manifest["identity"])
+evidence_path=pathlib.Path(ws)/"supervisor"/name
+digest=hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+ledger_append=pathlib.Path(sys.argv[1])/"ledger-append"
+result=subprocess.run(["bash",str(ledger_append),str(pathlib.Path(ws)/"ledger.jsonl"),"suite_evidence","-",phase+" full-suite evidence captured","phase="+phase,"evidence_hash="+digest],capture_output=True,text=True)
+if result.returncode: raise ValueError("cannot ledger suite evidence: "+result.stderr)
+PY
+    then
+      echo "RUN-GATES: structured suite evidence unavailable in $phase phase; waiver remains blocked" >&2
+    fi
+  fi
+fi
+if [ "$impact_manifest_created" = "1" ]; then
+  phase=${PIPELINE_GATE_PHASE:-task}
+  case "$phase" in task|integration|closing|baseline) ;; *) echo "RUN-GATES: invalid gate phase" >&2; exit 3 ;; esac
   task_id="-"
   if [ "${1:-}" = "--tasks" ] && [ $# -eq 2 ]; then task_id=$2; fi
   if ! python3 - "$SCRIPT_DIR" "$ws/impact-manifest.json" "$ws/ledger.jsonl" "$phase" "$task_id" "$run_rc" <<'PY'
@@ -71,7 +128,8 @@ summary = "{} gate status={} mode={}".format(phase, "PASS" if gate_rc == "0" els
 args = [os.environ.get("BASH_BIN") or shutil.which("bash") or "bash",
         str(pathlib.Path(script_dir) / "ledger-append"), ledger, kind, task_id, summary,
         "selection_hash=" + manifest["selection_hash"],
-        "candidate_commit=" + identity["head_commit"], "tree_hash=" + identity["tree_hash"].replace("=", "_"),
+        "impact_selection_hash=" + manifest["selection_hash"],
+        "candidate_commit=" + identity["head_commit"], "tree_hash=" + identity["tree_hash"],
         "config_hash=" + identity["config_hash"], "environment_hash=" + identity["environment_hash"],
         "phase=" + phase, "gate_status=" + ("PASS" if gate_rc == "0" else "FAIL")]
 result = subprocess.run(args)

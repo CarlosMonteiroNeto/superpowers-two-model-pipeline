@@ -309,6 +309,43 @@ fi
 # --- plan completeness (no EXPAND: brainstorming owns task authoring) ---
 tasks_usable || block "plan has no usable tasks (every task needs acceptance) - complete it before running"
 
+# Capture supervisor-owned complete-suite evidence before any coder can alter
+# the candidate. An unsupported adapter is a hard preflight blocker; an
+# ordinary pre-existing test failure is recorded and remains non-green.
+baseline_file="$WS/supervisor/baseline-evidence.json"
+if [ ! -f "$baseline_file" ]; then
+  baseline_mode=$(python3 - "$WS/plan.json" "$LEDGER" <<'PY'
+import json,sys
+plan=json.load(open(sys.argv[1],encoding="utf-8")); tasks=plan.get("tasks",[])
+ids={str(t.get("toolchain_id")) for t in tasks if isinstance(t,dict) and t.get("toolchain_id")}
+if tasks and all(isinstance(t,dict) and t.get("toolchain_id") for t in tasks): print("toolchains")
+elif not ids:
+ rows=[json.loads(line) for line in open(sys.argv[2],encoding="utf-8") if line.strip()]
+ gates=[row for row in rows if row.get("type")=="gate"]
+ print("legacy" if len(gates)==1 and "toolchain_descriptor" not in gates[0] else "unavailable")
+else: print("unavailable")
+PY
+)
+  baseline_rc=0
+  case "$baseline_mode" in
+    toolchains)
+      mapfile -t baseline_toolchains < <(python3 - "$WS/plan.json" <<'PY'
+import json,sys
+plan=json.load(open(sys.argv[1],encoding="utf-8"))
+print("\n".join(sorted({str(t["toolchain_id"]) for t in plan["tasks"]})))
+PY
+)
+      PIPELINE_GATE_PHASE=baseline "$SCRIPT_DIR/run-gates" "$WS" --toolchains "${baseline_toolchains[@]}" || baseline_rc=$? ;;
+    legacy) PIPELINE_GATE_PHASE=baseline "$SCRIPT_DIR/run-gates" "$WS" --legacy || baseline_rc=$? ;;
+    *) baseline_rc=3 ;;
+  esac
+  if [ ! -f "$baseline_file" ]; then
+    "$SCRIPT_DIR/ledger-append" "$LEDGER" baseline_evidence_unavailable "-" \
+      "pre-code complete-suite evidence unavailable; inherited failures cannot be waived" "gate_status=$baseline_rc" \
+      || block "cannot record unavailable baseline evidence"
+  fi
+fi
+
 # --- main loop ---
 # The per-task lifecycle (orchestrator + REVIEW/CORRECTIVE/ARBITRATE) lives in
 # task-run, shared by the serial runner and the wave path (the H2 lesson:

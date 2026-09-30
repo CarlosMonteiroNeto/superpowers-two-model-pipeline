@@ -10,6 +10,8 @@ Derive tests from the break they should catch. Prefer observable behavior and ha
 
 The upstream full-suite pre-commit instruction is overridden only when the pipeline has generated and validated a candidate-bound impact manifest. Task and integration gates use that script-owned selection; static analysis and required formatting remain in scope. Integration recomputes impact for the merged candidate. Closing always runs every configured suite for every affected toolchain. Reuse closing evidence only when candidate tree, environment, commands, and configuration all match exactly; otherwise rerun. Unknown impact selects complete suites.
 
+Before the first coder starts, the supervisor captures complete-suite raw evidence for each configured adapter. Unsupported or incomplete inventories block baseline capture. Closing failures block and reopen work unless supervisor-owned baseline and closing evidence prove the exact failures were already present and an explicit user approval is recorded for that candidate in the supervisor ledger. A valid inherited-failure waiver remains non-green and is reported as `completed_with_waived_baseline`; new, changed, missing, or ambiguous evidence is never waived.
+
 ## Self-review and evidence
 
 Before reporting, inspect the complete diff for scope, correctness, and missed requirements. Run the requested checks and report their commands and results accurately. Do not claim completion from an earlier run or from another worker's report.

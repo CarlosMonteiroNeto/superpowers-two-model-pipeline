@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import json
 from pathlib import Path
 from typing import Any
 
@@ -299,16 +300,34 @@ def _run_one(workspace: str, entry: dict[str, Any], name: str, log_path: str) ->
     env = dict(os.environ)
     env.update(spec["env"])
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    argv = list(spec["argv"])
+    if name == "test":
+        adapter = descriptor.get("red_adapter")
+        evidence_file = log_path + ".report.json"
+        if adapter == "pytest_json_report":
+            if "--json-report" not in argv:
+                argv.append("--json-report")
+            if not any(part.startswith("--json-report-file") for part in argv):
+                argv.append("--json-report-file=" + evidence_file)
+        elif adapter == "flutter_machine" and "--machine" not in argv:
+            argv.append("--machine")
+        elif adapter == "go_test_json" and "test" in argv and "-json" not in argv:
+            argv.insert(argv.index("test") + 1, "-json")
+        elif adapter == "unittest" and "-v" not in argv:
+            argv.append("-v")
     process = subprocess.run(
-        [bash, str(cmd_path), "--full-file", log_path, "--", *spec["argv"]],
+        [bash, str(cmd_path), "--full-file", log_path, "--", *argv],
         cwd=cwd, env=env,
     )
+    if name == "test":
+        Path(log_path + ".exit-code").write_text(str(process.returncode), encoding="ascii")
     return process.returncode
 
 
 def run_gates(workspace: str, entries: list[dict[str, Any]]) -> int:
     Path(workspace).mkdir(parents=True, exist_ok=True)
     multiple = len(entries) > 1
+    result = 0
     for entry in entries:
         identity = str(entry.get("toolchain_id") or entry.get("lang") or "legacy")
         suffix = "-" + "".join(
@@ -319,11 +338,13 @@ def run_gates(workspace: str, entries: list[dict[str, Any]]) -> int:
         test_rc = _run_one(workspace, entry, "test", test_log)
         if test_rc:
             print("RUN-GATES: tests FAILED (see %s)" % test_log, file=sys.stderr)
-            return 1
+            result = max(result, 1)
         analyze_rc = _run_one(workspace, entry, "analyze", analyze_log)
         if analyze_rc:
             print("RUN-GATES: analysis found issues (see %s)" % analyze_log, file=sys.stderr)
-            return 2
+            result = max(result, 2)
+    if result:
+        return result
     print("RUN-GATES: all configured gates passed")
     return 0
 

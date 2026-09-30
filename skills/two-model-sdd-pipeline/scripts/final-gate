@@ -44,6 +44,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
 
 blockers=0
+completion_status="completed"
 emit() {
   echo "FINAL-GATE: $1" >&2
   blockers=$((blockers + 1))
@@ -104,12 +105,37 @@ fi
 task_ids=()
 for t in $(seq 1 "$total"); do task_ids+=("$t"); done
 if [ -f "$ws/plan.json" ]; then
-  if ! PIPELINE_GATE_PHASE=closing "$RUN_GATES_BIN" "$ws" --tasks "${task_ids[@]}"; then
-    emit "one or more configured test/analyze commands failed"
-    for t in "${task_ids[@]}"; do
-      "$SCRIPT_DIR/ledger-append" "$ledger" integration_failed "$t" \
-        "closing candidate verification failed; task reopened" || emit "could not record reopened task $t"
-    done
+  cache_valid=0
+  python3 "$SCRIPT_DIR/closing_cache.py" "$ws" && cache_valid=1
+  gate_failed=0
+  if [ "$cache_valid" = "1" ]; then
+    echo "FINAL-GATE: reusing exact candidate-bound closing evidence"
+    if waiver_result=$(python3 "$SCRIPT_DIR/closing_waiver.py" "$ws"); then
+      completion_status="completed_with_waived_baseline"
+      echo "FINAL-GATE: completed_with_waived_baseline (non-green; exact pre-existing failures explicitly approved)"
+    elif ! python3 - "$ws/supervisor/current-evidence.json" <<'PY'
+import json,sys
+evidence=json.load(open(sys.argv[1],encoding="utf-8"))
+raise SystemExit(0 if all(suite["raw_result"]["status"]=="completed" and suite["raw_result"]["exit_code"]==0 for suite in evidence["suites"]) else 1)
+PY
+    then
+      gate_failed=1
+    fi
+  elif ! PIPELINE_GATE_PHASE=closing "$RUN_GATES_BIN" "$ws" --tasks "${task_ids[@]}"; then
+    gate_failed=1
+  fi
+  if [ "$gate_failed" = "1" ]; then
+    waiver_result=$(python3 "$SCRIPT_DIR/closing_waiver.py" "$ws" || true)
+    if [ -n "$waiver_result" ] && python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).get("status")=="completed_with_waived_baseline" else 1)' "$waiver_result"; then
+      completion_status="completed_with_waived_baseline"
+      echo "FINAL-GATE: completed_with_waived_baseline (non-green; exact pre-existing failures explicitly approved)"
+    else
+      emit "one or more configured test/analyze commands failed and no candidate-bound baseline waiver is valid"
+      for t in "${task_ids[@]}"; do
+        "$SCRIPT_DIR/ledger-append" "$ledger" integration_failed "$t" \
+          "closing candidate verification failed; task reopened" || emit "could not record reopened task $t"
+      done
+    fi
   fi
 elif ! PIPELINE_GATE_PHASE=closing "$RUN_GATES_BIN" "$ws" --legacy; then
   emit "legacy test/analyze command failed"
@@ -120,7 +146,11 @@ elif ! PIPELINE_GATE_PHASE=closing "$RUN_GATES_BIN" "$ws" --legacy; then
 fi
 
 if [ "$blockers" -eq 0 ]; then
-  echo "FINAL-GATE: mechanically ready for holistic review"
+  if [ "$completion_status" = "completed_with_waived_baseline" ]; then
+    printf '{"status":"%s"}\n' "$completion_status" > "$ws/supervisor/completion-status.json"
+  else
+    echo "FINAL-GATE: mechanically ready for holistic review"
+  fi
   exit 0
 fi
 

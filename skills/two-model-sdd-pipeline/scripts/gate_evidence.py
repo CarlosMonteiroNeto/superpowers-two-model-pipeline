@@ -119,12 +119,26 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
     plan_path = pathlib.Path(workspace) / "plan.json"
     plan = json.loads(plan_path.read_text(encoding="utf-8")) if plan_path.is_file() else {"tasks": []}
     if mode == "tasks":
-        toolchain_ids = list(dict.fromkeys(toolchain_gate.task_toolchain_id(workspace, task) for task in selection))
+        try:
+            toolchain_ids = list(dict.fromkeys(toolchain_gate.task_toolchain_id(workspace, task) for task in selection))
+        except toolchain_gate.GateContractError as exc:
+            legacy_entries = toolchain_gate.load_gate_entries(workspace)
+            if ("no explicit toolchain_id" not in str(exc) or len(legacy_entries) != 1
+                    or "toolchain_descriptor" in legacy_entries[0]):
+                raise
+            entries = legacy_entries
+            toolchain_ids = [str(entries[0].get("toolchain_id") or entries[0].get("lang") or "legacy")]
+            mode = "legacy-task"
         scope = sorted({path for task_id in selection for task in plan["tasks"]
                         if isinstance(task, dict) and str(task.get("id")) == str(task_id)
                         for path in task.get("touches", []) if isinstance(path, str)})
     elif mode == "toolchains":
         toolchain_ids = list(dict.fromkeys(selection))
+        required_ids = sorted({toolchain_gate.task_toolchain_id(workspace, str(task.get("id")))
+                               for task in plan.get("tasks", []) if isinstance(task, dict)
+                               and task.get("id") is not None})
+        if sorted(toolchain_ids) != required_ids:
+            raise ValueError("--toolchains must cover every toolchain in the supervisor-owned plan; use --tasks for task scope")
         scope = sorted({path for task in plan.get("tasks", []) if isinstance(task, dict)
                         and task.get("toolchain_id") in toolchain_ids
                         for path in task.get("touches", []) if isinstance(path, str)})
@@ -137,18 +151,22 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
 
     descriptors = []
     for identifier in toolchain_ids:
-        if mode == "legacy":
+        if mode in ("legacy", "legacy-task"):
             entry = entries[0]
         else:
             entry = toolchain_gate.gate_for_toolchain(workspace, identifier)
         descriptor = toolchain_gate._descriptor(entry)
-        test = toolchain_gate.command_spec(entry, "test")
+        commands = {name: toolchain_gate.command_spec(entry, name)
+                    for name in ("test", "analyze", "format")}
+        commands = {name: ({**command, "cwd": command.get("cwd") or str(root)}) if command else None
+                    for name, command in commands.items()}
+        test = commands["test"]
         if test is None:
             raise ValueError("toolchain %s has no configured test command" % identifier)
         language = descriptor.get("language") or entry.get("lang")
-        descriptors.append({"id": identifier, "language": language,
-                            "red_adapter": descriptor.get("red_adapter"),
-                            "commands": {"test": test}})
+        descriptors.append({"id": identifier, "descriptor": descriptor,
+                            "language": language, "red_adapter": descriptor.get("red_adapter"),
+                            "commands": commands})
 
     head = _git(root, "rev-parse", "HEAD")
     base_tree = _git(root, "rev-parse", "HEAD^{tree}")
@@ -194,7 +212,8 @@ def create_workspace_manifest(workspace: str, selection: list[str], mode: str) -
     tree_id = "commit:%s+sha256:%s" % (head, tree_digest.hexdigest())
     policy_path = scripts.parent / "toolchains" / "test-impact-rules.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
-    config_hash = _digest({"plan": plan, "toolchains": descriptors, "policy": policy})
+    config_hash = _digest({"manifest_version": "r4-impact-gates-2", "plan": plan,
+                           "toolchains": descriptors, "policy": policy})
     environment_hash = _digest({"python": sys.version, "platform": sys.platform,
                                  "path": os.environ.get("PATH", "")})
     diff = {"base_commit": head, "head_commit": head,
