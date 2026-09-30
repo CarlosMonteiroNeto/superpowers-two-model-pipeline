@@ -310,7 +310,7 @@ PY
     else
       RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
       gate_status=0
-      "$RUN_GATES_BIN" "$ws" --toolchains "$task_toolchain" || gate_status=$?
+      PIPELINE_GATE_PHASE=task "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
       if [ "$gate_status" -eq 0 ]; then
         passed=1
       fi
@@ -319,10 +319,10 @@ PY
     RUN_GATES_BIN="${RUN_GATES_BIN:-$SCRIPT_DIR/run-gates}"
     if [ -n "$task_toolchain" ]; then
       gate_status=0
-      "$RUN_GATES_BIN" "$ws" --toolchains "$task_toolchain" || gate_status=$?
+      PIPELINE_GATE_PHASE=task "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
     else
       gate_status=0
-      "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
+      PIPELINE_GATE_PHASE=task "$RUN_GATES_BIN" "$ws" --tasks "$task" || gate_status=$?
     fi
     if [ "$gate_status" -eq 0 ]; then
       passed=1

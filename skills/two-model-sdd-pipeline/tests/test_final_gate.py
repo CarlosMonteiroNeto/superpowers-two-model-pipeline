@@ -171,9 +171,8 @@ class TestFinalGate(FinalGateBase):
             env={**os.environ, **self.env},
         )
 
-    def test_unchanged_tree_skips_rerun(self):
-        """Clean tree + HEAD == last ledger green commit: the last task's
-        gates already proved this tree — even failing commands must not run."""
+    def test_unchanged_tree_still_reruns_closing_suites(self):
+        """Task-green evidence cannot satisfy the independent closing gate."""
         repo, sha = self._git_repo()
         self.write_ledger([
             self._new_keys_gate(),
@@ -184,12 +183,13 @@ class TestFinalGate(FinalGateBase):
         self.env["STUB_TEST_EXIT"] = "1"
         self.env["STUB_ANALYZE_EXIT"] = "1"
         r = self._run_in(repo)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("skipping", r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertNotIn("skipping", r.stdout + r.stderr)
+        self.assertTrue(any(e.get("type") == "integration_failed" and e.get("task") == "1"
+                            for e in map(json.loads, self.ledger.read_text(encoding="utf-8").splitlines())))
 
-    def test_unchanged_tree_skips_rerun_after_integration(self):
-        """After a wave, HEAD is a merge commit and the newest green entry is
-        `integrated`, not `commit`; the skip must still fire (S2)."""
+    def test_integrated_candidate_also_runs_closing_suites(self):
+        """A prior integration gate does not replace closing verification."""
         repo, _ = self._git_repo()
         base = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
                               cwd=str(repo), capture_output=True, text=True,
@@ -213,8 +213,8 @@ class TestFinalGate(FinalGateBase):
         self.env["STUB_TEST_EXIT"] = "1"
         self.env["STUB_ANALYZE_EXIT"] = "1"
         r = self._run_in(repo)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("skipping", r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertNotIn("skipping", r.stdout + r.stderr)
 
     def test_changed_tree_runs_commands(self):
         """Dirty tree: the re-run happens (and a failing command blocks)."""

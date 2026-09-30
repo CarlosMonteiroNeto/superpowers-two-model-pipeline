@@ -18,9 +18,68 @@ fi
 
 ws=$1
 shift
+impact_manifest_created=0
+if [ "${1:-}" != "--format" ]; then
+  impact_mode=""
+  case "${1:-}" in
+    --tasks) impact_mode=tasks ;;
+    --toolchains) impact_mode=toolchains ;;
+    --legacy) impact_mode=legacy ;;
+    *) if [ $# -eq 2 ]; then impact_mode=legacy; fi ;;
+  esac
+  if [ -n "$impact_mode" ]; then
+    if [ "$impact_mode" = legacy ] && ! git -C "$ws" rev-parse --show-toplevel >/dev/null 2>&1; then
+      echo "RUN-GATES: repository identity unavailable; legacy gate retains complete configured suite"
+    elif ! python3 - "$SCRIPT_DIR" "$ws" "$impact_mode" "${@:2}" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import gate_evidence
+try:
+    gate_evidence.create_workspace_manifest(sys.argv[2], sys.argv[4:], sys.argv[3])
+except (OSError, ValueError, TypeError, KeyError) as exc:
+    print("RUN-GATES: cannot create verified impact manifest: %s" % exc, file=sys.stderr)
+    raise SystemExit(3)
+PY
+    then
+      exit 3
+    else
+      impact_manifest_created=1
+    fi
+  fi
+fi
 if [ $# -eq 2 ] && [[ "$1" != --* ]] && [ -f "$ws/ledger.jsonl" ]; then
   # Preserve the single unstructured legacy gate path. Its command summaries
   # come from the ledger, never directly from the caller's shell arguments.
-  exec python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" --ledger
+  run_rc=0
+  python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" --ledger || run_rc=$?
+else
+  run_rc=0
+  python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" "$@" || run_rc=$?
 fi
-exec python3 "$SCRIPT_DIR/toolchain_gate.py" run "$ws" "$@"
+if [ "$impact_manifest_created" = "1" ]; then
+  phase=${PIPELINE_GATE_PHASE:-task}
+  case "$phase" in task|integration|closing) ;; *) echo "RUN-GATES: invalid gate phase" >&2; exit 3 ;; esac
+  task_id="-"
+  if [ "${1:-}" = "--tasks" ] && [ $# -eq 2 ]; then task_id=$2; fi
+  if ! python3 - "$SCRIPT_DIR" "$ws/impact-manifest.json" "$ws/ledger.jsonl" "$phase" "$task_id" "$run_rc" <<'PY'
+import json, os, pathlib, shutil, subprocess, sys
+script_dir, manifest_path, ledger, phase, task_id, gate_rc = sys.argv[1:]
+manifest = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
+identity = manifest["identity"]
+kind = "impact_gate_evidence"
+summary = "{} gate status={} mode={}".format(phase, "PASS" if gate_rc == "0" else "FAIL", manifest["mode"])
+args = [os.environ.get("BASH_BIN") or shutil.which("bash") or "bash",
+        str(pathlib.Path(script_dir) / "ledger-append"), ledger, kind, task_id, summary,
+        "selection_hash=" + manifest["selection_hash"],
+        "candidate_commit=" + identity["head_commit"], "tree_hash=" + identity["tree_hash"].replace("=", "_"),
+        "config_hash=" + identity["config_hash"], "environment_hash=" + identity["environment_hash"],
+        "phase=" + phase, "gate_status=" + ("PASS" if gate_rc == "0" else "FAIL")]
+result = subprocess.run(args)
+raise SystemExit(result.returncode)
+PY
+  then
+    echo "RUN-GATES: could not ledger candidate-bound impact evidence" >&2
+    [ "$run_rc" -ne 0 ] || run_rc=3
+  fi
+fi
+exit "$run_rc"

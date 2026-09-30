@@ -2,9 +2,13 @@
 
 ## Test and implementation loop
 
-Write the test first. Run it and confirm a behavior-specific RED before changing production code. A collection or setup error is not proof of the expected behavior. Implement the smallest change that satisfies the accepted test, then run the focused test and confirm GREEN. Do not weaken acceptance tests to make the implementation pass.
+Write the test first. Run it and confirm a behavior-specific RED before changing production code. A collection or setup error is not proof of the expected behavior. Implement the smallest change that satisfies the accepted test, then run the focused test and confirm GREEN. Do not weaken acceptance tests to make the implementation pass. During this loop, run focused checks to shorten feedback; do not run a full suite before every commit when the supervisor has generated a verified impact manifest. The script owns test selection and must fall back to complete suites when impact is unknown. Never accept a test list from the coder as gate input.
 
 Derive tests from the break they should catch. Prefer observable behavior and hand-checked expectations over mocks of the code under test. Keep each change within the assigned task and authorized paths.
+
+## Verification boundaries
+
+The upstream full-suite pre-commit instruction is overridden only when the pipeline has generated and validated a candidate-bound impact manifest. Task and integration gates use that script-owned selection; static analysis and required formatting remain in scope. Integration recomputes impact for the merged candidate. Closing always runs every configured suite for every affected toolchain. Reuse closing evidence only when candidate tree, environment, commands, and configuration all match exactly; otherwise rerun. Unknown impact selects complete suites.
 
 ## Self-review and evidence
 
