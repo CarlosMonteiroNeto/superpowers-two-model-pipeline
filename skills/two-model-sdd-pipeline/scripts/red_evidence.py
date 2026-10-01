@@ -11,6 +11,116 @@ IDENTITY_FIELDS = (
     "task_id", "attempt_id", "toolchain_id", "runner", "command", "source_snapshot", "adapter"
 )
 
+REVISION_FIELDS = (
+    "task_id", "attempt_id", "test_digest", "prior_digest",
+    "correction_rationale", "acceptance_id", "red_evidence_id",
+    "source_snapshot", "green_evidence_id",
+)
+
+
+def _is_hex64(value) -> bool:
+    return (isinstance(value, str) and len(value) == 64
+            and all(char in "0123456789abcdef" for char in value.lower()))
+
+
+def _check_record(record) -> str | None:
+    """Return a rejection reason, or None when the record shape is sound."""
+    if not isinstance(record, dict):
+        return "revision record must be an object"
+    missing = [field for field in REVISION_FIELDS if field not in record]
+    if missing:
+        return "revision record is missing: %s" % ", ".join(missing)
+    for field in ("task_id", "attempt_id", "correction_rationale",
+                  "acceptance_id", "red_evidence_id", "source_snapshot"):
+        value = record.get(field)
+        if not isinstance(value, str) or not value:
+            return "revision record field is invalid: %s" % field
+    if not _is_hex64(record.get("test_digest")):
+        return "revision test digest is invalid"
+    prior = record.get("prior_digest")
+    if prior is not None and not _is_hex64(prior):
+        return "revision prior digest is invalid"
+    if prior == record["test_digest"]:
+        return "revision digest must advance"
+    green = record.get("green_evidence_id")
+    if not isinstance(green, str):
+        return "revision green evidence identity is invalid"
+    if prior is not None and not green:
+        return "corrected tests require green evidence identity"
+    return None
+
+
+def validate_revision_chain(records, identity) -> None:
+    """Validate an append-only test revision chain, raising on violation.
+
+    Genesis (first record) carries a null prior digest. Every later record
+    links to its predecessor, digests stay unique, and every record shares
+    the task, acceptance, and retained pre-implementation source snapshot
+    from ``identity``. Stale snapshots, missing genesis, reordered or
+    conflicting records all fail closed.
+    """
+    if not isinstance(records, list) or not records:
+        raise ValueError("revision chain is missing")
+    if not isinstance(identity, dict):
+        raise ValueError("revision chain identity is required")
+    for field in ("task_id", "acceptance_id", "source_snapshot"):
+        if not isinstance(identity.get(field), str) or not identity[field]:
+            raise ValueError("revision chain identity is invalid: " + field)
+    seen = set()
+    previous = None
+    for position, record in enumerate(records):
+        reason = _check_record(record)
+        if reason is not None:
+            raise ValueError(reason)
+        if record["test_digest"] in seen:
+            raise ValueError("revision chain has conflicting digests")
+        seen.add(record["test_digest"])
+        if record["task_id"] != identity["task_id"]:
+            raise ValueError("revision chain task is conflicting")
+        if record["acceptance_id"] != identity["acceptance_id"]:
+            raise ValueError("revision chain acceptance is conflicting")
+        if record["source_snapshot"] != identity["source_snapshot"]:
+            raise ValueError("revision chain source snapshot is stale")
+        if position == 0:
+            if record["prior_digest"] is not None:
+                raise ValueError("revision chain genesis is missing")
+        elif record["prior_digest"] != previous:
+            raise ValueError("revision chain is reordered or has gaps")
+        previous = record["test_digest"]
+    return None
+
+
+def append_revision(chain_path: str, record: dict) -> dict:
+    """Atomically append one revision record to a JSONL chain file."""
+    reason = _check_record(record)
+    if reason is not None:
+        raise ValueError(reason)
+    path = Path(chain_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+    with open(path, "ab") as handle:
+        handle.write(line)
+        handle.flush()
+        try:
+            import os
+            os.fsync(handle.fileno())
+        except OSError:
+            pass
+    return dict(record)
+
+
+def read_chain(chain_path: str) -> list:
+    """Read every revision record; loader failures cannot pass."""
+    try:
+        with open(chain_path, encoding="utf-8") as handle:
+            records = [json.loads(line) for line in handle.read().splitlines()
+                       if line.strip()]
+    except (OSError, ValueError) as exc:
+        raise ValueError("cannot read revision chain: %s" % exc) from exc
+    if any(not isinstance(record, dict) for record in records):
+        raise ValueError("revision chain holds a non-object record")
+    return records
+
 
 def _jsonl(text: str):
     for line in text.splitlines():

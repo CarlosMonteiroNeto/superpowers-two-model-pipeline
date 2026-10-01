@@ -128,6 +128,38 @@ class TestReviewPackage(ReviewPackageTestBase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, package)
 
+    def test_task_package_includes_test_evolution_evidence(self):
+        head = self._change_and_commit()
+        task = {"id": 3, "title": "Evidence task", "verification": {"new_test_files": ["tests/test_app.py"]}}
+        (self.ws / "plan.json").write_text(json.dumps({"tasks": [task]}), encoding="utf-8")
+        (self.ws / "ledger.jsonl").write_text("", encoding="utf-8")
+        chain = [
+            {"task_id": "3", "attempt_id": "a", "test_digest": "d" * 64, "prior_digest": None,
+             "correction_rationale": "initial RED", "acceptance_id": "acc",
+             "red_evidence_id": "red-1", "source_snapshot": "snap", "green_evidence_id": ""},
+            {"task_id": "3", "attempt_id": "a", "test_digest": "e" * 64, "prior_digest": "d" * 64,
+             "correction_rationale": "setup was wrong", "acceptance_id": "acc",
+             "red_evidence_id": "red-2", "source_snapshot": "snap", "green_evidence_id": "green-1"},
+        ]
+        (self.ws / "task-3-revisions.jsonl").write_text(
+            "\n".join(json.dumps(record) for record in chain) + "\n", encoding="utf-8")
+        out = self._tmp / "pkg.diff"
+        result = run_script("review-package", [str(self.ws), self.base, head, str(out), "3"],
+                            cwd=str(self.repo), env_extra={})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        package = out.read_text(encoding="utf-8")
+        self.assertIn("Test evolution evidence", package)
+        self.assertIn("d" * 64, package)
+        self.assertIn("setup was wrong", package)
+
+    def test_task_package_tolerates_missing_revisions(self):
+        head = self._change_and_commit()
+        out = self._tmp / "pkg.diff"
+        result = run_script("review-package", [str(self.ws), self.base, head, str(out), "3"],
+                            cwd=str(self.repo), env_extra={})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("Test evolution evidence", out.read_text(encoding="utf-8"))
+
     def test_guidance_hook_failure_keeps_baseline_package_successful(self):
         head = self._change_and_commit()
         out = self._tmp / "pkg.diff"

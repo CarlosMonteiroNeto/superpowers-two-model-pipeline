@@ -230,6 +230,30 @@ class TestRedFormCheck(RedFormCheckBase):
         )
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
 
+    def test_legacy_evidence_without_revisions_still_validates(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "red_evidence_legacy", SCRIPTS / "red_evidence.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        evidence = {"task_id": "1", "attempt_id": "a",
+                    "toolchain_id": "py", "runner": "scoped-run-v1",
+                    "command": ["python", "-m", "unittest"],
+                    "source_snapshot": "snap-1", "adapter": "unittest",
+                    "tests_run": 1, "executed_tests": ["loop.T.test_x"],
+                    "failures": ["loop.T.test_x"], "errors": [],
+                    "exit_code": 1}
+        expected = {field: evidence[field]
+                    for field in module.IDENTITY_FIELDS}
+        result = module.validate_evidence("/nonexistent", expected)
+        self.assertFalse(result["valid_red"])
+        with tempfile.TemporaryDirectory() as temp:
+            path = os.path.join(temp, "red.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(evidence, handle)
+            result = module.validate_evidence(path, expected)
+        self.assertTrue(result["valid_red"], result)
+
 
 if __name__ == "__main__":
     unittest.main()
