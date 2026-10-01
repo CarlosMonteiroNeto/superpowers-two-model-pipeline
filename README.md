@@ -611,3 +611,14 @@ fixture results do not imply live-backend certification.
 ## 20. License
 
 MIT — see LICENSE. Upstream: https://github.com/obra/superpowers
+
+## R5 reusable assets and requirement profiles
+
+R5 adds provider-neutral asset records, deterministic local recall, applicable
+generic and Flutter requirement profiles, safe update previews, and local-only
+promotion staging. Ecosystem adapters continue to own source collection,
+scoring, and tooling. Python fixtures verify shared contract behavior and do
+not claim production Python support. Read the
+[planning flow](skills/two-model-sdd-pipeline/references/reusable-asset-planning.md)
+and [archive reconciliation](docs/superpowers/reviews/template-archive-reconciliation.md)
+for task-level rules and preserved Flutter contracts.

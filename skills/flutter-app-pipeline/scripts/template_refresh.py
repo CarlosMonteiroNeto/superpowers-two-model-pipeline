@@ -44,7 +44,7 @@ def refresh_one(conn, entry, github_token=None, collect=None):
     if not isinstance(entry, dict) or not isinstance(entry.get("owner_repo"), str): raise ValueError("entry.owner_repo is required")
     evidence=(collect or collect_evidence)(entry["owner_repo"], github_token)
     _validate_evidence(entry, evidence)
-    upsert_template(conn, entry["owner_repo"], entry.get("category", ""), entry.get("project", entry["owner_repo"]), evidence["score_report"], evidence)
+    upsert_template(conn, entry["owner_repo"], entry.get("category", ""), entry.get("project", entry["owner_repo"]), evidence["score_report"], evidence, refresh=True)
     return evidence
 
 def main(argv=None):

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex.local/schemas/template-release.schema.json",
+  "title": "Locally staged reusable template release",
+  "type": "object",
+  "required": ["asset_id", "version", "source_identity", "license", "dependencies", "files"],
+  "properties": {
+    "asset_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "source_identity": { "type": "string", "minLength": 1 },
+    "license": { "type": "object", "required": ["status", "value"], "properties": { "status": { "const": "known" }, "value": { "type": "string", "minLength": 1 } }, "additionalProperties": true },
+    "dependencies": { "type": "array", "items": { "type": "object", "required": ["name", "version", "compatible", "license"], "properties": { "name": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 }, "compatible": { "const": true }, "license": { "type": "object", "required": ["status"], "properties": { "status": { "const": "known" } }, "additionalProperties": true } }, "additionalProperties": true } },
+    "files": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

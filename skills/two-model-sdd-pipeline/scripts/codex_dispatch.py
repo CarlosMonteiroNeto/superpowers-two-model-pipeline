@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import uuid
@@ -67,6 +68,27 @@ def publish_requested_result(request, result):
     if not isinstance(path, str) or not path:
         raise ValueError("requested result path is missing")
     _json(path, result)
+
+
+def publish_operator_session_locator(workspace, task_id, agent, result):
+    """Atomically publish the completed operator session ID as a locator.
+
+    Resume authorization and identity checks remain in run_dispatch; this file
+    only helps the same task's correction caller find that validated session.
+    """
+    if (not isinstance(result, dict) or result.get("terminal_status") != "completed"
+            or not isinstance(result.get("session_id"), str) or not result["session_id"]):
+        raise ValueError("completed operator result with session ID is required")
+    if (not isinstance(agent, str)
+            or re.fullmatch(r"two-model-coder(?:-[A-Za-z0-9_]+)*", agent) is None
+            or not str(task_id).isdigit()):
+        raise ValueError("operator locator identity is invalid")
+    target = pathlib.Path(workspace) / ("task-%s-%s-session.txt" % (task_id, agent))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
+    temporary.write_text(result["session_id"] + "\n", encoding="utf-8")
+    os.replace(str(temporary), str(target))
+    return target
 
 
 def _event_stream(raw):

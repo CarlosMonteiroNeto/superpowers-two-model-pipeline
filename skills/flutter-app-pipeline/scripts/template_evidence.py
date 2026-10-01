@@ -98,6 +98,12 @@ def collect_evidence(owner_repo, github_token=None, fetch_json=None):
         license_value = "mit" if "mit" in license_id else "apache" if "apache" in license_id else "bsd" if "bsd" in license_id else "other"
     record = {
         "owner_repo": owner_repo,
+        "ecosystem": "flutter",
+        "name": owner_repo,
+        "version": "catalog-entry",
+        "source": {"type": "github", "uri": "https://github.com/" + owner_repo},
+        "license": _constraint(license_value),
+        "compatibility": {key: value for key, value in {"sdk": _sdk_constraint(pubspec_text)}.items() if value is not None},
         "score_report": score_report,
         "readme_text": readme_text,
         "pubspec_text": pubspec_text,

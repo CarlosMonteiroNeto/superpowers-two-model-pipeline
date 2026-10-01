@@ -20,8 +20,8 @@ The Flutter cold full-suite run took 16,659 ms; a separate earlier run included 
 - With a cached base and changed candidate identity, only the candidate is rebuilt (one miss/build).
 - Corrupt or incomplete entries rebuild; cache-write failures preserve valid fresh evidence.
 - Post-run identity verification is covered by tests asserting no graph construction or reselection. Its elapsed time was not separately instrumented.
-- Final shared suite: 1,101 tests ran. The only failure was a duplicate documentation assertion for the obsolete phrase `without graph context`; the current lifecycle test already verifies the revised wording. After removing that stale duplicate, all 7 documentation tests passed, as did the 6 gate-execution tests. Two tests were skipped because the Windows environment's `zip` CLI does not support the stdin-list option those tests require.
-- Flutter suite: 150 tests passed.
+- Final shared suite, rerun at accepted commit `817da04e7d92983bb33cecdc38115b4babeceb7a`: `python -m unittest discover -s skills/two-model-sdd-pipeline/tests -v` — 1,100 tests passed in 2,046.379 seconds; 2 skipped because the Windows `zip` CLI does not support file lists from stdin. This full rerun includes the fix for the obsolete `without graph context` documentation assertion noted during the earlier candidate run.
+- Flutter suite, rerun at the same accepted commit: `python -m unittest discover -s skills/flutter-app-pipeline/tests -v` — 150 tests passed in 132.384 seconds.
 - Final review findings were fixed: post-command manifest tampering is rejected against a pre-command seal, test/worker processes cannot access the supervisor cache path, and prior Green evidence cannot skip tests.
 
 ## Conclusion and limits

@@ -121,6 +121,8 @@ try:
         dispatch_entered=True
         result=codex_dispatch.run_dispatch(request,runtime)
         codex_dispatch.publish_requested_result(request,result)
+        codex_dispatch.publish_operator_session_locator(
+            workspace, values["--task"], values["--agent"], result)
         status=result["final_output"]["status"]
         ledger_script=codex_dispatch.ledger_append_script(os.environ["PIPELINE_SCRIPTS_DIR"])
         attempt_root=pathlib.Path(runtime["attempt_root"])

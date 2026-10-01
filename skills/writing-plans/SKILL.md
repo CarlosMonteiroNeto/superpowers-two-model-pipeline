@@ -183,3 +183,15 @@ After saving the plan, offer execution choice:
 **If Inline Execution chosen:**
 - **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
 - Batch execution with checkpoints for review
+
+## Reusable baseline in plans (R5)
+
+At planning start, capture the consolidated reusable baseline from
+[`reusable-asset-planning`](../two-model-sdd-pipeline/references/reusable-asset-planning.md): installed required/optional skills, applicable generic and ecosystem
+profile IDs/versions, immutable selected asset versions, covered requirements,
+reasoned exceptions, and unresolved questions. Keep those profile and asset
+identities in the spec/plan so execution can validate freshness and provenance.
+Do not add irrelevant ecosystem checks or install external skills without the
+user's explicit approval. A missing required skill blocks a credible plan; an
+optional omission is recorded with its reason. Planning approval still follows
+the normal design and plan boundary.

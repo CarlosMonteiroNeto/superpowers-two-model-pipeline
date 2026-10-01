@@ -1,0 +1,8 @@
+{
+  "profile_id": "user-interface",
+  "version": "1.0.0",
+  "applicability": { "ui": true },
+  "requirements": [
+    { "id": "accessibility", "description": "Meet applicable accessibility expectations for user-facing interfaces.", "checks": ["keyboard-navigation", "accessible-names", "contrast"], "dependencies": [] }
+  ]
+}

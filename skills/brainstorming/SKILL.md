@@ -334,3 +334,16 @@ A question about a UI topic is not automatically a visual question. "What does p
 
 If they agree to the companion, read the detailed guide before proceeding:
 `skills/brainstorming/visual-companion.md`
+
+## Reusable capability and asset baseline (R5)
+
+After establishing the request and repository context, discover installed
+skills first and resolve the generic profile plus only applicable ecosystem
+profiles. Check the local reusable-asset catalog for fresh, compatible evidence
+without downloading source. Consult cached external skill sources only for
+coverage still missing after local discovery; installing an external skill
+requires the user's explicit approval. Missing required skills block a sound
+plan; optional omissions carry a reason. Summarize applicable requirements,
+selected immutable assets, exceptions, and open applicability or merge
+questions together before presenting the design. See the
+[`reusable-asset-planning` flow](../two-model-sdd-pipeline/references/reusable-asset-planning.md).

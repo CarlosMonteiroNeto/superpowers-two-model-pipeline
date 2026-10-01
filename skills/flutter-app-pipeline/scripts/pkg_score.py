@@ -19,6 +19,12 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+SHARED_SCRIPTS = Path(__file__).resolve().parents[2] / "two-model-sdd-pipeline" / "scripts"
+if str(SHARED_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SHARED_SCRIPTS))
+import solution_research
 
 PUB_API = os.environ.get("PUB_API_BASE", "https://pub.dev")
 GH_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")
@@ -137,6 +143,9 @@ def gather_data(package, project_sdk, token):
 
     data = {
         "package": package,
+        "version": latest.get("version"),
+        "registry_source": "{}/packages/{}".format(PUB_API.rstrip("/"), package),
+        "license": pubspec.get("license"),
         "granted_points": score.get("grantedPoints", 0),
         "max_points": score.get("maxPoints", 160),
         "popularity": score.get("popularityScore", 0),
@@ -156,6 +165,8 @@ def gather_data(package, project_sdk, token):
             if commits:
                 recency_days = _days_ago(commits[0]["commit"]["committer"]["date"])
             repo_info = _fetch_json("{}/repos/{}/{}".format(GH_API, owner, name), token)
+            if isinstance(repo_info.get("license"), dict):
+                data["license"] = repo_info["license"].get("spdx_id") or data.get("license")
             open_q = _fetch_json(
                 "{}/search/issues?q=repo:{}/{}+type:issue+state:open&per_page=1".format(GH_API, owner, name),
                 token,
@@ -191,6 +202,21 @@ def main(argv=None):
     data = gather_data(args.package, args.project_sdk, args.github_token)
     report = compute_score(data)
     report["data"] = data
+    license_value = data.get("license")
+    research_record = solution_research.collect(
+        {"requirement": "Flutter dependency: {}".format(args.package)},
+        {"search": lambda _request: [{
+            "name": args.package,
+            "source": {"type": "pub.dev", "uri": data.get("registry_source")},
+            "evidence": {"provider": "pub.dev", "fields": sorted(data), "version": data.get("version")},
+            "compatibility": {"flutter_sdk": data.get("sdk")},
+            "license": ({"status": "known", "value": license_value}
+                        if isinstance(license_value, str) and license_value and license_value.upper() not in {"NOASSERTION", "NONE"}
+                        else {"status": "unknown", "value": None}),
+        }]},
+    )
+    if research_record["alternatives"]:
+        report["research_record"] = research_record["alternatives"][0]
     print(json.dumps(report, indent=2))
 
 

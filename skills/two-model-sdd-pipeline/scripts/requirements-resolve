@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Resolve supplied profile JSON without network access."""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from requirement_profiles import resolve
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Resolve applicable product requirement profiles")
+    parser.add_argument("context_json")
+    parser.add_argument("profiles_json")
+    args = parser.parse_args(argv)
+    try:
+        context = json.loads(Path(args.context_json).read_text(encoding="utf-8"))
+        profiles = json.loads(Path(args.profiles_json).read_text(encoding="utf-8"))
+        result = resolve(context, profiles)
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print("requirements-resolve: {}".format(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

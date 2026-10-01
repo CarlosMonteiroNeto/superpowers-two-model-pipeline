@@ -58,6 +58,54 @@ def _kill_unverified_child(proc):
         proc.wait(timeout=5)
 
 
+def _terminate_direct_child(proc, ownership, grace_seconds):
+    """Terminate an owned process tree, then reap this exact Popen child.
+
+    External cancellation has no Popen handle and must never wait on arbitrary
+    PIDs. This helper is only for the direct child created by run_owned.
+    """
+    if (not isinstance(ownership, dict) or ownership.get("pid") != proc.pid
+            or not isinstance(ownership.get("start_identity"), str)
+            or not ownership["start_identity"]):
+        raise ValueError("direct child ownership identity does not match Popen")
+    if isinstance(grace_seconds, bool) or not isinstance(grace_seconds, (int, float)) or grace_seconds < 0:
+        raise ValueError("grace_seconds must be nonnegative")
+    identity = ownership["start_identity"]
+    matches = _start_identity(proc.pid) == identity
+    if matches:
+        if os.name == "nt":
+            try:
+                result = subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                                        capture_output=True, timeout=max(1, grace_seconds + 1))
+            except (OSError, subprocess.SubprocessError):
+                result = None
+            if result is None or result.returncode != 0:
+                try: proc.kill()
+                except OSError: pass
+        else:
+            try: os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+            deadline = time.monotonic() + grace_seconds
+            while time.monotonic() < deadline and _start_identity(proc.pid) == identity:
+                time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+            # Keep the unreaped direct child as the ownership anchor while
+            # escalating the process group; a zombie still has its start id.
+            if _start_identity(proc.pid) == identity:
+                try: os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+    try:
+        proc.wait(timeout=max(1.0, grace_seconds + 1.0))
+    except subprocess.TimeoutExpired:
+        if _start_identity(proc.pid) == identity:
+            if os.name == "nt":
+                try: proc.kill()
+                except OSError: pass
+            else:
+                try: os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+            proc.wait(timeout=5)
+        else:
+            raise RuntimeError("owned direct child could not be reaped safely")
 def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
     if not isinstance(argv, (list, tuple)) or not argv or not all(isinstance(x, str) for x in argv):
         raise ValueError("argv must be a nonempty string array")
@@ -85,18 +133,18 @@ def run_owned(argv, cwd, stdin_text="", timeout=None, env=None, on_start=None):
         if not callable(on_start): raise ValueError("on_start must be callable")
         try: on_start(dict(ownership))
         except Exception:
-            stop_owned_processes([ownership], 0)
+            _terminate_direct_child(proc, ownership, 0)
             raise
     timed_out = False
     try:
         out, err = proc.communicate(stdin_text.encode("utf-8"), timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        stop_owned_processes([ownership], 1.0)
-        out, err = proc.communicate()
+        _terminate_direct_child(proc, ownership, 1.0)
+        out, err = proc.communicate(timeout=5)
     except KeyboardInterrupt:
-        stop_owned_processes([ownership], 1.0)
-        try: proc.communicate()
+        _terminate_direct_child(proc, ownership, 1.0)
+        try: proc.communicate(timeout=5)
         finally: raise
     return {"pid": proc.pid, "started": started, "start_identity": start_identity, "returncode": proc.returncode,
             "timed_out": timed_out,

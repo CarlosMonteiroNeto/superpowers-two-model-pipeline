@@ -12,6 +12,21 @@ set -euo pipefail
 
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 REPORT="${PUB_SYNC_REPORT:-pub-sync-report.txt}"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+# Manifest mutations share the same exclusive resource-lock implementation as
+# the generic dependency protocol. Re-entry carries the lock only for this
+# process tree; it does not add analysis, model calls, or graph work.
+if [ "${PIPELINE_DEPENDENCY_LOCK_HELD:-0}" != "1" ]; then
+  SHARED_SCRIPTS=$(cd "$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts" && pwd)
+  REPOSITORY_ID=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  BRANCH=$(git branch --show-current 2>/dev/null || true)
+  BRANCH="${BRANCH:-detached}"
+  LOCK_PATH="$REPOSITORY_ID/.codex/dependency-manifest.lock"
+  exec "${PYTHON:-python3}" "$SHARED_SCRIPTS/dependency_policy.py" \
+    --lock "$LOCK_PATH" --repository-id "$REPOSITORY_ID" --branch "$BRANCH" \
+    --run-id "pub-sync-$$" -- "$0" "$@"
+fi
 
 if [ $# -gt 0 ]; then
   "$FLUTTER_BIN" pub add "$@"

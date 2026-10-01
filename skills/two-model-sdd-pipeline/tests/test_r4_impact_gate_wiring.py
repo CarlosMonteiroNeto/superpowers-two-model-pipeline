@@ -21,6 +21,41 @@ def subject():
 
 
 class ImpactGateEvidenceTests(unittest.TestCase):
+    def test_git_rename_capture_uses_existing_destination(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self._repository(root, {"test_app.py": "def test_ok(): pass\n", "src.py": "value = 1\n"})
+            workspace = self._workspace(root, ["python"])
+            subprocess.run(["git", "mv", "test_app.py", "test_renamed.py"], cwd=root, check=True)
+
+            captured = subject().capture_workspace_inputs(str(workspace), ["1"], "tasks")
+
+            self.assertIn("test_renamed.py", captured["diff"]["test_paths"])
+            self.assertNotIn("test_app.py", captured["diff"]["test_paths"])
+            self.assertEqual("renamed", captured["files"][0]["status"])
+
+            result = subprocess.run(["bash", str(RUN_GATES), str(workspace), "--tasks", "1"],
+                                    cwd=root, text=True, capture_output=True)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            manifest = json.loads((workspace / "impact-manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["commands"][0]["full_suite"])
+            self.assertEqual(["python", "-c", "pass"], manifest["commands"][0]["argv"])
+            self.assertNotIn("test_app.py", manifest["commands"][0]["argv"])
+            self.assertFalse(manifest["evidence"]["graph_provenance"]["complete"])
+            self.assertIn("graph acquisition skipped during preflight",
+                          manifest["evidence"]["graph_provenance"]["diagnostics"])
+
+    def test_renamed_test_path_with_spaces_is_current_selector(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self._repository(root, {"test old.py": "def test_ok(): pass\n", "src.py": "value = 1\n"})
+            workspace = self._workspace(root, ["python"])
+            subprocess.run(["git", "mv", "test old.py", "test renamed.py"], cwd=root, check=True)
+            captured = subject().capture_workspace_inputs(str(workspace), ["1"], "tasks")
+            self.assertIn("test renamed.py", captured["diff"]["test_paths"])
+            self.assertNotIn("test old.py", captured["diff"]["test_paths"])
+            self.assertEqual("renamed", captured["files"][0]["status"])
+
     def test_evidence_matches_only_same_candidate_and_verified_impact_manifest(self):
         manifest = {
             "schema_version": 1, "mode": "full_suite", "scope_paths": [], "tests": [],

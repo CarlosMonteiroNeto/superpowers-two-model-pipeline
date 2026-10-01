@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+import json
+import sys
+from pathlib import Path
+from template_adoption import prepare
+
+if len(sys.argv) != 3:
+    print("usage: template-adopt REQUEST.json EVIDENCE.json", file=sys.stderr)
+    raise SystemExit(2)
+try:
+    result = prepare(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")), json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")))
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    raise SystemExit(0 if result["status"] == "adopted" else 1)
+except (OSError, ValueError, json.JSONDecodeError) as error:
+    print("template-adopt: {}".format(error), file=sys.stderr)
+    raise SystemExit(1)

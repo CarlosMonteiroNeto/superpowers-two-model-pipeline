@@ -243,6 +243,8 @@ METADATA_ROOT="$(prepare_metadata_root "$METADATA_SOURCE")"
 
 # Pin tar.umask and extract with -p so staged modes are canonical 755/644
 # regardless of the builder's git config or process umask.
+# Archive every skill subtree so R5 profiles, schemas, references, and generic
+# plus ecosystem compatibility wrappers ship together.
 git -C "$REPO_ROOT" -c tar.umask=0022 archive --format=tar "$REF" -- \
   .codex-plugin \
   agent \
