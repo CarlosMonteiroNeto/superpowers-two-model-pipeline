@@ -236,9 +236,10 @@ the spike: subagent-mode agents cannot be targeted headlessly by
   (`green-gate` for lang=flutter, `run-gates` otherwise), ledgers
   `coder_round`, and on failure builds the fix prompt (prior diff + gate
   report + brief — file-path interpolation only, no LLM call) and resumes the
-  operador session with `--continue`. The loop is unbounded and uncounted:
-  it retries until the gate passes and never hands back for help. It stops
-  only on `TEST_DEFECT` found in the latest log, ledgering `escalated` so
+  operador session with `--continue`. Retries draw from the durable [5, 3, 3]
+  family budget with director assessment at cycle boundaries; exhaustion
+  returns for assessment instead of looping silently. It stops
+  early only on `TEST_DEFECT` found in the latest log, ledgering `escalated` so
   `route-next` goes straight to ARBITRATE (Agente diretor resumes). On PASS:
   it first validates the operador's saved RED evidence
   (`<ws>/task-N-red.txt`) by FORM with `red-form-check` — a compile/load red
@@ -332,9 +333,9 @@ Script CEO never implements, reviews, or fixes anything itself.
   with `red-form-check` (a compile/load red does not count). If a test looks
   unsatisfiable: report `TEST_DEFECT`; Agente diretor rules.
 - Context zeroed per task; retries resume the same session
-  (`--continue --session`). No round budget, no failure counting: the loop
-  runs until the gate passes. Only `TEST_DEFECT` leaves the loop (→ Agente
-  diretor arbitration).
+  (`--continue --session`) within the durable [5, 3, 3] family budget.
+  Budget exhaustion returns for director assessment. Only `TEST_DEFECT`
+  leaves the loop (→ Agente diretor arbitration).
 
 ### Agente revisor (Strategic, `two-model-reviewer`)
 
@@ -527,8 +528,9 @@ For each task in order:
    task is green-and-reviewed, or TEST_DEFECT stops it. Ledger: `red_check`, then
    `coder_round` per attempt, `escalated` on TEST_DEFECT. Before approving
    green, coder-gate validates the saved RED form with `red-form-check`
-   (never a compile/load red). No budget, no counting, no Agente estratégico
-   anywhere.
+   (never a compile/load red). External dispatches draw from the durable
+   [5, 3, 3] family budget with director assessment at cycle boundaries;
+   no Agente estratégico anywhere.
 
  4. **Wrap-up on success.** All gates green → commit, append the `commit`
    ledger entry, build the review package, and dispatch D. Run
@@ -704,3 +706,42 @@ building a project baseline. Catalog recall is read-only and never downloads or
 adopts source. Manifest writers must hold the shared resource lock and satisfy
 path grants. Promotion stages locally; remote publication is a separate
 explicit action.
+
+## Agent instructions and autonomy contracts
+
+Workers receive adapted Superpowers guidance through deterministic scripts;
+a coder completes investigation, RED, implementation, debugging, GREEN, and
+self-review within one invocation whenever possible, without routine scope
+dispatches for file discovery, focused checks, or coder-authored test
+corrections.
+
+- **Instruction provenance** (`prompts/`, `prepare_prompt.py`): every
+  dispatch starts from one recorded package — adapted role core, backend
+  policy, domain skills, acceptance, output contract — with a tamper-evident
+  envelope (`prompt.md`, `provenance.json`, `envelope.json`) covering every
+  submitted channel, including role instructions, developer instructions,
+  and resume deltas. Post-hash behavioral prefixes are rejected; altered
+  bytes fail before any worker starts.
+- **Directory authority** (`working_areas.py`): plans opt in per task
+  through `task.working_areas` (canonical directories; `.` is the
+  repository root and is never inferred). Equal or nested areas overlap;
+  `src/a` never covers `src/ab`. Reservations are atomic per run/family,
+  retained by corrections in the same family, released after integration,
+  and recovered only after verified process termination — never by timeout
+  alone. Older plans without `working_areas` keep exact-path authority.
+- **Local capabilities** (`scoped_runner.py`): workers request structured
+  checks (modes red, test, analyze, format; file paths or unittest dotted
+  test_case selectors). Only configured toolchain commands execute; worker
+  command strings, flags, shell syntax, and installations are rejected.
+  Protected paths, dependency manifests, and lockfiles are rejected;
+  legacy exact-path behavior is unchanged.
+- **Test evolution** (`red_evidence.py`): an append-only revision record
+  (test digest, prior digest, rationale, acceptance, RED/GREEN evidence
+  identities, retained snapshot) tracks coder-authored corrections; the
+  chain validator rejects stale, missing, reordered, or conflicting
+  records. Local check iterations never consume dispatch budget slots;
+  external retries do, within the durable [5, 3, 3] cycles.
+- **Backend enforcement limits**: application-level tool policies are not
+  an OS sandbox against arbitrary code executed by tests. Capability
+  descriptions are generated from the normalized enforced policy; limits
+  of backend application-level enforcement are documented, not assumed.

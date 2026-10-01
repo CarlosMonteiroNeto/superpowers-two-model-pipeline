@@ -324,7 +324,24 @@ def reserve(registry_path: str, owner: dict, scope: dict) -> dict:
                 continue
             held = existing.get("owner", {})
             if held.get("family_id") == identity["family_id"]:
-                return {"decision": "granted", "owner": held,
+                # A correction in the same family retains the reservation
+                # and adopts it: scopes unite so the family footprint only
+                # grows, and the newest task owns release.
+                existing["owner"] = identity
+                existing["roots"] = sorted(set(
+                    existing.get("roots", [])) | set(claim["roots"]))
+                existing["exact_paths"] = sorted(set(
+                    existing.get("exact_paths", []))
+                    | set(claim["exact_paths"]))
+                existing["pid"] = os.getpid()
+                try:
+                    existing["process_start"] = _creation_identity(
+                        os.getpid())
+                except Exception:
+                    existing["process_start"] = None
+                existing["acquired_at"] = time.time()
+                _store_registry(registry_path, records)
+                return {"decision": "granted", "owner": identity,
                         "recovered": False}
             if _alive(existing.get("pid"), existing.get("process_start")):
                 return {"decision": "conflict", "owner": held,
