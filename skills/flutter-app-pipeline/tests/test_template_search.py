@@ -65,6 +65,7 @@ class StubGitHub:
     def stop(self):
         self._server.shutdown()
         self.thread.join(timeout=5)
+        self._server.server_close()
 
     def base_url(self):
         return "http://127.0.0.1:{}".format(self.port)
@@ -200,6 +201,18 @@ class TemplateSearchTestBase(unittest.TestCase):
         if extra_env:
             env.update(extra_env)
         return run_script("template-search", args, cwd=self._tmp, env_extra=env)
+
+
+class StubGitHubLifecycleTests(unittest.TestCase):
+    def test_stub_stop_closes_listening_socket(self):
+        stub = StubGitHub({}, {}).start()
+        server_socket = stub._server.socket
+        try:
+            stub.stop()
+            self.assertEqual(server_socket.fileno(), -1)
+        finally:
+            if server_socket.fileno() != -1:
+                stub.stop()
 
 
 GOOD_REPO = {

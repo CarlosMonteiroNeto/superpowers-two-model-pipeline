@@ -1,6 +1,6 @@
 # R3: Shared pipeline integration and acceptance
 
-**Status:** Complete planning artifact; implementation has not started.
+**Status:** Implemented with documented limitations; acceptance bound at `abe4bc5`.
 **Spec:** [transition contract](../../specs/2026-09-25-codex-pipeline-design.md).
 **Decisions:** [confirmed record](../../specs/2026-09-25-confirmed-pipeline-decisions.md).
 **Roadmap:** [round sequence](../../../../roadmap.md).
@@ -8,8 +8,8 @@
 
 ## Prerequisites
 
-- [R1](../2026-09-25-codex-pipeline/plan.json) accepted with commit and verification evidence.
-- [R2](../2026-09-25-r2-worker-runtime/plan.json) accepted with commit and verification evidence.
+- [R1](../2026-09-25-codex-pipeline/plan.json) accepted at `58810ac42b959b02529c73837e32ed7a8f757c79`.
+- [R2](../2026-09-25-r2-worker-runtime/plan.json) accepted at `4383bba954233a2541a28ff366ffe8618c3c3c9a` with the verification limits recorded in its README.
 
 Recheck paths/interfaces against accepted predecessor commits before execution;
 refresh implementation drift without reopening the user's confirmed choices.
@@ -17,26 +17,29 @@ Do not execute transition-backlog.json or the deferred R6 plan.
 
 ## Tasks
 
-- [ ] 1. Isolate runs, worktrees and shared state with durable ownership. Dependencies: none within this round.
-- [ ] 2. Wire normalized outcomes into RED, GREEN and independent review. Dependencies: 1.
-- [ ] 3. Apply director proposals through canonical script transactions. Dependencies: 1, 2.
-- [ ] 4. Require a candidate-bound closing verdict and branch-wide verification. Dependencies: 1, 2, 3.
-- [ ] 5. Connect the complete Codex launcher, cancellation and explicit publication. Dependencies: 1, 2, 3, 4.
-- [ ] 6. Ship the Codex workflow through skills, documentation and both package paths. Dependencies: 5.
-- [ ] 7. Prove the complete adaptation with an acceptance harness and support matrix. Dependencies: 6.
+- [x] 1. Isolate runs, worktrees and shared state with durable ownership. Dependencies: none within this round.
+- [x] 2. Wire normalized outcomes into RED, GREEN and independent review. Dependencies: 1.
+- [x] 3. Apply director proposals through canonical script transactions. Dependencies: 1, 2.
+- [x] 4. Require a candidate-bound closing verdict and branch-wide verification. Dependencies: 1, 2, 3.
+- [x] 5. Connect the complete Codex launcher, cancellation and explicit publication. Dependencies: 1, 2, 3, 4.
+- [x] 6. Ship the Codex workflow through skills, documentation and both package paths. Dependencies: 5.
+- [x] 7. Prove the complete adaptation with an acceptance harness and support matrix. Dependencies: 6.
 
-## Execution and verification
+## Historical execution notes
 
-At each new run confirm backend, operator/reviewer models (director defaults to
-reviewer unless overridden), local-only versus push-and-PR, and concurrency.
-Offer saved model choices; resume retains the manifest. No automatic merge.
-Use an isolated checkout and pinned supervisor outside worker edits.
-Bootstrap through an explicitly launched development workflow; the current runner is not the finished shared pipeline. R3 is an integration milestone, and R4 must enforce the agreed policies before unattended production adoption.
-
-The JSON defines exact files, interfaces, acceptance and future verification files.
-These test files are deliverables, not claims of existing/passing tests. Observe
-meaningful RED and preserve raw output. Run required complete suites at closure;
-new regressions block. Proven inherited failures require an explicit candidate-bound
-user waiver and must never be reported as green.
+The original pre-execution workflow text is superseded by the completed status
+and acceptance record below. R3 is closed with the compatibility limits recorded
+in its support matrix.
 
 Next: [R4](../2026-09-25-r4-execution-efficiency/plan.json).
+
+## Acceptance evidence and limitations
+
+- Source commit: `6cddf38ce55f2a2a590656ee34278891b0afcb45`; acceptance bound at
+  `abe4bc56a404d4421ec05dda4ae1546ae673f8c7`.
+- The [support matrix](../../../testing/codex-pipeline-support-matrix.md)
+  records the 947-test generic suite, offline Codex acceptance and live Codex
+  evidence.
+- Full unattended OpenCode parity remains unproven because headless closing
+  returned HTTP 403. The protected-path test demonstrated detection at closing,
+  not write-time prevention; broad platform certification is not claimed.

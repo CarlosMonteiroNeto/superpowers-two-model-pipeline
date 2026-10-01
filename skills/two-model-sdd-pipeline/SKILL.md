@@ -691,3 +691,16 @@ input identities; it does not extract or reselect after tests. Candidate,
 plan, toolchain, command, policy, extractor, adapter, environment, or manifest
 drift prevents PASS. Baseline and closing gates always run full suites. Graph
 artifacts are neither published nor included in prompts or commits.
+
+## R5 reusable capability contracts
+
+Generic asset persistence, offline recall, requirement profiles, repository
+update previews, research, dependency decisions, and adoption preparation live
+under `scripts/`, `schemas/`, `profiles/`, and `references/` in this skill.
+Ecosystem adapters own their evidence collection and scoring; generic fixtures
+do not claim production support for another ecosystem. Use the documented
+[reusable-asset planning flow](references/reusable-asset-planning.md) when
+building a project baseline. Catalog recall is read-only and never downloads or
+adopts source. Manifest writers must hold the shared resource lock and satisfy
+path grants. Promotion stages locally; remote publication is a separate
+explicit action.

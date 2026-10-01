@@ -17,6 +17,10 @@ class CorrectiveFamilyTests(unittest.TestCase):
         self.assertIn("family", source.lower())
         self.assertNotIn("--continue-director", source)
 
+    def test_new_codex_corrective_task_does_not_forward_parent_session(self):
+        source = (SCRIPTS / "task-run").read_text(encoding="utf-8")
+        self.assertIn('if [ "${PIPELINE_BACKEND:-opencode}" != codex ] && [ -n "$orig_session" ]; then', source)
+
     def test_family_resume_identity_accepts_only_actual_descendants(self):
         helper=SCRIPTS/"family_identity.py"
         plan={"tasks":[{"id":1,"corrects":None},{"id":2,"corrects":1},{"id":3,"corrects":2},{"id":4,"corrects":None}]}

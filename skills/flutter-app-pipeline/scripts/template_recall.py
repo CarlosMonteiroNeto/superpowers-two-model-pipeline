@@ -16,6 +16,12 @@ import os
 import subprocess
 import sqlite3
 import sys
+from pathlib import Path
+
+SHARED_SCRIPTS = Path(__file__).resolve().parents[2] / "two-model-sdd-pipeline" / "scripts"
+if str(SHARED_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SHARED_SCRIPTS))
+import asset_recall
 
 try:  # Direct script execution is the supported CLI path.
     from template_catalog import _connect
@@ -166,46 +172,63 @@ def recall(
             return "SETUP_ERROR", []
 
     try:
-        rows = [dict(row) for row in conn.execute("SELECT * FROM templates WHERE category=?", (category,))]
+        candidate_limit = max(top_n, conn.execute("SELECT COUNT(*) FROM assets WHERE ecosystem='flutter'").fetchone()[0])
+    except (AttributeError, sqlite3.DatabaseError, TypeError):
+        return "SETUP_ERROR", []
+    wanted = {str(value) for value in (packages or [])}
+    try:
+        bindings = conn.execute("SELECT owner_repo, asset_id FROM templates ORDER BY owner_repo").fetchall()
+        current_ids = [row["asset_id"] for row in bindings]
+        if any(not isinstance(asset_id, str) or not asset_id for asset_id in current_ids):
+            return "SETUP_ERROR", []
+        if current_ids:
+            placeholders = ",".join("?" for _ in current_ids)
+            existing = {row[0] for row in conn.execute(
+                "SELECT asset_id FROM assets WHERE ecosystem='flutter' AND asset_id IN ({})".format(placeholders),
+                current_ids,
+            )}
+            if existing != set(current_ids):
+                return "SETUP_ERROR", []
+    except (AttributeError, sqlite3.DatabaseError, TypeError):
+        return "SETUP_ERROR", []
+    request = {
+        "ecosystem": "flutter",
+        "category": category,
+        "top_n": candidate_limit,
+        "max_age_days": max_age_days,
+        "dependencies": list(packages or []),
+        "evidence_filters": {"score_report.verdict": "AUTO_APPROVE"},
+        "asset_ids": current_ids,
+    }
+    if allowed_hashes is not None:
+        request["evidence_hashes"] = sorted(allowed_hashes)
+    result = asset_recall.query_connection(conn, request)
+    if result["status"] != "HIT":
+        return result["status"], []
+    try:
+        rows = {row["asset_id"]: dict(row) for row in conn.execute("SELECT * FROM templates")}
     except (AttributeError, sqlite3.DatabaseError):
         return "SETUP_ERROR", []
-
-    wanted = {str(value) for value in (packages or [])}
     eligible = []
-    for row in rows:
-        # A source hash is mandatory for a HIT, including deterministic recall
-        # without a query vector. Legacy rows remain visible to the catalog
-        # but cannot be presented as current evidence.
-        source_hash = row.get("evidence_hash")
-        if not isinstance(source_hash, str) or not source_hash:
-            continue
-        age = _age(row.get("fetched_at"))
-        if (
-            row.get("score_verdict") != "AUTO_APPROVE"
-            or age is None
-            or age > max_age_days
-            or (allowed_hashes is not None and source_hash not in allowed_hashes)
-        ):
-            continue
-
-        similarity = 0.0
-        if vector_requested:
-            similarity = _stored_similarity(row, query, requested_model)
-            if similarity is None:
-                # A malformed vector, stale arbitrary identity, or dimension
-                # mismatch is a required embedding setup failure. It is not a
-                # candidate-level MISS because the caller asked for vectors.
-                return "SETUP_ERROR", []
-
-        owner_repo = row.get("owner_repo")
-        if not isinstance(owner_repo, str) or not owner_repo:
+    for asset in result["results"]:
+        row = rows.get(asset["asset_id"])
+        if row is None:
             return "SETUP_ERROR", []
+        # The compatibility table remains the source of Flutter-only package
+        # names and older injected vectors while callers migrate to assets.
+        # A synthesized generic hash never makes an incomplete legacy record
+        # eligible for the Flutter public contract.
+        if not isinstance(row.get("evidence_hash"), str) or not row["evidence_hash"] or _age(row.get("fetched_at")) is None:
+            continue
         row["package_overlap"] = len(wanted & _pkgs(row))
+        similarity = _stored_similarity(row, query, requested_model) if vector_requested else 0.0
+        if vector_requested and similarity is None:
+            return "SETUP_ERROR", []
         row["similarity"] = similarity
         eligible.append(row)
-
     eligible.sort(key=lambda row: (-row["package_overlap"], -row["similarity"], row["owner_repo"]))
-    return ("HIT", eligible[:top_n]) if eligible else ("MISS", [])
+    eligible = eligible[:top_n]
+    return ("HIT", eligible) if eligible else ("MISS", [])
 
 
 def _run_live_search(specific, generic, workspace):

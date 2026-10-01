@@ -52,6 +52,23 @@ class CodexDispatchTests(unittest.TestCase):
             module.publish_requested_result(request, result)
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), result)
 
+    def test_operator_locator_publishes_only_completed_session_atomically(self):
+        module = load(self, "codex_dispatch.py", "publish_operator_session_locator")
+        with tempfile.TemporaryDirectory() as temp:
+            locator = module.publish_operator_session_locator(temp, 7, "two-model-coder", {
+                "terminal_status": "completed", "session_id": "session-operator-1"})
+            self.assertEqual(locator.name, "task-7-two-model-coder-session.txt")
+            self.assertEqual(locator.read_text(encoding="utf-8").strip(), "session-operator-1")
+            self.assertEqual(list(pathlib.Path(temp).glob(locator.name + ".*.tmp")), [])
+            with self.assertRaisesRegex(ValueError, "completed operator result"):
+                module.publish_operator_session_locator(temp, 8, "two-model-coder", {
+                    "terminal_status": "failed", "session_id": "session-failed"})
+            self.assertFalse((pathlib.Path(temp) / "task-8-two-model-coder-session.txt").exists())
+            with self.assertRaisesRegex(ValueError, "operator locator identity"):
+                module.publish_operator_session_locator(temp, 9, "two-model-coder/../../escape", {
+                    "terminal_status": "completed", "session_id": "session-operator-2"})
+            self.assertFalse((pathlib.Path(temp).parent / "escape-session.txt").exists())
+
     def test_normalized_director_output_hash_excludes_null_schema_slots(self):
         module = load(self, "codex_dispatch.py", "normalized_output_and_hash")
         raw={"mode":"arbitration","decision":"amend","reason":"narrow scope",
@@ -230,3 +247,4 @@ class CodexDispatchTests(unittest.TestCase):
             ], cwd=str(root), env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
             self.assertNotIn("prompt hash mismatch", result.stderr)
+            self.assertFalse((workspace / "task-1-two-model-coder-session.txt").exists())

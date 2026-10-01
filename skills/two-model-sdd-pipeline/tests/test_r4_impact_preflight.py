@@ -70,6 +70,13 @@ class ImpactPreflightTests(unittest.TestCase):
                 reasons = result["toolchain_reasons"]
                 self.assertIn(expected_reason, reasons[selected_toolchains[0]["id"]].lower())
 
+    def test_test_only_edit_runs_full_command_without_graph(self):
+        result = self.selector.preflight(
+            diff_fixture([{"status": "modified", "path": "tests/test_app.py"}]),
+            [toolchain()], self.policy, "task")
+        self.assertFalse(result["requires_graph"])
+        self.assertIn("test", result["toolchain_reasons"]["python"].lower())
+
     def test_mixed_toolchains_keep_graph_for_supported_source_selection(self):
         selected = [toolchain(), toolchain("rust", "rust", "cargo")]
 

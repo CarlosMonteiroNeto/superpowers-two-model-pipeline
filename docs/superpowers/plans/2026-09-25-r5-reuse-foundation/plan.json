@@ -2,9 +2,10 @@
   "version": 1,
   "title": "R5: Generic reuse, requirement profiles and templates",
   "date": "2026-09-25",
-  "status": "planned_not_implemented",
+  "status": "complete",
   "round_id": "R5",
   "baseline_commit": "596951fa0da14b0010998c29c2810bff4f2e8b02",
+  "execution_baseline_commit": "817da04e7d92983bb33cecdc38115b4babeceb7a",
   "spec_doc": "docs/superpowers/specs/2026-09-25-codex-pipeline-design.md",
   "roadmap_doc": "roadmap.md",
   "global_constraints": [
@@ -27,30 +28,43 @@
     {
       "round": "R1",
       "plan": "docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "58810ac42b959b02529c73837e32ed7a8f757c79",
+      "acceptance_commit": "58810ac42b959b02529c73837e32ed7a8f757c79",
+      "evidence": "R1 closure: docs/superpowers/plans/2026-09-25-codex-pipeline/README.md and round_closure in its plan.json."
     },
     {
       "round": "R2",
       "plan": "docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "4383bba954233a2541a28ff366ffe8618c3c3c9a",
+      "acceptance_commit": "4383bba954233a2541a28ff366ffe8618c3c3c9a",
+      "evidence": "R2 closure: docs/superpowers/plans/2026-09-25-r2-worker-runtime/README.md, .superpowers/sdd/r2-worker-runtime-codex/progress.md, and round_closure in its plan.json."
     },
     {
       "round": "R3",
       "plan": "docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "6cddf38ce55f2a2a590656ee34278891b0afcb45",
+      "acceptance_commit": "abe4bc56a404d4421ec05dda4ae1546ae673f8c7",
+      "evidence": "docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json acceptance_record and docs/testing/codex-pipeline-support-matrix.md."
     },
     {
       "round": "R4",
       "plan": "docs/superpowers/plans/2026-09-25-r4-execution-efficiency/plan.json",
-      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution."
+      "condition": "All tasks and round closure accepted; record accepted source commit and evidence reference before execution.",
+      "accepted_source_commit": "817da04e7d92983bb33cecdc38115b4babeceb7a",
+      "acceptance_commit": "817da04e7d92983bb33cecdc38115b4babeceb7a",
+      "evidence": "R4 round closure and full suite results: docs/superpowers/plans/2026-09-25-r4-execution-efficiency/README.md; docs/superpowers/plans/2026-09-30-r4-impact-efficiency-results.md; Task 5 independent acceptance: .superpowers/sdd/plan.json/task-5-report.md."
     }
   ],
   "execution_handoff": {
-    "implementation_authorized": false,
-    "model_selection": "At each new run confirm backend, saved operator/reviewer model choices, director override if any, publication and concurrency. Resume retains the manifest.",
-    "bootstrap": "Use the accepted R3 shared runner from a pinned bundle outside worker edits.",
-    "publication": "Choose local-only or push-and-PR at implementation launch; no automatic merge or repeated closing approval.",
-    "drift_check": "Before execution compare exact paths, schemas, interface signatures and prerequisites with accepted predecessor commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
+    "implementation_authorized": true,
+    "execution_method": "Native Superpowers SDD with task-by-task RED/GREEN, focused review, and verification. Do not use the Two Model Pipeline runner or orchestration scripts as the workflow.",
+    "model_selection": "The user requested Luna at medium effort. The active session model cannot be changed with the available controls; do not claim Luna medium was used.",
+    "publication": "Local-only; do not push or create a pull request. No automatic merge.",
+    "concurrency": "Serial execution.",
+    "drift_check": "R1-R4 prerequisites and R4 acceptance are recorded above. Before implementation compare exact paths, schemas, interface signatures and prerequisites with accepted source commits. Refresh affected task fields if implementations diverged; do not expand scope or run historical backlog automatically."
   },
   "scheduling": {
     "task_ids": "Local to this round; depends_on never names another round's task ID.",
@@ -217,7 +231,8 @@
         "skills/two-model-sdd-pipeline/scripts/requirements-resolve",
         "skills/two-model-sdd-pipeline/schemas/requirements-profile.schema.json",
         "skills/two-model-sdd-pipeline/profiles/generic.json",
-        "skills/flutter-app-pipeline/profiles/flutter-forms.json"
+        "skills/two-model-sdd-pipeline/profiles/user-interface.json",
+        "skills/two-model-sdd-pipeline/profiles/flutter-forms.json"
       ],
       "depends_on": [
         1,
@@ -431,5 +446,23 @@
     "scope": "All task acceptance is governed by the confirmed decisions; R6 is deferred."
   },
   "decision_record": "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md",
-  "active_task_count": 7
+  "active_task_count": 7,
+  "implementation_record": {
+    "implementation_status": "complete_local",
+    "branch": "codex/r5-reuse-foundation",
+    "baseline_commit": "817da04e7d92983bb33cecdc38115b4babeceb7a",
+    "accepted_source_commit": null,
+    "publication": "Local-only; uncommitted; no push or pull request.",
+    "verification": [
+      "Shared suite: 1152 passed, 2 skipped, exit 0.",
+      "Flutter suite: 151 passed, exit 0.",
+      "Focused R5 suite: included in the complete shared suite and passed.",
+      "git diff --check: clean."
+    ],
+    "limitations": [
+      "The two shared-suite skips are local ZIP stdin capability limitations; TAR packaging checks passed.",
+      "Generic Python fixtures validate contracts and do not establish production Python ecosystem support.",
+      "The requested Luna medium setting could not be selected by the active session controls."
+    ]
+  }
 }

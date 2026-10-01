@@ -1,0 +1,9 @@
+{
+  "profile_id": "flutter-forms",
+  "version": "1.0.0",
+  "applicability": { "ecosystem": "flutter", "ui": true, "product_type": "form" },
+  "requirements": [
+    { "id": "form-validation", "description": "Validate form fields and report actionable errors.", "checks": ["field-validation"], "dependencies": [] },
+    { "id": "input-mask", "description": "Apply input formatting separately from validation.", "checks": ["input-formatting"], "dependencies": ["form-validation"] }
+  ]
+}

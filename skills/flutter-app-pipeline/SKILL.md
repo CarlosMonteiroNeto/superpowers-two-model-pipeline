@@ -233,3 +233,14 @@ ledgered full-scope argv. Gate evidence binds the manifest and executed test
 argv to the candidate; any change detected after execution prevents PASS.
 Graphify graph files remain in disposable snapshot folders and provide no
 worker or reviewer context.
+
+## R5 shared-capability adapter boundary
+
+Flutter retains the existing `template-*`, `pkg-score`, `pub-sync`, and
+`rtk-run` public entrypoints. Catalog identity and deterministic candidate
+eligibility delegate to the shared asset contracts; GitHub/pub.dev collection,
+Flutter thresholds, Dart/Flutter tooling, and Jev suitability remain Flutter
+adapters. Dependency manifest writes use the shared resource lock. Reusable
+assets are not auto-adopted from a score alone: technical checks, provenance,
+license, dependencies, and local update conflicts govern preparation. See the
+[reusable-asset planning flow](../two-model-sdd-pipeline/references/reusable-asset-planning.md).

@@ -292,6 +292,11 @@ def preflight(diff: dict, toolchains: list, policy: dict, phase: str) -> dict:
                                         if kind == "deleted source" and _matches(path, test_globs)})
                 if deleted_tests:
                     reason = "deleted test cannot be executed: " + ", ".join(deleted_tests)
+                elif any(_matches(path, test_globs) for path, _kind in changed):
+                    # Direct test edits are graph-free, but executing only the
+                    # edited file is not a complete proof of the candidate.
+                    # Conservatively run the configured full command.
+                    reason = "direct test changes require complete suite"
             if reason is None:
                 source_globs = _globs(rule.get("source_globs", []), "policy language %s source_globs" % language)
                 graph_changes = [(path, kind) for path, kind in changed

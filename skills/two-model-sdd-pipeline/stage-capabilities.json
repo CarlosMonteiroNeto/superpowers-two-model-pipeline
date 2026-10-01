@@ -1,0 +1,358 @@
+{
+  "version": 1,
+  "stages": [
+    "phase-0",
+    "phase-1",
+    "phase-2",
+    "phase-3",
+    "phase-4",
+    "phase-5",
+    "phase-6",
+    "phase-7",
+    "phase-8"
+  ],
+  "claims_new_ecosystem_support": false,
+  "generic_fixtures_are_contract_only": true,
+  "capabilities": [
+    {
+      "stage": "phase-0",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#relationship-to-two-model-sdd-pipeline"],
+      "current_owner": "Flutter skill entry layered over the shared harness",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared planning entry with a Flutter specialization",
+      "plan_task": "R5.7",
+      "evidence": ["README.md", "skills/using-superpowers/SKILL.md#pipeline-integration"],
+      "callers": ["README.md", "skills/using-superpowers/SKILL.md"]
+    },
+    {
+      "stage": "phase-1",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#phase-1-requirements"],
+      "current_owner": "Flutter planning skill",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared applicable requirement profiles with ecosystem overlays",
+      "plan_task": "R5.4",
+      "evidence": ["skills/brainstorming/SKILL.md", "roadmap.md#d13--baseline-requirements-are-profiles-not-unconditional-features"],
+      "callers": ["skills/brainstorming/SKILL.md", "skills/writing-plans/SKILL.md"]
+    },
+    {
+      "stage": "phase-1",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#interface-design"],
+      "current_owner": "Apple-design Flutter UI specialization",
+      "disposition": "flutter-specific",
+      "target_owner": "Flutter UI adapter; generic profile resolver selects UI applicability only when declared",
+      "plan_task": "R5.4",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md", "skills/apple-design/SKILL.md"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/apple-design/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#phase-2-research--planning"],
+      "current_owner": "Flutter research and template selection flow",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared research/adoption orchestration with provider and ecosystem adapters",
+      "plan_task": "R5.6",
+      "evidence": ["roadmap.md#d11--generic-capabilities-ecosystem-adapters", "docs/superpowers/specs/2026-09-25-confirmed-pipeline-decisions.md#decisions"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/writing-plans/SKILL.md"]
+    },
+    {
+      "stage": "phase-3",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#phase-3-tdd-implementation-two-model-loop"],
+      "current_owner": "Shared task engine with Flutter command and package adapters",
+      "disposition": "shared",
+      "target_owner": "Accepted shared task/review/gate contracts; R5 adds dependency-policy adapter coordination",
+      "plan_task": "R4.4",
+      "evidence": ["skills/two-model-sdd-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/red-gate", "skills/flutter-app-pipeline/scripts/green-gate"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/two-model-sdd-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-4",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#phase-4-project-wide-review"],
+      "current_owner": "Shared closing review with Flutter UI review criteria",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared closing contract plus Flutter-specific UI acceptance adapter",
+      "plan_task": "R3.4",
+      "evidence": ["skills/two-model-sdd-pipeline/SKILL.md", "skills/flutter-app-pipeline/SKILL.md"],
+      "callers": ["skills/two-model-sdd-pipeline/SKILL.md", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-5",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#deterministic-scripts-no-ai-involvement"],
+      "current_owner": "Flutter deterministic command adapters",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared lifecycle contracts with stable Flutter CLI compatibility wrappers",
+      "plan_task": "R5.7",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md", "skills/two-model-sdd-pipeline/SKILL.md"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "README.md"]
+    },
+    {
+      "stage": "phase-6",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#data-sources-for-score-computation"],
+      "current_owner": "Flutter package/template provider scoring",
+      "disposition": "flutter-specific",
+      "target_owner": "Flutter provider/scoring adapters behind shared research evidence contracts",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/scripts/pkg_score.py", "skills/flutter-app-pipeline/scripts/template_score.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/pkg-score", "skills/flutter-app-pipeline/scripts/template-score"]
+    },
+    {
+      "stage": "phase-7",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#github-authentication-one-time-setup"],
+      "current_owner": "Flutter GitHub API authentication guidance",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared secret-safe credential policy with provider-specific token adapters",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md", "roadmap.md#d12--skill-discovery-per-task"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/two-model-sdd-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-8",
+      "source": ["skills/flutter-app-pipeline/SKILL.md#summary-of-flow"],
+      "current_owner": "Flutter workflow summary over shared and ecosystem-specific stages",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared planning/adoption stages with Flutter overlay and preserved CLI entrypoints",
+      "plan_task": "R5.7",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md", "skills/writing-plans/SKILL.md"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/writing-plans/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/_template_search_collect.py"],
+      "current_owner": "Flutter template search collector",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared solution research contract plus GitHub search adapter",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#solution-research", "skills/flutter-app-pipeline/tests/test_template_search.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-search", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-3",
+      "source": ["skills/flutter-app-pipeline/scripts/green-gate"],
+      "current_owner": "Flutter gate wrapper over accepted shared gate and review contracts",
+      "disposition": "shared",
+      "target_owner": "Shared gate contract; keep the Flutter command/CLI adapter",
+      "plan_task": "R4.4",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#phase-3-tdd-implementation-two-model-loop", "skills/flutter-app-pipeline/tests/test_gates.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/two-model-sdd-pipeline/scripts/integrate"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/pkg_score.py"],
+      "current_owner": "Flutter pub.dev/GitHub package quality scorer",
+      "disposition": "flutter-specific",
+      "target_owner": "Flutter scoring adapter implementing shared research evidence contracts",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#quality-score-0-100-per-candidate-package-pkg-score", "skills/flutter-app-pipeline/tests/test_score.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/pkg-score", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/pkg-score"],
+      "current_owner": "Flutter package scoring CLI",
+      "disposition": "flutter-specific",
+      "target_owner": "Preserve Flutter CLI over the Flutter scorer adapter",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#solution-research", "skills/flutter-app-pipeline/tests/test_score.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "README.md"]
+    },
+    {
+      "stage": "phase-3",
+      "source": ["skills/flutter-app-pipeline/scripts/pub-sync"],
+      "current_owner": "Flutter pub dependency resolver and lockfile writer",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared dependency policy/ownership checks plus a Flutter pub execution adapter",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#task-documentation", "skills/flutter-app-pipeline/SKILL.md#tdd-implementation"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/tests/test_gates.py"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/recall_suitability.py"],
+      "current_owner": "Optional Jev suitability classifier after deterministic Flutter template recall",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared evidence-gated suitability/adoption policy plus optional advisory adapter",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_jev_recall_suitability.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/recall-suitability", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/recall-suitability"],
+      "current_owner": "Optional suitability CLI adapter",
+      "disposition": "adaptation-required",
+      "target_owner": "Preserve Flutter CLI over the shared evidence-gated suitability contract",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-suitability", "skills/flutter-app-pipeline/tests/test_jev_recall_suitability.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/template-recall"]
+    },
+    {
+      "stage": "phase-3",
+      "source": ["skills/flutter-app-pipeline/scripts/red-gate"],
+      "current_owner": "Flutter red-gate compatibility wrapper for the accepted generic red gate",
+      "disposition": "shared",
+      "target_owner": "Keep the accepted shared red-gate owner and Flutter CLI alias",
+      "plan_task": "R3.2",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#tdd-implementation", "skills/flutter-app-pipeline/tests/test_gates.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/two-model-sdd-pipeline/scripts/coder-gate"]
+    },
+    {
+      "stage": "phase-3",
+      "source": ["skills/flutter-app-pipeline/scripts/rtk-run"],
+      "current_owner": "Flutter-scoped runner that delegates to the accepted shared RTK command runner",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared command-evidence contract with Flutter test/analyze modes and compatibility wrapper",
+      "plan_task": "R3.2",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#rtk-compression-invariant", "docs/superpowers/adr/0016-operador-scoped-runner.md"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/two-model-sdd-pipeline/scripts/coder-gate"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_catalog.py"],
+      "current_owner": "Flutter template catalog and migration adapter",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared ecosystem-neutral asset catalog with Flutter schema migration wrapper",
+      "plan_task": "R5.2",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-1-catalog-triage", "skills/flutter-app-pipeline/tests/test_catalog_migration_and_evidence.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-catalog", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_embed.py"],
+      "current_owner": "Flutter template embedding and vector identity adapter",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared deterministic recall contract with model/vector provider adapter",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_template_embedding_identity.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-embed", "skills/flutter-app-pipeline/scripts/template-refresh"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_evidence.py"],
+      "current_owner": "Flutter catalog evidence normalization/provenance",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared evidence/provenance contract with Flutter compatibility mapping",
+      "plan_task": "R5.2",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-1-catalog-triage", "skills/flutter-app-pipeline/tests/test_template_evidence_contract.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-evidence", "skills/flutter-app-pipeline/scripts/template_catalog.py"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_recall.py"],
+      "current_owner": "Deterministic Flutter catalog eligibility, ranking and suitability adapter",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared deterministic recall/adoption policy plus Flutter evidence/scoring filters",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_template_recall_foundation.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-recall", "skills/flutter-app-pipeline/scripts/recall-suitability"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_refresh.py"],
+      "current_owner": "Flutter evidence collection and transactional catalog refresh",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared atomic refresh contract plus Flutter provider evidence collectors",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_template_research_cli_integration.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-refresh", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_score.py"],
+      "current_owner": "Flutter template quality scorer including readiness and provider metrics",
+      "disposition": "flutter-specific",
+      "target_owner": "Flutter score/provider adapter; expose normalized evidence to shared research",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#template-score-0-100-per-candidate-template-template-score", "skills/flutter-app-pipeline/tests/test_template_score.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-score", "skills/flutter-app-pipeline/scripts/template-search"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template_triage.py"],
+      "current_owner": "Flutter Site 1 advisory triage and Jev decision boundary",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared evidence-based adoption policy while preserving optional Jev advisory boundary",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-1-catalog-triage", "skills/flutter-app-pipeline/tests/test_jev_catalog_triage.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-triage", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-catalog"],
+      "current_owner": "Flutter template catalog compatibility CLI",
+      "disposition": "adaptation-required",
+      "target_owner": "Preserve the Flutter CLI over the shared generic asset catalog",
+      "plan_task": "R5.2",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-1-catalog-triage", "skills/flutter-app-pipeline/tests/test_catalog_migration_and_evidence.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/template-refresh"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-embed"],
+      "current_owner": "Flutter embedding command compatibility CLI",
+      "disposition": "adaptation-required",
+      "target_owner": "Preserve CLI over the shared recall/vector adapter boundary",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_template_embedding_identity.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-refresh", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-evidence"],
+      "current_owner": "Flutter evidence compatibility CLI",
+      "disposition": "adaptation-required",
+      "target_owner": "Preserve CLI over shared asset evidence/provenance",
+      "plan_task": "R5.2",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-1-catalog-triage", "skills/flutter-app-pipeline/tests/test_template_evidence_contract.py"],
+      "callers": ["skills/flutter-app-pipeline/scripts/template-catalog", "skills/flutter-app-pipeline/SKILL.md"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-recall"],
+      "current_owner": "Flutter deterministic recall compatibility CLI",
+      "disposition": "adaptation-required",
+      "target_owner": "Preserve CLI over shared deterministic recall and Flutter filters",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_template_recall_foundation.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/recall-suitability"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-refresh"],
+      "current_owner": "Flutter atomic refresh compatibility CLI",
+      "disposition": "adaptation-required",
+      "target_owner": "Preserve CLI over shared refresh and provider evidence collectors",
+      "plan_task": "R5.3",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-2-template-recall", "skills/flutter-app-pipeline/tests/test_template_research_cli_integration.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/template-recall"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-score"],
+      "current_owner": "Flutter score compatibility CLI",
+      "disposition": "flutter-specific",
+      "target_owner": "Preserve Flutter CLI and its provider-specific quality formula",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#template-score-0-100-per-candidate-template-template-score", "skills/flutter-app-pipeline/tests/test_template_score.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/template-search"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-search"],
+      "current_owner": "Flutter GitHub template search and candidate collection",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared solution-research contract plus GitHub template-search adapter",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#solution-research", "skills/flutter-app-pipeline/tests/test_template_search.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/template-score"]
+    },
+    {
+      "stage": "phase-2",
+      "source": ["skills/flutter-app-pipeline/scripts/template-triage"],
+      "current_owner": "Flutter triage CLI with optional advisory selection",
+      "disposition": "adaptation-required",
+      "target_owner": "Shared evidence-based adoption orchestration with the Flutter CLI preserved",
+      "plan_task": "R5.6",
+      "evidence": ["skills/flutter-app-pipeline/SKILL.md#site-1-catalog-triage", "skills/flutter-app-pipeline/tests/test_jev_catalog_triage.py"],
+      "callers": ["skills/flutter-app-pipeline/SKILL.md", "skills/flutter-app-pipeline/scripts/template-catalog"]
+    }
+  ]
+}

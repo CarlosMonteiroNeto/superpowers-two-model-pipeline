@@ -26,6 +26,16 @@ class RecallFoundationTests(unittest.TestCase):
         self.assertEqual(status, "HIT")
         self.assertEqual(rows[0]["owner_repo"], "a/fresh")
 
+    def test_legacy_package_overlap_is_preserved_after_shared_candidate_filtering(self):
+        conn = _connect(":memory:")
+        fresh = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        for repo, packages in (("a/low", []), ("z/high", ["requested"])):
+            upsert_template(conn, repo, "cat", repo, {"verdict": "AUTO_APPROVE"}, {"evidence_hash": repo, "fetched_at": fresh})
+            conn.execute("UPDATE templates SET package_names=? WHERE owner_repo=?", (json.dumps(packages), repo))
+        status, rows = recall(conn, "cat", packages=["requested"], top_n=1)
+        self.assertEqual("HIT", status)
+        self.assertEqual("z/high", rows[0]["owner_repo"])
+
     def test_invalid_inputs_are_setup_failures(self):
         conn = _connect(":memory:")
         self.assertEqual(recall(conn, "cat", top_n=0)[0], "SETUP_ERROR")

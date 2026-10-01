@@ -1,7 +1,7 @@
 # Shared Pipeline Roadmap
 
 Date: 2026-09-25
-Status: Consolidated design; R3 Codex integration is implemented and accepted with documented backend limitations. R4 remains the next planned round.
+Status: R1–R4 are implemented and accepted with documented verification or backend limitations. R5 implementation is complete in its isolated worktree; local changes remain uncommitted for review, with no push or pull request.
 
 ## 1. Purpose and authority
 
@@ -112,8 +112,10 @@ may reuse valid evidence; changes invalidate it. New regressions block completio
 Record pre-existing failures from baseline evidence, continue unaffected work,
 and report them. Remaining baseline failures require an explicit candidate-bound
 user waiver at closing; waived completion is never reported as green.
-Keep conservative gates until R4 is accepted; supersede historical retry/testing
-ADRs explicitly when the new policy lands.
+The original rollout retained conservative gates pending R4 acceptance. R4 is
+now accepted; its bounded dispatch and affected-verification policies are
+recorded in the R4 plan and closure report. Supersede historical retry/testing
+ADRs explicitly where the accepted policy changed them.
 
 ### D11 — Generic capabilities, ecosystem adapters
 
@@ -178,11 +180,21 @@ cleanup is reported rather than faked. Export evidence before releasing worktree
 | R4 | Direct corrections and 5/3/3 budgets; impact selection; baseline waivers; wired gates; cost audit | R3 | Confirmed operational policies enforced; required final suites |
 | R5 | Full Flutter audit; generic catalog/recall/profiles; template repository; shared research/adoption/dependencies; planning integration | R4 | Every stage disposition implemented or specialized; compatibility and migration evidence |
 
-R3 is an integration milestone, not permission to adopt unbounded retries in
-production. R4 must pass before unattended production use of the redesigned flow.
-Every round includes documentation, packaging and regression work. Implementation
-uses a pinned supervisor outside worker edits. Existing runtime remains unchanged
-during planning.
+R3 was an integration milestone, not permission to adopt unbounded retries in
+production. R4 has passed its acceptance gate; this does not establish broad
+platform certification or production cost savings. Every round includes
+documentation, packaging and regression work. Implementation uses a pinned
+supervisor outside worker edits. Existing runtime remained unchanged during
+planning.
+
+### Accepted round closures
+
+| Round | Accepted source / closure | Status and evidence |
+|---|---|---|
+| R1 | `58810ac42b959b02529c73837e32ed7a8f757c79` | Accepted; [closure record](docs/superpowers/plans/2026-09-25-codex-pipeline/README.md). |
+| R2 | `4383bba954233a2541a28ff366ffe8618c3c3c9a` | Accepted with historical full-suite and shell-check limitations; [closure record](docs/superpowers/plans/2026-09-25-r2-worker-runtime/README.md). |
+| R3 | Source `6cddf38ce55f2a2a590656ee34278891b0afcb45`; acceptance `abe4bc56a404d4421ec05dda4ae1546ae673f8c7` | Accepted with documented backend/platform limitations; [closure record](docs/superpowers/plans/2026-09-25-r3-pipeline-integration/README.md) and [support matrix](docs/testing/codex-pipeline-support-matrix.md). |
+| R4 | `817da04e7d92983bb33cecdc38115b4babeceb7a` | Accepted; all five tasks, including Task 5, are complete. Full shared and Flutter suite results and measurement limits are in the [closure record](docs/superpowers/plans/2026-09-25-r4-execution-efficiency/README.md) and [results report](docs/superpowers/plans/2026-09-30-r4-impact-efficiency-results.md). |
 
 R3 Codex acceptance completed on 2026-09-27: the full generic suite passed
 (947 tests, 2 skips), the offline Codex acceptance harness passed all seven
@@ -196,15 +208,15 @@ does not establish full OpenCode lifecycle parity or broad platform certificatio
 
 ### Complete machine plans
 
-| Round | Plan | Active tasks |
-|---|---|---:|
-| R1 | [Round 1: safe shared harness foundation](docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json) | 4 |
-| R2 | [Worker runtime, prompts and backend adapters](docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json) | 6 |
-| R3 | [Shared pipeline integration and acceptance](docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json) | 7 |
-| R4 | [Bounded dispatch and affected verification](docs/superpowers/plans/2026-09-25-r4-execution-efficiency/plan.json) | 5 |
-| R5 | [Generic reuse, requirement profiles and templates](docs/superpowers/plans/2026-09-25-r5-reuse-foundation/plan.json) | 7 |
+| Round | Plan | Status | Tasks |
+|---|---|---|---:|
+| R1 | [Round 1: safe shared harness foundation](docs/superpowers/plans/2026-09-25-codex-pipeline/plan.json) | Accepted | 4 |
+| R2 | [Worker runtime, prompts and backend adapters](docs/superpowers/plans/2026-09-25-r2-worker-runtime/plan.json) | Accepted with documented limitations | 6 |
+| R3 | [Shared pipeline integration and acceptance](docs/superpowers/plans/2026-09-25-r3-pipeline-integration/plan.json) | Accepted with documented limitations | 7 |
+| R4 | [Bounded dispatch and affected verification](docs/superpowers/plans/2026-09-25-r4-execution-efficiency/plan.json) | Accepted with documented limitations | 5 |
+| R5 | [Generic reuse, requirement profiles and templates](docs/superpowers/plans/2026-09-25-r5-reuse-foundation/plan.json) | In progress; Tasks 1–2 complete | 7 |
 
-**29 active tasks across five rounds.** The old R6 plan has zero active tasks and
+**29 planned tasks across five rounds: 22 accepted in R1–R4 and 7 planned for R5.** The old R6 plan has zero active tasks and
 three historical task references; it is explicitly non-executable.
 The original twelve-task transition-backlog remains non-executable historical input.
 Task IDs are local to a round; prerequisite acceptance orders shared file edits
@@ -218,9 +230,9 @@ between rounds. Source drift checks refine interfaces, not reopen confirmed choi
 
 The ZIP contains recall/catalog/promotion tooling, not form widgets. Current
 catalog code differs from it and includes newer provenance controls. R5 must
-preserve those controls. Audit all actual call sites again after R3 changes.
-No new code/tests/runtime workers or remote repository were executed/created
-during this authoring task.
+preserve those controls and audit current call sites. At original roadmap
+authoring, no new code/tests/runtime workers or remote repository were
+executed/created.
 
 ## 5. Possible future investigation
 
@@ -231,4 +243,4 @@ value and compare alternatives before selecting a solution: existing interactive
 classification, deterministic hints, Jev or another classifier. No provider or
 activation policy is approved. The [old R6 plan](docs/superpowers/plans/2026-09-25-r6-brainstorming-advisory/plan.json)
 is reference-only and must not run. This deferral does not remove existing Jev
-Sites 1–5.
+Sites 1–5.\n\n\n

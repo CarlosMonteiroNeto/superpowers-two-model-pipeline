@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex.local/schemas/stage-capability.schema.json",
+  "title": "Flutter stage capability disposition",
+  "type": "object",
+  "required": [
+    "version",
+    "stages",
+    "capabilities",
+    "claims_new_ecosystem_support",
+    "generic_fixtures_are_contract_only"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "stages": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^phase-[0-8]$" }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 9,
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "claims_new_ecosystem_support": { "const": false },
+    "generic_fixtures_are_contract_only": { "const": true }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "required": [
+        "stage",
+        "source",
+        "current_owner",
+        "disposition",
+        "target_owner",
+        "plan_task",
+        "evidence",
+        "callers"
+      ],
+      "properties": {
+        "stage": { "type": "string", "pattern": "^phase-[0-8]$" },
+        "source": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "current_owner": { "type": "string", "minLength": 1 },
+        "disposition": { "enum": ["shared", "flutter-specific", "adaptation-required"] },
+        "target_owner": { "type": "string", "minLength": 1 },
+        "plan_task": { "type": "string", "pattern": "^(R5\\.[2-7]|R[1-4]\\.[1-9])$" },
+        "evidence": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "callers": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -19,6 +19,12 @@ import os
 import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+SHARED_SCRIPTS = Path(__file__).resolve().parents[2] / "two-model-sdd-pipeline" / "scripts"
+if str(SHARED_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SHARED_SCRIPTS))
+import solution_research
 
 GH_API = os.environ.get("GITHUB_API_BASE", "https://api.github.com")
 
@@ -323,7 +329,7 @@ def collect_candidates(specific_query, generic_query, token=None):
             return []
         return search_resp.get("items", [])
 
-    def _score_item(item):
+    def _score_item(item, requirement):
         """Score a single search result item. Returns scored dict or None."""
         full_name = item.get("full_name", "")
         parts = full_name.split("/")
@@ -334,6 +340,23 @@ def collect_candidates(specific_query, generic_query, token=None):
             data = gather_data(owner, repo, token)
             score = compute_score(data)
             score["data"] = data
+            license_value = data.get("license")
+            known_licenses = {"mit", "apache", "bsd"}
+            license_info = ({"status": "known", "value": license_value}
+                            if isinstance(license_value, str) and license_value.lower() in known_licenses
+                            else {"status": "unknown", "value": None})
+            research_record = solution_research.collect(
+                {"requirement": requirement or "Flutter reusable template"},
+                {"search": lambda _request: [{
+                    "name": full_name,
+                    "source": {"type": "github", "uri": "https://github.com/" + full_name},
+                    "evidence": {"provider": "github", "fields": sorted(data), "collected": True},
+                    "compatibility": {"flutter_ready": data.get("flutter_ready"), "sdk": data.get("sdk")},
+                    "license": license_info,
+                }]},
+            )
+            if research_record["alternatives"]:
+                score["research_record"] = research_record["alternatives"][0]
             return score
         except Exception:
             return None
@@ -345,7 +368,7 @@ def collect_candidates(specific_query, generic_query, token=None):
     specific_candidates = []
     auto_count = 0
     for item in specific_items:
-        scored = _score_item(item)
+        scored = _score_item(item, specific_query)
         if scored is None:
             continue
         specific_candidates.append(scored)
@@ -366,7 +389,7 @@ def collect_candidates(specific_query, generic_query, token=None):
         generic_items = _fetch_search_items(generic_query)
         generic_candidates = []
         for item in generic_items:
-            scored = _score_item(item)
+            scored = _score_item(item, generic_query)
             if scored is None:
                 continue
             generic_candidates.append(scored)

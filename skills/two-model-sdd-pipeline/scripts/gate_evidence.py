@@ -483,9 +483,20 @@ def capture_workspace_inputs(workspace: str, selection: list[str], mode: str) ->
         if raw_path:
             files.append({"status": "added", "path": raw_path.decode("utf-8")})
     tracked_paths = _git(root, "ls-files", "-z", binary=True).split(b"\0")
-    test_paths = sorted({path.decode("utf-8") for path in tracked_paths if path}
-                        | {item["path"] for item in files if item.get("status") != "deleted"}
-                        | {item["new_path"] for item in files if item.get("status") == "renamed"})
+    current_paths = {path.decode("utf-8") for path in tracked_paths if path}
+    current_paths.update(item["path"] for item in files
+                         if item.get("status") != "deleted" and "path" in item)
+    current_paths.update(item["new_path"] for item in files if item.get("status") == "renamed")
+    # ls-files can still name a path removed from the index/worktree during a
+    # staged rename or deletion. Only existing regular files are executable
+    # test selectors; retain both rename endpoints in `files` for impact logic.
+    test_paths = []
+    for path in current_paths:
+        relative = _safe_repo_path(path)
+        candidate = root.joinpath(*relative.parts)
+        if candidate.is_file() and not candidate.is_symlink():
+            test_paths.append(path)
+    test_paths.sort()
     tree_digest = hashlib.sha256()
     tree_digest.update(_git(root, "diff", "--binary", base, binary=True))
     for item in sorted(files, key=lambda value: (value.get("path", value.get("old_path", "")), value["status"])):

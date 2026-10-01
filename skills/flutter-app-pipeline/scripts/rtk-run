@@ -25,6 +25,9 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+# RTK stays a Flutter command adapter; output shaping and execution ownership
+# remain in the shared cmd entrypoint. This wrapper adds no classification or
+# extra dispatch stage.
 CMD_BIN="${CMD_BIN:-$SCRIPT_DIR/../../two-model-sdd-pipeline/scripts/cmd}"
 FLUTTER_BIN="${FLUTTER_BIN:-flutter}"
 TMP_DIR="${TMPDIR:-/tmp}"

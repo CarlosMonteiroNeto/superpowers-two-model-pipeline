@@ -1,0 +1,9 @@
+{
+  "profile_id": "generic",
+  "version": "1.0.0",
+  "applicability": {},
+  "requirements": [
+    { "id": "error-handling", "description": "Define behavior for expected failure paths.", "checks": ["failure-paths"], "dependencies": [] },
+    { "id": "input-contract", "description": "Validate inputs at the relevant boundary.", "checks": ["input-validation"], "dependencies": [] }
+  ]
+}
