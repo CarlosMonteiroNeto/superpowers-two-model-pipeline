@@ -80,6 +80,23 @@ else
 fi
 
 set +e
+# Recorded instruction package: the submitted channels (prompt file bytes
+# plus the inline dispatch prefix) are hashed and persisted before the
+# worker starts, so no behavioral prefix travels unrecorded.
+envelope_file="$log.envelope.json"
+prompt_sha=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$prompt_file")
+prefix_sha=$(printf '%s' "$prompt" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')
+python3 - "$envelope_file" "$prompt_file" "$prompt_sha" "$prefix_sha" "$cont" <<'PY'
+import json, sys
+_, path, prompt_file, prompt_sha, prefix_sha, cont = sys.argv
+envelope = {"version": 1, "prompt_file": prompt_file,
+            "channels": [{"name": "prompt_file", "sha256": prompt_sha},
+                         {"name": "dispatch_prefix", "sha256": prefix_sha}],
+            "continued_from": (cont or None), "session": None}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(envelope, fh, ensure_ascii=False, sort_keys=True, indent=2)
+    fh.write("\n")
+PY
 # Live digest filter (python program via -c so stdin stays on the pipe;
 # a heredoc would steal stdin and leave tee readerless -> SIGPIPE).
 # Prints short progress lines to stdout; full stream still lands in $log
@@ -180,6 +197,17 @@ fi
 # instead of a cache-billed prefix (ADR-0003), and nothing would show it.
 sid=""
 [ -f "$sid_file" ] && sid=$(cat "$sid_file" 2>/dev/null || true)
+if [ -n "$sid" ]; then python3 - "$envelope_file" "$sid" <<'PY'
+import json, sys
+_, path, sid = sys.argv
+with open(path, encoding="utf-8") as fh:
+    envelope = json.load(fh)
+envelope["session"] = sid
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(envelope, fh, ensure_ascii=False, sort_keys=True, indent=2)
+    fh.write("\n")
+PY
+fi
 if [ -z "$sid" ]; then
   "$SCRIPT_DIR/ledger-append" "$sid_dir/ledger.jsonl" session_lost "$task" \
     "no session id recorded by dispatch" >/dev/null 2>&1 || true

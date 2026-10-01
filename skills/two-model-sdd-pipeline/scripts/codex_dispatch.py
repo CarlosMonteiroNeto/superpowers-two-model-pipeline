@@ -91,6 +91,66 @@ def publish_operator_session_locator(workspace, task_id, agent, result):
     return target
 
 
+def _package_envelope_path(prompt_path):
+    return str(pathlib.Path(prompt_path).parent / "envelope.json")
+
+
+def _verify_package_envelope(prompt_path, prompt_hash):
+    """Cross-check the prepare() envelope sibling when the caller used it.
+
+    Returns the verified package envelope, or None for legacy callers that
+    only carry prompt bytes. A present-but-divergent envelope fails closed:
+    altered bytes must never reach a worker.
+    """
+    sidecar = pathlib.Path(prompt_path).parent / "envelope.json"
+    if not sidecar.is_file():
+        return None
+    try:
+        envelope = json.loads(sidecar.read_text(encoding="utf-8"))
+    except ValueError:
+        raise ValueError("prompt envelope is not valid JSON")
+    if not isinstance(envelope, dict):
+        raise ValueError("prompt envelope is not valid JSON")
+    if envelope.get("prompt_sha256") != prompt_hash:
+        raise ValueError("prompt envelope does not match prompt bytes")
+    channels = envelope.get("channels")
+    if not isinstance(channels, list) or not channels:
+        raise ValueError("prompt envelope has no channels")
+    canonical = {"role": envelope.get("role"),
+                 "prompt_sha256": envelope.get("prompt_sha256"),
+                 "policy_sha256": envelope.get("policy_sha256"),
+                 "channels": channels}
+    recomputed = hashlib.sha256(json.dumps(
+        canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if recomputed != envelope.get("instruction_envelope_hash"):
+        raise ValueError("prompt envelope hash mismatch")
+    return envelope
+
+
+def _submission_envelope(role, prompt_hash, package_envelope, prefix_bytes,
+                         prefix_source, developer_instructions, resume_id,
+                         submitted_sha):
+    """Describe every submitted instruction channel with digests."""
+    channels = [{"name": "prepared_prompt", "sha256": prompt_hash},
+                {"name": "role_instruction", "source": prefix_source,
+                 "sha256": hashlib.sha256(prefix_bytes).hexdigest()}]
+    if isinstance(developer_instructions, str) and developer_instructions:
+        channels.append({"name": "developer_instructions",
+                         "sha256": hashlib.sha256(
+                             developer_instructions.encode("utf-8")).hexdigest()})
+    resume = None
+    if isinstance(resume_id, str) and resume_id:
+        resume = {"resumed_from": resume_id, "package_sha256": prompt_hash}
+    body = {"role": role, "prompt_sha256": prompt_hash,
+            "channels": channels, "resume": resume,
+            "submitted_stdin_sha256": submitted_sha}
+    body["instruction_envelope_hash"] = hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    body["prepared_envelope_hash"] = (package_envelope or {}).get(
+        "instruction_envelope_hash")
+    return body
+
+
 def _event_stream(raw):
     events = []
     for line in raw.splitlines():
@@ -162,6 +222,7 @@ def run_dispatch(request, runtime):
     prompt = prompt_path.read_text(encoding="utf-8")
     if hashlib.sha256(prompt.encode("utf-8")).hexdigest() != req["prompt_hash"]:
         raise ValueError("prompt hash mismatch")
+    package_envelope = _verify_package_envelope(prompt_path, req["prompt_hash"])
     capabilities = runtime.get("capabilities")
     if not isinstance(capabilities, dict): raise ValueError("Codex capability report required")
     role_config = manifest.get("roles", {}).get(req["role"], {})
@@ -177,6 +238,8 @@ def run_dispatch(request, runtime):
         role_file=pathlib.Path(__file__).resolve().parent.parent/"codex"/(req["role"]+".md")
         role_instruction=role_file.read_text(encoding="utf-8") if role_file.is_file() else ""
     if not isinstance(role_instruction,str) or not role_instruction.strip(): raise ValueError("packaged role instructions are missing")
+    prefix_source = "runtime" if runtime.get("role_instructions",{}).get(req["role"]) else "codex/%s.md" % req["role"]
+    prefix_bytes = (role_instruction.rstrip()+"\n\n").encode("utf-8")
     prompt=role_instruction.rstrip()+"\n\n"+prompt
     resume_id = runtime.get("resume_session_id")
     recovery = runtime.get("recovery")
@@ -204,6 +267,15 @@ def run_dispatch(request, runtime):
     policy_path=attempt_dir/"policy.json"
     policy=codex_policy.build_attempt_policy(req,runtime)
     _json(str(policy_path),policy)
+    submitted_sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    attempt_envelope = _submission_envelope(
+        req["role"], req["prompt_hash"], package_envelope, prefix_bytes,
+        prefix_source, runtime.get("developer_instructions"), resume_id,
+        submitted_sha)
+    prepared_text = pathlib.Path(ep["prompt_path"]).read_text(encoding="utf-8")
+    if hashlib.sha256(prefix_bytes + prepared_text.encode("utf-8")).hexdigest() != submitted_sha:
+        raise ValueError("submitted prompt does not match recorded channels")
+    _json(str(attempt_dir/"envelope.json"), attempt_envelope)
     protected_artifacts=None
     protected_before=None
     if req["role"]=="operator":
