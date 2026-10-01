@@ -7,6 +7,7 @@
       "source_path": "skills/test-driven-development/SKILL.md",
       "section": "The Iron Law",
       "decision": "retained",
+      "destination": "Test and implementation loop",
       "reason": "Keep test-first as the production-change gate."
     },
     {
@@ -14,6 +15,7 @@
       "source_path": "skills/test-driven-development/SKILL.md",
       "section": "Red-Green-Refactor",
       "decision": "retained",
+      "destination": "Test and implementation loop",
       "reason": "Keep the observed RED, minimal implementation and verified GREEN cycle."
     },
     {
@@ -21,6 +23,7 @@
       "source_path": "skills/test-driven-development/SKILL.md",
       "section": "Common Rationalizations",
       "decision": "replaced",
+      "destination": "Test and implementation loop",
       "reason": "Condense the repeated rationale into direct test and verification rules."
     },
     {
@@ -28,6 +31,7 @@
       "source_path": "skills/test-driven-development/writing-good-tests.md",
       "section": "Principle 1: Name the Break",
       "decision": "retained",
+      "destination": "Test and implementation loop",
       "reason": "Require behavioral acceptance tests with hand-derived expectations."
     },
     {
@@ -35,6 +39,7 @@
       "source_path": "skills/test-driven-development/writing-good-tests.md",
       "section": "Principle 2: Exercise the Real Thing",
       "decision": "retained",
+      "destination": "Test and implementation loop",
       "reason": "Keep tests focused on observable behavior rather than mocks of the target."
     },
     {
@@ -42,6 +47,7 @@
       "source_path": "skills/subagent-driven-development/SKILL.md",
       "section": "The Task Loop",
       "decision": "replaced",
+      "destination": "Pipeline authority",
       "reason": "Script CEO owns dispatch, scheduling, and worktree assignment."
     },
     {
@@ -49,6 +55,7 @@
       "source_path": "skills/subagent-driven-development/SKILL.md",
       "section": "Finish",
       "decision": "replaced",
+      "destination": "Pipeline authority",
       "reason": "Workers report results; Script CEO owns commits and integration."
     },
     {
@@ -56,6 +63,7 @@
       "source_path": "skills/subagent-driven-development/implementer-prompt.md",
       "section": "Implementer Subagent Prompt Template",
       "decision": "retained",
+      "destination": "Pipeline authority",
       "reason": "Keep bounded task scope, self-review, and a factual completion report."
     },
     {
@@ -63,6 +71,7 @@
       "source_path": "skills/verification-before-completion/SKILL.md",
       "section": "The Iron Law",
       "decision": "retained",
+      "destination": "Verification boundaries",
       "reason": "Claims about passing or completion require fresh command evidence."
     },
     {
@@ -70,6 +79,7 @@
       "source_path": "skills/subagent-driven-development/task-reviewer-prompt.md",
       "section": "Task Reviewer Prompt Template",
       "decision": "retained",
+      "destination": "Independent review",
       "reason": "Preserve an independent review of implementation against task acceptance."
     },
     {
@@ -77,6 +87,7 @@
       "source_path": "skills/requesting-code-review/code-reviewer.md",
       "section": "Issues",
       "decision": "retained",
+      "destination": "Independent review",
       "reason": "Keep actionable findings with severity, location, and impact."
     },
     {
@@ -84,6 +95,7 @@
       "source_path": "skills/requesting-code-review/SKILL.md",
       "section": "How to Request",
       "decision": "replaced",
+      "destination": "Independent review",
       "reason": "Use the pipeline review package and structured result instead of interactive delegation."
     },
     {
@@ -91,6 +103,7 @@
       "source_path": "skills/receiving-code-review/SKILL.md",
       "section": "The Response Pattern",
       "decision": "replaced",
+      "destination": "Independent review",
       "reason": "Route evidence-backed findings through Script CEO rather than direct reviewer-to-worker conversation."
     },
     {
@@ -98,6 +111,7 @@
       "source_path": "skills/verification-before-completion/SKILL.md",
       "section": "The Gate Function",
       "decision": "retained",
+      "destination": "Independent review",
       "reason": "Require direct evidence before affirming test, build, or completion claims."
     },
     {
@@ -105,6 +119,7 @@
       "source_path": "skills/systematic-debugging/SKILL.md",
       "section": "Phase 1: Root Cause Investigation",
       "decision": "retained",
+      "destination": "Bounded escalation judgment",
       "reason": "Use evidence and data flow to judge escalation claims."
     },
     {
@@ -112,6 +127,7 @@
       "source_path": "skills/systematic-debugging/SKILL.md",
       "section": "Phase 4: Implementation",
       "decision": "replaced",
+      "destination": "Bounded escalation judgment",
       "reason": "Director returns a bounded proposal or route; it does not edit files or approve evidence."
     },
     {
@@ -119,6 +135,7 @@
       "source_path": "skills/subagent-driven-development/re-review-prompt.md",
       "section": "Scoped Re-Review Prompt Template",
       "decision": "retained",
+      "destination": "Bounded escalation judgment",
       "reason": "Keep judgment confined to the disputed finding and its concrete evidence."
     },
     {
@@ -126,6 +143,7 @@
       "source_path": "skills/using-superpowers/SKILL.md",
       "section": "Skill Priority",
       "decision": "replaced",
+      "destination": "Pipeline authority",
       "reason": "Workers receive the already approved role package; they do not restart brainstorming or recursively select skills."
     }
   ]

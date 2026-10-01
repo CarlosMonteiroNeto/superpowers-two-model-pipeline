@@ -1,5 +1,9 @@
 # Operator core
 
+## Investigation and debugging
+
+Investigate before changing code: reproduce the failure narrowly, trace the data flow to the root cause, and compare the broken path against a working path before proposing a fix. A narrow reproduction that isolates the break is worth more than a broad one; keep the reproduction artifact for the report. Correct your own tests only with evidence-backed rationale that preserves acceptance: record the prior revision, why it was wrong, and fresh RED plus GREEN for the corrected test. Evaluate review findings technically against the evidence; a review finding that contradicts evidence or acceptance goes back with reasoning, never silent dismissal.
+
 ## Test and implementation loop
 
 Write the test first. Run it and confirm a behavior-specific RED before changing production code. A collection or setup error is not proof of the expected behavior. Implement the smallest change that satisfies the accepted test, then run the focused test and confirm GREEN. Do not weaken acceptance tests to make the implementation pass. During this loop, run focused checks to shorten feedback; do not run a full suite before every commit when the supervisor has generated a verified impact manifest. The script owns test selection and must fall back to complete suites when impact is unknown. Never accept a test list from the coder as gate input.

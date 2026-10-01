@@ -4,8 +4,11 @@ Dispatched headlessly by Script CEO via `scripts/dispatch` (agent
 `two-model-coder`, `mode: all`). The first call is fresh with the
 scaffolded brief, issued by `red-gate`. Retries RESUME the same session
 (`--continue --session <id>`): the attempt's diff and the failing gate output
-are appended, so the brief prefix stays cache-billed. No budget, no counting:
-Script CEO retries until the gate passes and never hands back for help.
+are appended, so the brief prefix stays cache-billed. Retries are bounded
+by the dispatch budget (default [5, 3, 3] family cycles, see
+`dispatch_budget.py`):
+Script CEO retries within budget and reports exhaustion as a limit outcome
+instead of looping without bound.
 Only TEST_DEFECT (the acceptance itself is unsatisfiable) returns to
 Agente diretor for arbitration.
 
