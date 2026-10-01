@@ -136,9 +136,17 @@ def build_attempt_policy(request, runtime):
         except ValueError:
             continue
         if protected.is_file(): protected_paths.append(str(protected.resolve()))
+    try:
+        import working_areas
+        scope = working_areas.normalize(task, str(worktree))
+        scope_unresolved = False
+    except ValueError:
+        scope = {"mode": "legacy", "roots": [], "exact_paths": []}
+        scope_unresolved = True
     return {"role":request["role"],"workspace_root":str(worktree),"task_id":request["task_id"],
         "attempt_id":request["dispatch_id"],"touches":list(task.get("touches",[])),
         "new_test_files":list(verification.get("new_test_files",[])),
+        "scope":scope,"scope_unresolved":scope_unresolved,
         "protected_paths":protected_paths,
         "runner_commands":runner_commands,
         "read_only_commands":runtime.get("read_only_commands",[]),

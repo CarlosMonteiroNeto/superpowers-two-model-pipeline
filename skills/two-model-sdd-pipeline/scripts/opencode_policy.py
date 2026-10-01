@@ -129,9 +129,19 @@ def build_settings(role, runtime, request):
                 unsupported.append("protected path outside workspace: " + str(value))
     if unsupported:
         enforced = [entry for entry in enforced if entry not in unsupported]
+    scope = request.get("scope")
+    scope_record = None
+    if (isinstance(scope, dict) and scope.get("mode") == "areas"
+            and isinstance(scope.get("roots"), list)
+            and all(isinstance(item, str) for item in scope["roots"])):
+        enforced.append("directory-scoped edits")
+        scope_record = {"mode": "areas", "roots": list(scope["roots"])}
     config = {"agent": {settings["agent"]: {"model": item["model"], "variant": settings["variant"],
                                              "prompt": request.get("developer_instructions", item.get("instruction", "")),
                                              "permission": permission}}}
-    return {"config": config, "capabilities": {"enforced": sorted(set(enforced)),
-              "unsupported": sorted(set(str(v) for v in unsupported)),
-              "available": not unsupported and available_paths}}
+    capabilities = {"enforced": sorted(set(enforced)),
+                    "unsupported": sorted(set(str(v) for v in unsupported)),
+                    "available": not unsupported and available_paths}
+    if scope_record is not None:
+        capabilities["scope"] = scope_record
+    return {"config": config, "capabilities": capabilities}

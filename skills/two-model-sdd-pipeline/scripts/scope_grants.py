@@ -6,6 +6,35 @@ import hashlib
 import hmac
 
 
+_BUILTIN_PROTECTED_PREFIXES = (".git/", ".superpowers/")
+_BUILTIN_PROTECTED_BASENAMES = frozenset({
+    "package.json", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
+    "pnpm-lock.yaml", "requirements.txt", "requirements-dev.txt",
+    "Cargo.toml", "Cargo.lock", "go.mod", "go.sum", "pubspec.yaml",
+    "pubspec.lock", "Gemfile", "Gemfile.lock", "poetry.lock",
+    "composer.json", "composer.lock", "Pipfile", "Pipfile.lock", "pom.xml",
+    "build.gradle", "build.gradle.kts",
+})
+
+
+def is_protected(relative_path: str) -> bool:
+    """True when a canonical repo-relative path is always off-limits.
+
+    Covers pipeline control state and dependency manifests/lockfiles: Git
+    metadata, control state, manifests, and ``*.lock``. Plans, ledgers, and
+    permission configuration travel through explicit protected_paths; the
+    builtins here are the categories no task may ever claim.
+    """
+    if not isinstance(relative_path, str) or not relative_path:
+        return True
+    lowered = relative_path.casefold()
+    for prefix in _BUILTIN_PROTECTED_PREFIXES:
+        if lowered == prefix.rstrip("/") or lowered.startswith(prefix):
+            return True
+    base = lowered.rsplit("/", 1)[-1]
+    return base in _BUILTIN_PROTECTED_BASENAMES or base.endswith(".lock")
+
+
 _SIGNED_FIELDS = ("path", "run_id", "family_id", "task_id", "attempt_id",
                   "grant_id", "issuer", "contracts")
 
@@ -43,6 +72,31 @@ def verify_issued(record, key):
     return hmac.compare_digest(expected, str(record.get("signature", "")))
 
 
+def _in_granted_areas(path: str, ownership: dict) -> bool:
+    """True when a canonical path sits inside the owner's directory scope.
+
+    ``ownership["scope"]`` carries normalized ``roots`` (``"."`` is the
+    repository itself). Comparison is case-aware per platform and treats
+    ``src/a`` as covering ``src/a/x.py`` but never ``src/ab``.
+    """
+    scope = ownership.get("scope")
+    if not isinstance(scope, dict):
+        return False
+    roots = scope.get("roots")
+    if not isinstance(roots, list):
+        return False
+    folded = os.path.normcase(path.replace("/", os.sep))
+    for root in roots:
+        if not isinstance(root, str) or not root:
+            continue
+        if root == ".":
+            return True
+        folded_root = os.path.normcase(root.replace("/", os.sep))
+        if folded == folded_root or folded.startswith(folded_root + os.sep):
+            return True
+    return False
+
+
 def _normal(path):
     if not isinstance(path, str) or not path.strip() or "\\" in path:
         raise ValueError("invalid canonical relative path")
@@ -70,6 +124,9 @@ def reserve(request: dict, ownership: dict) -> dict:
                  for x in ownership.get("protected_paths", [])}
     if any(path_key == p or path_key.startswith(p + os.sep) for p in protected):
         return {"decision": "block", "reason": "protected path", "path": path}
+    if is_protected(path):
+        return {"decision": "block", "reason": "protected path", "path": path}
+    in_area = _in_granted_areas(path, ownership)
     in_root = any(path == root or path.startswith(root + "/") for root in allowed_roots)
     if not in_root:
         return {"decision": "block", "reason": "outside approved task roots", "path": path}
@@ -83,7 +140,7 @@ def reserve(request: dict, ownership: dict) -> dict:
         return {"decision": "block", "reason": "path conflicts with active or future task scope", "path": path}
     approved = {os.path.normcase(_resolve_path(root, _normal(x)) if repo_root else _normal(x))
                 for x in ownership.get("director_approved_existing", [])}
-    if kind == "existing_file" and path_key not in approved:
+    if kind == "existing_file" and path_key not in approved and not in_area:
         return {"decision": "block", "reason": "existing file requires director approval", "path": path}
     if kind not in ("new_file", "existing_file"):
         return {"decision": "block", "reason": "unsupported path kind", "path": path}
@@ -97,7 +154,8 @@ def reserve(request: dict, ownership: dict) -> dict:
     registry = ownership.get("registry_path")
     if registry:
         _reserve_registry(registry, path, ownership)
-    return {"decision": "grant", "path": path, "run_id": ownership.get("run_id"), "family_id": ownership.get("family_id")}
+    return {"decision": "grant", "path": path, "run_id": ownership.get("run_id"), "family_id": ownership.get("family_id"),
+            "scope": "areas" if in_area else "exact"}
 
 
 def _resolve_path(root, relative):
