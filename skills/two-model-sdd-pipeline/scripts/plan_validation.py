@@ -1,6 +1,12 @@
 """Strict validation for executable canonical pipeline plans."""
 import os
+import pathlib
 import re
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+import working_areas
 
 TASK_REQUIRED = {"id", "title", "summary", "spec_refs", "touches", "depends_on", "acceptance", "interfaces", "verification"}
 ROOT_REQUIRED = {"version", "title", "spec_doc", "global_constraints", "tasks"}
@@ -113,6 +119,17 @@ def validate_plan(plan: dict, repo_root: str) -> None:
                 _fail("task {} new test files belong in verification.new_test_files, not touches".format(tid))
             _claim(path, seen_paths)
             all_paths.append(path)
+        if "working_areas" in task:
+            areas = task["working_areas"]
+            if (not isinstance(areas, list) or not areas
+                    or not all(isinstance(item, str) and item.strip()
+                               for item in areas)):
+                _fail("task {} working_areas must be a non-empty string list".format(tid))
+            for area in areas:
+                try:
+                    working_areas.check_area(root, area)
+                except ValueError:
+                    _fail("task {} working area escapes the repository: {}".format(tid, area))
         for ref in task["spec_refs"]:
             if not isinstance(ref, str) or "#" not in ref:
                 _fail("task {} has invalid spec ref".format(tid))

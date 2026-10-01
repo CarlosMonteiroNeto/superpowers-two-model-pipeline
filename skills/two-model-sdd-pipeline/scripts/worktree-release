@@ -154,5 +154,18 @@ if ! git branch -d "$branch"; then
   exit 1
 fi
 
+# Directory authority: the freed worktree ends the task lifecycle, so its
+# area reservation is released with completion attested. A missing record
+# (legacy or pre-authority dispatch) only warns: leaked reservations of
+# dead owners are retired by liveness on the next claim.
+areas_out=$(python3 "$script_dir/working_areas.py" release-for-task "$ws/reservations.json" "$ws" "$task" 2>&1) || {
+  rc=$?
+  if [ "$rc" -eq 1 ]; then
+    echo "WORKTREE-RELEASE: no area reservation held for task $task - continuing" >&2
+  else
+    echo "WORKTREE-RELEASE: area release failed for task $task ($areas_out) - continuing" >&2
+  fi
+}
+
 "$script_dir/ledger-append" "$ws/ledger.jsonl" worktree_release "$task" \
   "released $branch" branch="$branch" run_id="$owner_run"

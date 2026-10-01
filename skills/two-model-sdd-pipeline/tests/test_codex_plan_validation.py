@@ -101,3 +101,20 @@ class PlanValidationTests(unittest.TestCase):
                 with self.subTest(candidate=candidate):
                     with self.assertRaises(ValueError):
                         validator.validate_plan(candidate, str(root))
+
+    def test_working_areas_are_optional_but_strictly_validated(self):
+        validator = load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / "docs").mkdir()
+            (root / "docs" / "spec.md").write_text("# Contract\n", encoding="utf-8")
+            plan = valid_plan()
+            plan["tasks"][0]["working_areas"] = ["src/a", "."]
+            validator.validate_plan(plan, str(root))
+            for bad in (["../outside"], ["/absolute"], ["C:/win"],
+                        ["src//double"], ["a", 3], "src/a", []):
+                plan = valid_plan()
+                plan["tasks"][0]["working_areas"] = bad
+                with self.subTest(areas=bad):
+                    with self.assertRaises(ValueError):
+                        validator.validate_plan(plan, str(root))

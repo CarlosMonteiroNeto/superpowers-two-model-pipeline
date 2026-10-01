@@ -20,9 +20,24 @@ per-task index; one Python pass, no subprocess; git none.
 
 import json
 import os
+import subprocess
 import sys
 
+import working_areas
+
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def repo_root_of(workspace):
+    try:
+        out = subprocess.run(
+            ["git", "-C", workspace, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except OSError:
+        pass
+    return workspace
 
 
 def load_ledger(path):
@@ -62,17 +77,43 @@ def touches_of(task, plan=None):
     return {os.path.normcase(str(p).replace("\\", "/")).replace("\\", "/") for p in result}
 
 
-def conflicts(selected, candidate, plan=None):
+def conflicts(selected, candidate, plan=None, repo_root=None):
     """Declared-touches overlap between a candidate and the chosen wave.
 
     A local set intersection (the same contract as the standalone
     `touches-overlap` CLI, which stays the single definition of the rule and
-    keeps its exit-code contract for other callers).
+    keeps its exit-code contract for other callers). When a repository root
+    is supplied, directory authority from `working_areas` applies through
+    the one shared overlap definition: nested areas, areas covering legacy
+    exact paths, and the explicit repository root all conflict.
     """
     claimed = set()
     for t in selected:
         claimed |= touches_of(t, plan)
-    return sorted(claimed & touches_of(candidate, plan))
+    shared = sorted(claimed & touches_of(candidate, plan))
+    if shared:
+        return shared
+    if repo_root is None:
+        return []
+    try:
+        candidate_scope = working_areas.normalize(candidate, repo_root)
+    except ValueError:
+        return []
+    reasons = set()
+    for t in selected:
+        try:
+            scope = working_areas.normalize(t, repo_root)
+        except ValueError:
+            continue
+        if working_areas.overlap(scope, candidate_scope, repo_root):
+            for root in scope["roots"] + candidate_scope["roots"]:
+                reasons.add("area:" + root)
+            for path in (scope["exact_paths"]
+                         + candidate_scope["exact_paths"]):
+                for root in scope["roots"] + candidate_scope["roots"]:
+                    if root == "." or path == root or path.startswith(root + "/"):
+                        reasons.add(path)
+    return sorted(reasons)
 
 
 def main():
@@ -144,11 +185,14 @@ def main():
     # wall for every later candidate that shares any file with it. The
     # disjointness check is inlined (a set intersection); touches-overlap stays
     # the standalone CLI so its exit-code contract and tests are intact.
+    # Directory authority resolves against the repository holding the
+    # workspace so opted-in areas serialize through the same definition.
+    root = repo_root_of(ws)
     selected = []
     for t in sorted(ready, key=lambda x: (len(touches_of(x)), int(x["id"]))):
         if len(selected) >= cap:
             break
-        clash = conflicts(selected, t, plan)
+        clash = conflicts(selected, t, plan, root)
         if clash:
             print(
                 "WAVE-DEFER: task {} deferred - shares {} with the wave".format(

@@ -61,6 +61,35 @@ class TouchesOverlapTest(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
 
+    def test_area_overlap_reports_conflict(self):
+        self.plan["tasks"] = [
+            {"id": 1, "touches": [], "working_areas": ["src/a"]},
+            {"id": 2, "touches": [], "working_areas": ["src/a/b"]},
+        ]
+        (self.ws / "plan.json").write_text(json.dumps(self.plan), encoding="utf-8")
+        r = self.run_it(1, 2)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("1 and 2", r.stderr)
+
+    def test_sibling_areas_are_disjoint(self):
+        self.plan["tasks"] = [
+            {"id": 1, "touches": [], "working_areas": ["src/a"]},
+            {"id": 2, "touches": [], "working_areas": ["src/ab"]},
+        ]
+        (self.ws / "plan.json").write_text(json.dumps(self.plan), encoding="utf-8")
+        r = self.run_it(1, 2)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_legacy_path_inside_area_conflicts(self):
+        self.plan["tasks"] = [
+            {"id": 1, "touches": [], "working_areas": ["src/a"]},
+            {"id": 2, "touches": ["src/a/x.py"]},
+        ]
+        (self.ws / "plan.json").write_text(json.dumps(self.plan), encoding="utf-8")
+        r = self.run_it(1, 2)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("1 and 2", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,6 +71,18 @@ while [ "$attempt" -lt "$MAX_TRIES" ]; do
     python3 "$SCRIPT_DIR/dispatch_budget.py" reserve-opencode "$budget_ws" "$task" "$prompt" "$resume_session" \
       || { echo "DISPATCH-RETRY: coder dispatch budget requires director assessment" >&2; exit 7; }
   fi
+  # Directory authority: reserve the task's working areas before any worker
+  # starts. A conflicting family fails closed here with a concrete scope
+  # blocker; retries never run unreserved.
+  if [[ "$agent" == two-model-coder* ]] && [ -n "$task" ] && [ -n "$log" ]; then
+    areas_ws=$(dirname "$log")
+    if [ -f "$areas_ws/plan.json" ] && [ -f "$areas_ws/.pipeline-identity.json" ]; then
+      areas_out=$(python3 "$SCRIPT_DIR/working_areas.py" reserve-for-task "$areas_ws/reservations.json" "$areas_ws" "$task" 2>&1) || {
+        echo "DISPATCH-RETRY: SCOPE-BLOCKED - task $task area is held by another family ($areas_out)" >&2
+        exit 1
+      }
+    fi
+  fi
   set +e
   marker=$(mktemp)
   rm -f "$marker"

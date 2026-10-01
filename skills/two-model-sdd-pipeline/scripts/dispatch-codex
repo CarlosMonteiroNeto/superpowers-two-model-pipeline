@@ -115,6 +115,14 @@ try:
     else:
         values=parse_operator_args(args)
         request, workspace=build_operator_request(values,runtime)
+        import working_areas
+        areas_result=working_areas.reserve_for_task(
+            str(pathlib.Path(workspace)/"reservations.json"), str(workspace), request["task_id"])
+        if areas_result.get("decision") != "granted":
+            holder=areas_result.get("owner",{})
+            print("dispatch-codex: SCOPE-BLOCKED - task {} area is held by run={} family={}".format(
+                request["task_id"], holder.get("run_id"), holder.get("family_id")), file=sys.stderr)
+            raise SystemExit(7)
         budget_recorded=reserve_operator_budget(request,runtime,workspace)
         if values.get("--continue"):
             runtime["resume"]=True; runtime["resume_session_id"]=values["--continue"]
