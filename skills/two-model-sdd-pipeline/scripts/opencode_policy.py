@@ -129,9 +129,27 @@ def build_settings(role, runtime, request):
                 unsupported.append("protected path outside workspace: " + str(value))
     if unsupported:
         enforced = [entry for entry in enforced if entry not in unsupported]
+    scope = request.get("scope")
+    scope_record = None
+    if isinstance(scope, dict) and scope.get("mode") == "areas":
+        roots = scope.get("roots")
+        if (not isinstance(roots, list) or not roots
+                or not all(isinstance(item, str) for item in roots)):
+            raise ValueError("area scope roots must be a non-empty string list")
+        try:
+            import working_areas
+            canonical = [working_areas.check_area(
+                str(root), item) for item in roots]
+        except ValueError as exc:
+            raise ValueError("area scope root is invalid: %s" % exc) from exc
+        enforced.append("directory-scoped edits")
+        scope_record = {"mode": "areas", "roots": canonical}
     config = {"agent": {settings["agent"]: {"model": item["model"], "variant": settings["variant"],
                                              "prompt": request.get("developer_instructions", item.get("instruction", "")),
                                              "permission": permission}}}
-    return {"config": config, "capabilities": {"enforced": sorted(set(enforced)),
-              "unsupported": sorted(set(str(v) for v in unsupported)),
-              "available": not unsupported and available_paths}}
+    capabilities = {"enforced": sorted(set(enforced)),
+                    "unsupported": sorted(set(str(v) for v in unsupported)),
+                    "available": not unsupported and available_paths}
+    if scope_record is not None:
+        capabilities["scope"] = scope_record
+    return {"config": config, "capabilities": capabilities}

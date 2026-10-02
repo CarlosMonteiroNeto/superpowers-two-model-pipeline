@@ -91,6 +91,104 @@ def publish_operator_session_locator(workspace, task_id, agent, result):
     return target
 
 
+def _verify_package_envelope(prompt_path, prompt_hash):
+    """Cross-check the prepare() envelope sibling when the caller used it.
+
+    Returns the verified package envelope, or None for legacy callers that
+    only carry prompt bytes. A present-but-divergent envelope fails closed:
+    altered bytes must never reach a worker.
+    """
+    sidecar = pathlib.Path(str(prompt_path) + ".envelope.json")
+    if not sidecar.is_file():
+        sidecar = pathlib.Path(prompt_path).parent / "envelope.json"
+    if not sidecar.is_file():
+        return None
+    try:
+        envelope = json.loads(sidecar.read_text(encoding="utf-8"))
+    except ValueError:
+        raise ValueError("prompt envelope is not valid JSON")
+    if not isinstance(envelope, dict):
+        raise ValueError("prompt envelope is not valid JSON")
+    if envelope.get("prompt_sha256") != prompt_hash:
+        raise ValueError("prompt envelope does not match prompt bytes")
+    channels = envelope.get("channels")
+    if not isinstance(channels, list) or not channels:
+        raise ValueError("prompt envelope has no channels")
+    canonical = {"role": envelope.get("role"),
+                 "prompt_sha256": envelope.get("prompt_sha256"),
+                 "policy_sha256": envelope.get("policy_sha256"),
+                 "channels": channels}
+    recomputed = hashlib.sha256(json.dumps(
+        canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if recomputed != envelope.get("instruction_envelope_hash"):
+        raise ValueError("prompt envelope hash mismatch")
+    return envelope
+
+
+def _package_snapshot(package_envelope):
+    """Extract the comparable package provenance for session records."""
+    if not isinstance(package_envelope, dict):
+        return {"prompt_sha256": None, "policy_sha256": None,
+                "upstream_revision": None, "core_sha256_hex": None,
+                "instruction_envelope_hash": None}
+    return {key: package_envelope.get(key) for key in (
+        "prompt_sha256", "policy_sha256", "upstream_revision",
+        "core_sha256_hex", "instruction_envelope_hash")}
+
+
+def _reconcile_resume(old, package_envelope):
+    """Reconcile a resumed session against the current package explicitly.
+
+    Core instruction changes (upstream revision or core digest) fail
+    closed: an old session must never silently retain obsolete authority.
+    Prompt or policy drift is recorded as an explicit delta. Sessions
+    recorded before package provenance existed reconcile as legacy.
+    """
+    prior = old.get("package") if isinstance(old, dict) else None
+    current = _package_snapshot(package_envelope)
+    if not isinstance(prior, dict) or not prior.get("prompt_sha256"):
+        return {"reconciled": "legacy",
+                "resumed_from": old.get("session_id"),
+                "prior_package_sha256": (prior or {}).get("prompt_sha256"),
+                "package_sha256": current["prompt_sha256"],
+                "policy_changed": None}
+    if (prior.get("upstream_revision") != current["upstream_revision"]
+            or prior.get("core_sha256_hex") != current["core_sha256_hex"]):
+        raise ValueError(
+            "resumed session core instructions changed; start fresh")
+    return {"reconciled": "explicit",
+            "resumed_from": old.get("session_id"),
+            "prior_package_sha256": prior.get("prompt_sha256"),
+            "package_sha256": current["prompt_sha256"],
+            "policy_changed": (prior.get("policy_sha256")
+                               != current["policy_sha256"])}
+
+
+def _submission_envelope(role, prompt_hash, package_envelope, prefix_bytes,
+                         prefix_source, developer_instructions, resume_id,
+                         submitted_sha, reconciliation=None):
+    """Describe every submitted instruction channel with digests."""
+    channels = [{"name": "prepared_prompt", "sha256": prompt_hash},
+                {"name": "role_instruction", "source": prefix_source,
+                 "sha256": hashlib.sha256(prefix_bytes).hexdigest()}]
+    if isinstance(developer_instructions, str) and developer_instructions:
+        channels.append({"name": "developer_instructions",
+                         "sha256": hashlib.sha256(
+                             developer_instructions.encode("utf-8")).hexdigest()})
+    resume = None
+    if isinstance(resume_id, str) and resume_id:
+        resume = {"resumed_from": resume_id, "package_sha256": prompt_hash,
+                  "reconciliation": reconciliation}
+    body = {"role": role, "prompt_sha256": prompt_hash,
+            "channels": channels, "resume": resume,
+            "submitted_stdin_sha256": submitted_sha}
+    body["instruction_envelope_hash"] = hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    body["prepared_envelope_hash"] = (package_envelope or {}).get(
+        "instruction_envelope_hash")
+    return body
+
+
 def _event_stream(raw):
     events = []
     for line in raw.splitlines():
@@ -162,6 +260,7 @@ def run_dispatch(request, runtime):
     prompt = prompt_path.read_text(encoding="utf-8")
     if hashlib.sha256(prompt.encode("utf-8")).hexdigest() != req["prompt_hash"]:
         raise ValueError("prompt hash mismatch")
+    package_envelope = _verify_package_envelope(prompt_path, req["prompt_hash"])
     capabilities = runtime.get("capabilities")
     if not isinstance(capabilities, dict): raise ValueError("Codex capability report required")
     role_config = manifest.get("roles", {}).get(req["role"], {})
@@ -177,6 +276,8 @@ def run_dispatch(request, runtime):
         role_file=pathlib.Path(__file__).resolve().parent.parent/"codex"/(req["role"]+".md")
         role_instruction=role_file.read_text(encoding="utf-8") if role_file.is_file() else ""
     if not isinstance(role_instruction,str) or not role_instruction.strip(): raise ValueError("packaged role instructions are missing")
+    prefix_source = "runtime" if runtime.get("role_instructions",{}).get(req["role"]) else "codex/%s.md" % req["role"]
+    prefix_bytes = (role_instruction.rstrip()+"\n\n").encode("utf-8")
     prompt=role_instruction.rstrip()+"\n\n"+prompt
     resume_id = runtime.get("resume_session_id")
     recovery = runtime.get("recovery")
@@ -195,6 +296,9 @@ def run_dispatch(request, runtime):
         if old is None and isinstance(recovery, dict) and recovery.get("fresh") is True:
             context_reset = True
             resume_id = None
+    reconciliation = None
+    if runtime.get("resume") and old is not None and not context_reset:
+        reconciliation = _reconcile_resume(old, package_envelope)
     # Evidence for each execution attempt is immutable and disjoint. Preserve
     # the caller's prompt source while placing generated artifacts together.
     requested_root = pathlib.Path(runtime.get("attempt_root") or pathlib.Path(ep["request_path"]).parent)
@@ -204,6 +308,15 @@ def run_dispatch(request, runtime):
     policy_path=attempt_dir/"policy.json"
     policy=codex_policy.build_attempt_policy(req,runtime)
     _json(str(policy_path),policy)
+    submitted_sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    attempt_envelope = _submission_envelope(
+        req["role"], req["prompt_hash"], package_envelope, prefix_bytes,
+        prefix_source, runtime.get("developer_instructions"), resume_id,
+        submitted_sha, reconciliation)
+    prepared_text = pathlib.Path(ep["prompt_path"]).read_text(encoding="utf-8")
+    if hashlib.sha256(prefix_bytes + prepared_text.encode("utf-8")).hexdigest() != submitted_sha:
+        raise ValueError("submitted prompt does not match recorded channels")
+    _json(str(attempt_dir/"envelope.json"), attempt_envelope)
     protected_artifacts=None
     protected_before=None
     if req["role"]=="operator":
@@ -241,7 +354,8 @@ def run_dispatch(request, runtime):
             if not callable(callback): raise ValueError("on_process_start must be callable")
             callback(dict(record))
     lifecycle = {"session_id":resume_id, "status":"active", "started_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                 "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown"))}
+                  "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown")),
+                  "package":_package_snapshot(package_envelope)}
     codex_sessions.store_session(identity, lifecycle)
     try:
         env=_worker_environment(runtime)
@@ -303,5 +417,5 @@ def run_dispatch(request, runtime):
                   usage={"input_tokens":usage_event.get("input_tokens"), "cached_tokens":usage_event.get("cached_input_tokens"), "output_tokens":usage_event.get("output_tokens")}, error=None)
     validated = dispatch_contract.validate_result(result, req)
     _json(ep["result_path"], validated)
-    codex_sessions.store_session(identity, {"session_id":session_id, "status":"completed", "completed_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":result["runtime_version"]})
+    codex_sessions.store_session(identity, {"session_id":session_id, "status":"completed", "completed_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":result["runtime_version"], "package":_package_snapshot(package_envelope)})
     return validated

@@ -155,6 +155,30 @@ def main(argv):
         "impact beyond this task's files.",
         "",
     ]
+    areas = match.get("working_areas")
+    if isinstance(areas, list) and areas and all(
+            isinstance(item, str) and item.strip() for item in areas):
+        import scoped_runner
+        capabilities = scoped_runner.describe_capabilities({
+            "scope": {"mode": "areas", "roots": list(areas),
+                      "exact_paths": []},
+            "protected_paths": [],
+            "toolchains": {}})
+        lines += [
+            "## Working areas (reserved atomically before dispatch)",
+            "",
+            *(("- `%s`" % item) for item in areas),
+            "",
+            "Create and modify ordinary source and test files inside these "
+            "areas, including supporting files the plan did not predict. "
+            "Outside paths, protected paths, dependency manifests, deletions, "
+            "and renames stay blocked with a concrete scope blocker.",
+            "",
+            "## Supported local capabilities",
+            "",
+            *capabilities.splitlines(),
+            "",
+        ]
     out_path = "%s/task-%s-brief.md" % (ws.rstrip("/\\"), wanted)
     try:
         with open(out_path, "w", encoding="utf-8") as fh:

@@ -14,7 +14,44 @@ Resource profile: dispatch none; stdout not LLM-facing; ledger read none
 
 import json
 import os
+import subprocess
 import sys
+
+import working_areas
+
+
+def repo_root_of(workspace):
+    try:
+        out = subprocess.run(
+            ["git", "-C", workspace, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except OSError:
+        pass
+    return workspace
+
+
+def directory_conflicts(by_id, ids, root):
+    """Directory-authority conflicts through the shared overlap definition."""
+    try:
+        scopes = {i: working_areas.normalize(by_id[i], root) for i in ids}
+    except (ValueError, KeyError):
+        print("TOUCHES-OVERLAP: invalid working scope in plan",
+              file=sys.stderr)
+        return None
+    found = []
+    for a in range(len(ids)):
+        for b in range(a + 1, len(ids)):
+            first, second = scopes[ids[a]], scopes[ids[b]]
+            if not working_areas.overlap(first, second, root):
+                continue
+            reasons = set()
+            for entry in (first, second):
+                reasons.update("area:" + item for item in entry["roots"])
+                reasons.update(entry["exact_paths"])
+            found.append((ids[a], ids[b], sorted(reasons)))
+    return found
 
 
 def main():
@@ -68,6 +105,15 @@ def main():
         for x, y, shared in conflicts:
             print("TOUCHES-OVERLAP: {} and {} share {}".format(x, y, ",".join(shared)),
                   file=sys.stderr)
+        return 1
+    tasks = {str(t.get("id")): t for t in plan.get("tasks", [])}
+    found = directory_conflicts(tasks, ids, repo_root_of(ws))
+    if found is None:
+        return 2
+    for x, y, shared in found:
+        print("TOUCHES-OVERLAP: {} and {} share {}".format(x, y, ",".join(shared)),
+              file=sys.stderr)
+    if found:
         return 1
     print("TOUCHES-OVERLAP: disjoint")
     return 0

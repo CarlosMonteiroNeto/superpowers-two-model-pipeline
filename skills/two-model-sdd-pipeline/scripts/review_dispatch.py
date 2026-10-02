@@ -123,6 +123,18 @@ def build_request(workspace, task_id, output):
     }
     dispatch_contract.validate_request({k: v for k, v in request.items()
                                        if k in dispatch_contract.REQUEST_FIELDS})
+    import prepare_prompt
+    role_core = pathlib.Path(__file__).resolve().parent.parent / "codex" / "reviewer.md"
+    if not role_core.is_file():
+        raise ValueError("packaged reviewer role instructions are missing")
+    prepare_prompt.record_envelope(
+        str(package_path), "reviewer",
+        [{"name": "review_package",
+          "sha256": hashlib.sha256(
+              package_path.read_bytes()).hexdigest()},
+         {"name": "reviewer_role_core",
+          "sha256": hashlib.sha256(
+              role_core.read_bytes()).hexdigest()}])
     target = pathlib.Path(output)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(target.name + ".tmp")

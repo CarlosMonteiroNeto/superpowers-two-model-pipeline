@@ -74,6 +74,15 @@ class PromptHeaderTests(unittest.TestCase):
         self.assertIn("self-review", text.casefold())
         self.assertEqual(result["hash"], sha256(text))
 
+    def test_operator_prompt_carries_investigation_contract(self):
+        result = self.module.build(
+            "operator", context(), skill_bundle(), "BACKEND-POLICY-9",
+        )
+        folded = result["text"].casefold()
+        for marker in ("investigat", "root cause", "reproduc",
+                       "working path", "evidence-backed"):
+            self.assertIn(marker, folded)
+
     def test_prompt_hash_changes_when_dispatch_inputs_change(self):
         first = self.module.build(
             "operator", context(), skill_bundle(), "CODEX-POLICY",

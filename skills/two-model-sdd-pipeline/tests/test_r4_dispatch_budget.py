@@ -21,6 +21,14 @@ def load_budget(testcase):
 
 
 class DispatchBudgetTests(unittest.TestCase):
+    def test_status_queries_never_reserve_or_mutate_budget_state(self):
+        budget = load_budget(self)
+        state = {}
+        result = budget.status("r", 1, state=state)
+        self.assertEqual(result["coder_invocations"], 0)
+        self.assertFalse(result["director_required"])
+        self.assertEqual(state, {})
+
     def test_opencode_cycle_limits_can_be_set_before_run_and_then_freeze(self):
         budget = load_budget(self)
         with tempfile.TemporaryDirectory() as temp, mock.patch.dict(

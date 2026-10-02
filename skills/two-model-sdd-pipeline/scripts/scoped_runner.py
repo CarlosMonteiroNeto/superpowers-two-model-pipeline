@@ -16,6 +16,7 @@ from typing import Any
 
 from red_evidence import classify_raw
 from toolchain_contract import ADAPTER_LANGUAGES, resolve_toolchain
+import scope_grants
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -332,6 +333,215 @@ def _run(argv: list[str], command: dict[str, Any], full_output: Path) -> int:
     return process.returncode
 
 
+_CAPABILITY_REQUEST_KEYS = {"mode", "toolchain_id", "paths", "selector"}
+_CAPABILITY_FORBIDDEN_KEYS = {"command", "argv", "shell", "flags", "cwd",
+                              "env", "environment"}
+_CAPABILITY_ADAPTERS = {"unittest"}
+_TEST_CASE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$")
+_SHELL_METACHARS = set(";|&<>`$(){}[]!'\"*?~#")
+
+
+def _capability_scope(policy: dict[str, Any]) -> dict[str, Any]:
+    scope = policy.get("scope")
+    if not isinstance(scope, dict):
+        return {"mode": "legacy", "roots": [], "exact_paths": []}
+    roots = scope.get("roots", [])
+    exact = scope.get("exact_paths", [])
+    if scope.get("mode") != "areas" or not isinstance(roots, list):
+        return {"mode": "legacy", "roots": [], "exact_paths": []}
+    return {"mode": "areas",
+            "roots": [item for item in roots if isinstance(item, str) and item],
+            "exact_paths": [item for item in exact
+                            if isinstance(item, str) and item]}
+
+
+def _in_scope_roots(roots: list, rel: str) -> bool:
+    folded = os.path.normcase(rel.replace("/", os.sep))
+    for root in roots:
+        if not isinstance(root, str) or not root:
+            continue
+        if root == ".":
+            return True
+        folded_root = os.path.normcase(root.replace("/", os.sep))
+        if folded == folded_root or folded.startswith(folded_root + os.sep):
+            return True
+    return False
+
+
+def _capability_paths(request: dict[str, Any], policy: dict[str, Any],
+                      project_root: Path) -> list[str]:
+    raw_paths = request.get("paths", [])
+    if not isinstance(raw_paths, list) or not all(
+            isinstance(item, str) for item in raw_paths):
+        raise RunnerError("capability request paths must be a string list")
+    selector = request.get("selector")
+    if selector is not None:
+        if not isinstance(selector, dict):
+            raise RunnerError("capability selector must be an object")
+        kind = selector.get("kind")
+        if kind == "file":
+            value = selector.get("value")
+            if not isinstance(value, str):
+                raise RunnerError("file selector needs a string path")
+            raw_paths = list(raw_paths) + [value]
+        elif kind != "test_case":
+            raise RunnerError("unsupported capability selector: %r" % (kind,))
+    checked = []
+    for raw in raw_paths:
+        if any(char in _SHELL_METACHARS for char in raw):
+            raise RunnerError(
+                "capability path carries shell syntax: %s" % raw)
+        rel = _validate_path_syntax(raw)
+        checked.append(rel.as_posix())
+    scope = _capability_scope(policy)
+    if scope["mode"] == "areas":
+        roots = scope["roots"]
+        for rel in checked:
+            if not _in_scope_roots(roots, rel):
+                raise RunnerError(
+                    "capability path is outside the reserved areas: %s" % rel)
+    protected = policy.get("protected_paths", [])
+    if not isinstance(protected, list):
+        raise RunnerError("capability policy protected paths are invalid")
+    for rel in checked:
+        if rel in protected or any(
+                rel == item or rel.startswith(str(item).rstrip("/") + "/")
+                for item in protected if isinstance(item, str)):
+            raise RunnerError(
+                "capability path is protected: %s" % rel)
+        if scope_grants.is_protected(rel):
+            raise RunnerError(
+                "capability path is protected: %s" % rel)
+    resolved_root = project_root.resolve()
+    for rel in checked:
+        target = (resolved_root / Path(*PurePosixPath(rel).parts))
+        try:
+            target.resolve().relative_to(resolved_root)
+        except (ValueError, OSError) as exc:
+            raise RunnerError(
+                "capability path escapes the project root: %s" % rel) from exc
+        if not target.is_file():
+            raise RunnerError(
+                "capability path is not an existing file: %s" % rel)
+    return checked
+
+
+def resolve_capability(request: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a worker check request to trusted execution inputs.
+
+    The worker describes WHAT (mode, toolchain, paths, an optional
+    adapter-supported selector); only configured toolchain commands become
+    argv. Worker-supplied command strings, flags, and shell syntax are
+    rejected. Returns argv, cwd, an evidence destination, and identity.
+    Nothing is executed.
+    """
+    if not isinstance(request, dict) or not isinstance(policy, dict):
+        raise RunnerError("capability request and policy must be objects")
+    forbidden = sorted(set(request) & _CAPABILITY_FORBIDDEN_KEYS)
+    if forbidden:
+        raise RunnerError(
+            "capability request must not carry commands: %s"
+            % ",".join(forbidden))
+    mode = request.get("mode")
+    if mode not in MODES:
+        raise RunnerError("unsupported capability mode: %r" % (mode,))
+    toolchain_id = request.get("toolchain_id")
+    if not isinstance(toolchain_id, str) or not toolchain_id.strip():
+        raise RunnerError("capability toolchain_id is required")
+    toolchains = policy.get("toolchains")
+    if not isinstance(toolchains, dict) or toolchain_id not in toolchains:
+        raise RunnerError(
+            "capability toolchain is not configured: %s" % toolchain_id)
+    toolchain = toolchains[toolchain_id]
+    if not isinstance(toolchain, dict):
+        raise RunnerError("capability toolchain descriptor is invalid")
+    adapter = toolchain.get("adapter")
+    if adapter not in _CAPABILITY_ADAPTERS:
+        raise RunnerError(
+            "unsupported capability adapter: %r" % (adapter,))
+    commands = toolchain.get("commands")
+    if not isinstance(commands, dict) or mode not in commands:
+        raise RunnerError(
+            "toolchain %s has no configured %s command"
+            % (toolchain_id, mode))
+    command = commands[mode]
+    if (not isinstance(command, dict) or not isinstance(command.get("argv"), list)
+            or not command["argv"]
+            or not all(isinstance(part, str) and part for part in command["argv"])):
+        raise RunnerError("capability command descriptor is invalid")
+    project_root = policy.get("project_root")
+    if not project_root or not Path(str(project_root)).is_dir():
+        raise RunnerError("capability policy project root is invalid")
+    root = Path(str(project_root)).resolve()
+    evidence_dir = policy.get("evidence_dir")
+    if not evidence_dir:
+        raise RunnerError("capability policy evidence directory is invalid")
+    if mode in ("analyze", "format") and (request.get("paths") or request.get("selector")):
+        raise RunnerError(
+            "unexpected test path argument for %s mode" % mode)
+    paths = _capability_paths(request, policy, root)
+    evidence_path = Path(str(evidence_dir)) / ("%s-%s.txt" % (toolchain_id, mode))
+    report_path = evidence_path.with_suffix(".report.json")
+    argv = _expand_argv(command, adapter, mode, paths, report_path)
+    selector = request.get("selector")
+    if isinstance(selector, dict) and selector.get("kind") == "test_case":
+        dotted = selector.get("value")
+        if not isinstance(dotted, str) or not _TEST_CASE.match(dotted):
+            raise RunnerError("capability test case selector is invalid")
+        argv = list(argv) + [dotted]
+        if mode == "red" and "-v" not in argv and "--verbose" not in argv:
+            argv.append("-v")
+    cwd_value = command.get("cwd") or "."
+    cwd = (root / str(cwd_value)).resolve() if not os.path.isabs(str(cwd_value)) else Path(str(cwd_value)).resolve()
+    try:
+        cwd.relative_to(root)
+    except ValueError as exc:
+        raise RunnerError("capability command cwd escapes the project root") from exc
+    if not cwd.is_dir():
+        raise RunnerError("capability command cwd is not a directory")
+    scope = _capability_scope(policy)
+    return {
+        "argv": argv,
+        "cwd": str(cwd),
+        "evidence_path": str(evidence_path),
+        "identity": {"toolchain_id": toolchain_id, "mode": mode,
+                     "adapter": adapter,
+                     "scope": scope["roots"] if scope["mode"] == "areas" else "legacy"},
+    }
+
+
+def describe_capabilities(policy: dict[str, Any]) -> str:
+    """Render the enforced local capabilities for prompts and briefs."""
+    if not isinstance(policy, dict):
+        raise RunnerError("capability policy must be an object")
+    lines = ["Supported local checks (no worker command strings):",
+             "modes: %s." % ", ".join(sorted(MODES))]
+    toolchains = policy.get("toolchains")
+    if isinstance(toolchains, dict):
+        for toolchain_id in sorted(toolchains):
+            toolchain = toolchains[toolchain_id]
+            adapter = toolchain.get("adapter") if isinstance(toolchain, dict) else None
+            commands = toolchain.get("commands") if isinstance(toolchain, dict) else None
+            modes = sorted(commands) if isinstance(commands, dict) else []
+            selectors = "file paths"
+            if adapter == "unittest":
+                selectors += ", test_case (dotted names, unittest only)"
+            lines.append("- %s (%s): modes %s; selectors: %s."
+                         % (toolchain_id, adapter,
+                            ", ".join(modes) if modes else "none", selectors))
+    scope = _capability_scope(policy)
+    if scope["mode"] == "areas":
+        lines.append("Reserved areas: %s." % ", ".join(scope["roots"]))
+    else:
+        lines.append("Legacy exact-path authority (no opted-in areas).")
+    protected = policy.get("protected_paths", [])
+    names = sorted(str(item) for item in protected) if isinstance(
+        protected, list) else []
+    lines.append("%d protected paths (%s) plus manifests and lockfiles "
+                 "are rejected." % (len(names), ", ".join(names)))
+    return "\n".join(lines)
+
+
 def run_scoped(workspace_value: str, task_id: str, mode: str, raw_paths: list[str]) -> int:
     workspace = Path(workspace_value).resolve()
     if mode not in MODES:
@@ -350,6 +560,18 @@ def run_scoped(workspace_value: str, task_id: str, mode: str, raw_paths: list[st
     root = _project_root(task, plan, descriptor)
     descriptor = _relocate_descriptor(descriptor, root)
     paths = _validated_test_paths(raw_paths, root)
+    areas = task.get("working_areas")
+    if isinstance(areas, list) and areas:
+        import working_areas
+        try:
+            scope = working_areas.normalize(task, str(root))
+        except ValueError as exc:
+            raise RunnerError(
+                "task working areas are invalid: %s" % exc) from exc
+        for rel in paths:
+            if not _in_scope_roots(scope["roots"], rel):
+                raise RunnerError(
+                    "scoped path is outside the reserved areas: %s" % rel)
     resolved = resolve_toolchain(
         {"toolchain_id": toolchain_id}, {"toolchains": {toolchain_id: descriptor}}, str(root)
     )

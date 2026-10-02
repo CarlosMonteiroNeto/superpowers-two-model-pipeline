@@ -101,6 +101,7 @@ for name,label in (("task-"+sys.argv[2]+"-red.txt","Raw RED evidence"),
                    ("task-"+sys.argv[2]+"-analyze.txt","Raw analysis evidence"),
                    ("task-"+sys.argv[2]+"-gate.txt","Gate report"),
                    ("task-"+sys.argv[2]+"-attempt.json","RED attempt identity"),
+                   ("task-"+sys.argv[2]+"-revisions.jsonl","Test evolution evidence"),
                    ("run-gates-test.txt","Shared test gate evidence"),
                    ("run-gates-analyze.txt","Shared analysis gate evidence")):
  path=plan_path.parent/name

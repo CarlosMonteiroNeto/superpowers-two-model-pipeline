@@ -237,7 +237,7 @@ written-spec approval.
 **Fork history (condensed).** Verified against the actual scripts: after
 round 1's script-driven Coder dispatch, nothing ever called `green-gate`,
 and `orchestrator`'s `CODER*`/`REVIEW*` cases were no-op stubs — fixed
-with `coder-gate` (unbounded retries until green, RED-form check before
+with `coder-gate` (budget-bounded retries until green, RED-form check before
 commit, TEST_DEFECT short-circuit) plus `red-gate` chaining and
 `orchestrator` dispatch-table fixes. A subagent-driven-development audit
 added TEST_DEFECT handling and `test-integrity` tamper checks. A routing
@@ -273,8 +273,7 @@ detection; ask only on genuine ambiguity) and the generic `red-gate`, with
    (dispatches Agente operador on a scaffolded brief, then chains straight
    into `coder-gate`, which owns every retry after that: RED-form check
    (`red-form-check`) + gate check -> PASS (`green-gate` commit + dispatch
-   revisor) | FAIL (fix prompt + redispatch with `--continue`, unbounded
-   until green) | TEST_DEFECT (stop, `route-next` emits ARBITRATE for
+   revisor) | FAIL (fix prompt + budget-bounded redispatch with `--continue`) | TEST_DEFECT (stop, `route-next` emits ARBITRATE for
    Agente diretor) -> `route-next` (CORRECTIVE / ARBITRATE / NEXT /
    FINAL_REVIEW). Every LLM-invoked command runs through `scripts/cmd`
    (RTK compression).
@@ -323,7 +322,7 @@ subagent-mode agents cannot be targeted headlessly by `opencode run
 | `template-score TEMPLATE` | Score a project template candidate | JSON + gate verdict (same semantics as pkg-score) |
 | `pub-sync [PACKAGE]` | `pub add`/`pub get` + lockfile; `pub upgrade --dry-run` conflict report | exit 0 resolved; exit 1 conflicts (`pub-sync-report.txt`) |
 | `red-gate WORKSPACE TASK` (two-model) | Per-task kickoff: verify the scaffolded brief, dispatch the lang-selected operador variant, chain `coder-gate` (RED-form check via `red-form-check`) | exit = `coder-gate`'s exit; 2 usage |
-| `coder-gate WORKSPACE TASK` (two-model) | Unbounded retries until green: RED-form check via `red-form-check`, scope gate via `keep-discard`, commit, advisory `interface-check`, `review-package`, dispatch revisor; TEST_DEFECT stops | exit 0 green+committed+revisor dispatched; 1 blocking failure; 2 TEST_DEFECT / scope violation; 3 usage |
+| `coder-gate WORKSPACE TASK` (two-model) | Budget-bounded retries until green ([5, 3, 3] + director assessment): RED-form check via `red-form-check`, scope gate via `keep-discard`, commit, advisory `interface-check`, `review-package`, dispatch revisor; TEST_DEFECT stops | exit 0 green+committed+revisor dispatched; 1 blocking failure; 2 TEST_DEFECT / scope violation; 3 usage |
 | `red-form-check WORKSPACE TASK LANG` (two-model) | Deterministic RED-form classifier: requires the suite loaded, ≥1 test executed, and an assertion/runtime failure | exit 0 valid red; 1 invalid red; 2 unsupported language / usage |
 | `resolve-toolchain WORKSPACE [ROOT]` (two-model) | One-time-per-branch ecosystem detection, ledgers `TEST_CMD`/`ANALYZE_CMD` | exit 0 resolved; 1 ambiguous; 2 usage/no marker |
 | `green-gate [--no-commit] [-m MSG] [-l LEDGER] [-w WS -t TASK -b BASE]` | Chain `flutter test` + `flutter analyze` (through `cmd`) + commit, then review package + revisor dispatch | exit 0 green (+commit +revisor); 1 tests; 2 analyze; 4 scope violation |
@@ -363,7 +362,7 @@ All scripts honor `FLUTTER_BIN`, `DART_BIN`, `GIT_BIN`, `RTK_BIN`,
   reason, then implements and runs them green. It may run test/analyze/
   format commands but never git. Script CEO validates the saved RED form
   with `red-form-check` and decides the authoritative gate by exit code —
-  unbounded retries until green; only TEST_DEFECT escalates to Agente
+  budget-bounded retries until green ([5, 3, 3] cycles); only TEST_DEFECT escalates to Agente
   diretor.
 - **Revisor reviews compiler-approved code only:** never runs or re-runs
   test/analyze; scope is design, architecture, spec compliance (incl.
@@ -478,7 +477,8 @@ implementations**. These fields drive the `template-search` query
   operador, then chains coder-gate.
 - **green-gate** — chains full suite + `flutter analyze` + commit, then
   dispatches Agente revisor.
-- **coder-gate** — unbounded retries until green; verifies the operador's
+- **coder-gate** — retries within the durable [5, 3, 3] family budget with
+  director assessment at cycle boundaries; verifies the operador's
   saved RED evidence by FORM via `red-form-check`; the keep-discard scope
   gate runs before commit. Only TEST_DEFECT leaves the loop.
 - **route-next** — deterministic router; Script CEO executes its emitted
@@ -494,6 +494,27 @@ implementations**. These fields drive the `template-search` query
   scheduling-authoritative; waves are computed by `wave-next`; one git
   worktree + `task/<N>` branch per task with a per-worktree ledger shard;
   `integrate` is the script-owned serial merge gate.
+- **prepare_prompt** — one recorded instruction package per dispatch:
+  adapted role core, backend policy, domain skills, acceptance, and output
+  contract rendered once, with a tamper-evident envelope over every
+  submitted channel (role/developer instructions, resume deltas). Altered
+  bytes fail before any worker starts.
+- **working_areas** — per-task directory authority (`task.working_areas`;
+  `.` is the repository root, never inferred). Equal/nested areas overlap;
+  reservations are atomic per run/family, retained by same-family
+  corrections, released after integration, recovered only after verified
+  process termination. Plans without it keep exact-path authority.
+- **Scoped local capabilities** — workers request checks (red, test,
+  analyze, format; file paths or unittest dotted test_case selectors)
+  resolved against configured toolchains only. Worker command strings,
+  flags, shell syntax, and installations are rejected; protected paths,
+  manifests, and lockfiles are rejected. Local check iterations never
+  consume dispatch budget slots; external retries do, within [5, 3, 3].
+- **Test revision lineage** — append-only records (test/prior digests,
+  rationale, acceptance, RED/GREEN evidence identities, retained
+  snapshot) track coder-authored test corrections; the chain validator
+  rejects stale, missing, reordered, or conflicting records. Review
+  packages include the chain as test-evolution evidence.
 
 ## 13. Packaging and distribution
 

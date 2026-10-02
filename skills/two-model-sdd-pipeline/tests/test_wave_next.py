@@ -108,6 +108,32 @@ class WaveNextTest(unittest.TestCase):
         r = subprocess.run([PY, str(SCRIPTS / "wave-next")], capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
 
+    def test_area_overlap_defers_next_wave(self):
+        self.write([
+            {"id": 1, "touches": [], "depends_on": [], "working_areas": ["src/a"]},
+            {"id": 2, "touches": [], "depends_on": [], "working_areas": ["src/a/b"]},
+        ], [])
+        r = self.run_it(2)
+        self.assertEqual(r.stdout.split(), ["RUN", "1"])
+        self.assertIn("WAVE-DEFER", r.stderr)
+
+    def test_sibling_areas_run_together(self):
+        self.write([
+            {"id": 1, "touches": [], "depends_on": [], "working_areas": ["src/a"]},
+            {"id": 2, "touches": [], "depends_on": [], "working_areas": ["src/ab"]},
+        ], [])
+        r = self.run_it(2)
+        self.assertEqual(r.stdout.split(), ["RUN", "1", "RUN", "2"])
+
+    def test_legacy_path_inside_area_defers(self):
+        self.write([
+            {"id": 1, "touches": [], "depends_on": [], "working_areas": ["src/a"]},
+            {"id": 2, "touches": ["src/a/x.py"], "depends_on": []},
+        ], [])
+        r = self.run_it(2)
+        self.assertEqual(r.stdout.split(), ["RUN", "1"])
+        self.assertIn("WAVE-DEFER", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
