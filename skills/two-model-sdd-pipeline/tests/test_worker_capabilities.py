@@ -238,6 +238,46 @@ class PolicyScopeTests(unittest.TestCase):
                       result["capabilities"]["enforced"])
         self.assertEqual(result["capabilities"]["scope"]["roots"], ["src/a"])
 
+    def test_opencode_settings_reject_non_canonical_area_roots(self):
+        opencode_policy = _load("opencode_policy.py")
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="caps-opencode-"))
+        runtime = {"backend": "opencode",
+                   "roles": {"operator": {
+                       "model": "m",
+                       "settings": {"variant": "v", "agent": "a"}}}}
+        for roots in (["../outside"], ["/absolute"], ["src//double"], []):
+            with self.subTest(roots=roots):
+                request = {"workspace_root": str(tmp), "touches": [],
+                           "new_test_files": [], "protected_paths": [],
+                           "runner_commands": {}, "read_only_commands": [],
+                           "capabilities": {"permission_schema": "v1",
+                                            "uncovered_mutating_tools": []},
+                           "scope": {"mode": "areas", "roots": roots,
+                                     "exact_paths": []}}
+                with self.assertRaises(ValueError):
+                    opencode_policy.build_settings("operator", runtime, request)
+
+    def test_symlinked_paths_resolve_before_grant_comparison(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="caps-link-"))
+        root = tmp / "repo"
+        (root / "src").mkdir(parents=True)
+        target = root / "actual"
+        target.mkdir()
+        (target / "inside.py").write_text("x = 1\n", encoding="utf-8")
+        link = root / "src" / "linked"
+        try:
+            os.symlink(str(target), str(link))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks are unavailable")
+        mine = {"run_id": "run-1", "family_id": 1,
+                "repo_root": str(root), "allowed_roots": ["src", "actual"],
+                "scope": {"mode": "areas", "roots": ["actual"],
+                          "exact_paths": []}}
+        result = scope_grants.reserve(
+            {"path": "src/linked/inside.py", "kind": "existing_file"}, mine)
+        self.assertEqual(result["decision"], "grant")
+        self.assertEqual(result["path"], "actual/inside.py")
+
 
 class DescribeCapabilitiesTests(unittest.TestCase):
     def test_description_covers_modes_selectors_scope_and_protected(self):

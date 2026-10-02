@@ -102,7 +102,9 @@ def _verify_package_envelope(prompt_path, prompt_hash):
     only carry prompt bytes. A present-but-divergent envelope fails closed:
     altered bytes must never reach a worker.
     """
-    sidecar = pathlib.Path(prompt_path).parent / "envelope.json"
+    sidecar = pathlib.Path(str(prompt_path) + ".envelope.json")
+    if not sidecar.is_file():
+        sidecar = pathlib.Path(prompt_path).parent / "envelope.json"
     if not sidecar.is_file():
         return None
     try:
@@ -127,9 +129,48 @@ def _verify_package_envelope(prompt_path, prompt_hash):
     return envelope
 
 
+def _package_snapshot(package_envelope):
+    """Extract the comparable package provenance for session records."""
+    if not isinstance(package_envelope, dict):
+        return {"prompt_sha256": None, "policy_sha256": None,
+                "upstream_revision": None, "core_sha256_hex": None,
+                "instruction_envelope_hash": None}
+    return {key: package_envelope.get(key) for key in (
+        "prompt_sha256", "policy_sha256", "upstream_revision",
+        "core_sha256_hex", "instruction_envelope_hash")}
+
+
+def _reconcile_resume(old, package_envelope):
+    """Reconcile a resumed session against the current package explicitly.
+
+    Core instruction changes (upstream revision or core digest) fail
+    closed: an old session must never silently retain obsolete authority.
+    Prompt or policy drift is recorded as an explicit delta. Sessions
+    recorded before package provenance existed reconcile as legacy.
+    """
+    prior = old.get("package") if isinstance(old, dict) else None
+    current = _package_snapshot(package_envelope)
+    if not isinstance(prior, dict) or not prior.get("prompt_sha256"):
+        return {"reconciled": "legacy",
+                "resumed_from": old.get("session_id"),
+                "prior_package_sha256": (prior or {}).get("prompt_sha256"),
+                "package_sha256": current["prompt_sha256"],
+                "policy_changed": None}
+    if (prior.get("upstream_revision") != current["upstream_revision"]
+            or prior.get("core_sha256_hex") != current["core_sha256_hex"]):
+        raise ValueError(
+            "resumed session core instructions changed; start fresh")
+    return {"reconciled": "explicit",
+            "resumed_from": old.get("session_id"),
+            "prior_package_sha256": prior.get("prompt_sha256"),
+            "package_sha256": current["prompt_sha256"],
+            "policy_changed": (prior.get("policy_sha256")
+                               != current["policy_sha256"])}
+
+
 def _submission_envelope(role, prompt_hash, package_envelope, prefix_bytes,
                          prefix_source, developer_instructions, resume_id,
-                         submitted_sha):
+                         submitted_sha, reconciliation=None):
     """Describe every submitted instruction channel with digests."""
     channels = [{"name": "prepared_prompt", "sha256": prompt_hash},
                 {"name": "role_instruction", "source": prefix_source,
@@ -140,7 +181,8 @@ def _submission_envelope(role, prompt_hash, package_envelope, prefix_bytes,
                              developer_instructions.encode("utf-8")).hexdigest()})
     resume = None
     if isinstance(resume_id, str) and resume_id:
-        resume = {"resumed_from": resume_id, "package_sha256": prompt_hash}
+        resume = {"resumed_from": resume_id, "package_sha256": prompt_hash,
+                  "reconciliation": reconciliation}
     body = {"role": role, "prompt_sha256": prompt_hash,
             "channels": channels, "resume": resume,
             "submitted_stdin_sha256": submitted_sha}
@@ -258,6 +300,9 @@ def run_dispatch(request, runtime):
         if old is None and isinstance(recovery, dict) and recovery.get("fresh") is True:
             context_reset = True
             resume_id = None
+    reconciliation = None
+    if runtime.get("resume") and old is not None and not context_reset:
+        reconciliation = _reconcile_resume(old, package_envelope)
     # Evidence for each execution attempt is immutable and disjoint. Preserve
     # the caller's prompt source while placing generated artifacts together.
     requested_root = pathlib.Path(runtime.get("attempt_root") or pathlib.Path(ep["request_path"]).parent)
@@ -271,7 +316,7 @@ def run_dispatch(request, runtime):
     attempt_envelope = _submission_envelope(
         req["role"], req["prompt_hash"], package_envelope, prefix_bytes,
         prefix_source, runtime.get("developer_instructions"), resume_id,
-        submitted_sha)
+        submitted_sha, reconciliation)
     prepared_text = pathlib.Path(ep["prompt_path"]).read_text(encoding="utf-8")
     if hashlib.sha256(prefix_bytes + prepared_text.encode("utf-8")).hexdigest() != submitted_sha:
         raise ValueError("submitted prompt does not match recorded channels")
@@ -313,7 +358,8 @@ def run_dispatch(request, runtime):
             if not callable(callback): raise ValueError("on_process_start must be callable")
             callback(dict(record))
     lifecycle = {"session_id":resume_id, "status":"active", "started_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                 "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown"))}
+                  "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":str(manifest.get("version", "unknown")),
+                  "package":_package_snapshot(package_envelope)}
     codex_sessions.store_session(identity, lifecycle)
     try:
         env=_worker_environment(runtime)
@@ -375,5 +421,5 @@ def run_dispatch(request, runtime):
                   usage={"input_tokens":usage_event.get("input_tokens"), "cached_tokens":usage_event.get("cached_input_tokens"), "output_tokens":usage_event.get("output_tokens")}, error=None)
     validated = dispatch_contract.validate_result(result, req)
     _json(ep["result_path"], validated)
-    codex_sessions.store_session(identity, {"session_id":session_id, "status":"completed", "completed_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":result["runtime_version"]})
+    codex_sessions.store_session(identity, {"session_id":session_id, "status":"completed", "completed_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "evidence_dir":str(attempt_dir), "context_reset":context_reset, "runtime_version":result["runtime_version"], "package":_package_snapshot(package_envelope)})
     return validated

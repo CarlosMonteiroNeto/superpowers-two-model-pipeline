@@ -129,6 +129,24 @@ class TestBriefScaffold(BriefScaffoldTestBase):
         self.assertNotIn("Expected failure", text)
         self.assertNotIn("expected_red", text)
 
+    def test_opted_in_task_brief_describes_areas_and_capabilities(self):
+        task = dict(FULL_TASK, working_areas=["src/a"])
+        self.write_plan(plan_with(task))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertIn("## Working areas", text)
+        self.assertIn("src/a", text)
+        self.assertIn("Reserved areas: src/a", text)
+        self.assertIn("no worker command strings", text.casefold())
+
+    def test_legacy_task_brief_has_no_working_areas_section(self):
+        self.write_plan(plan_with(FULL_TASK))
+        r = run_scaffold(self.ws, 3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        text = (self.ws / "task-3-brief.md").read_text(encoding="utf-8")
+        self.assertNotIn("## Working areas", text)
+
     def test_brief_requires_machine_readable_red_evidence(self):
         """The operador must save the RED run in the runner's machine-readable
         format so red-form-check can classify it (design §4)."""

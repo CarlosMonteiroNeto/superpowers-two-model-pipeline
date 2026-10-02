@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -181,6 +182,24 @@ class PrepareFailureTests(unittest.TestCase):
                 self.assertEqual(
                     [], list(out.iterdir()),
                     "invalid preparation must not start any worker artifact")
+
+    def test_adulterated_domain_skills_fail_before_writes(self):
+        require_prepare(self)
+        real_build = prepare_prompt.prompt_headers.build
+
+        def adulterated(role, context, skills, policy):
+            built = real_build(role, context, skills, policy)
+            return dict(built, text=built["text"].replace(
+                "DOMAIN-SKILL-CONTENT-9", "EVIL-SKILL-CONTENT"))
+
+        out = pathlib.Path(tempfile.mkdtemp(prefix="prepare-adulterated-"))
+        with mock.patch.object(prepare_prompt.prompt_headers, "build",
+                               adulterated):
+            with self.assertRaises(ValueError):
+                prepare_prompt.prepare(
+                    "operator", context(), skill_bundle("operator"),
+                    policy_for("codex"), out)
+        self.assertEqual([], list(out.iterdir()))
 
 
 def _load_module(name):
@@ -350,9 +369,70 @@ class CodexDispatchDeliveryTests(unittest.TestCase):
         envelope = json.loads(
             (attempt_dirs[0] / "envelope.json").read_text(encoding="utf-8"))
         self.assertEqual(
-            envelope["resume"],
-            {"resumed_from": "sess-resume-7",
-             "package_sha256": package["prompt_hash"]})
+            envelope["resume"]["resumed_from"], "sess-resume-7")
+        self.assertEqual(
+            envelope["resume"]["package_sha256"], package["prompt_hash"])
+        self.assertEqual(
+            envelope["resume"]["reconciliation"]["reconciled"], "legacy")
+
+    def test_resume_with_changed_core_instructions_fails_before_start(self):
+        module, request, runtime, tmp, package = self._dispatch("operator")
+        sessions = _load_module("codex_sessions")
+        identity = {
+            "backend": "codex", "run_id": "run-1", "task_id": 1,
+            "task_family": 1, "role": "operator",
+            "worktree": str(tmp / "repo"),
+            "requested_model": "m", "requested_effort": "medium",
+            "config_hash": "c" * 64,
+            "session_dir": str(tmp / "sessions"),
+        }
+        sessions.store_session(identity, {
+            "session_id": "sess-stale-1", "status": "completed",
+            "package": {"prompt_sha256": package["prompt_hash"],
+                       "policy_sha256": package.get("policy_sha256", "0" * 64),
+                       "upstream_revision": "0" * 40,
+                       "core_sha256_hex": "0" * 64,
+                       "instruction_envelope_hash": "0" * 64}})
+        runtime["resume"] = True
+        runtime["resume_session_id"] = "sess-stale-1"
+        with self.assertRaisesRegex(ValueError, "core instructions changed"):
+            module.run_dispatch(request, runtime)
+        self.assertFalse((tmp / "started.marker").exists())
+
+    def test_resume_with_same_package_reconciles_explicitly(self):
+        module, request, runtime, tmp, package = self._dispatch(
+            "operator", resume_session="sess-prior-1")
+        sessions = _load_module("codex_sessions")
+        sibling = json.loads(pathlib.Path(
+            package["prompt_path"]).parent.joinpath(
+                "envelope.json").read_text(encoding="utf-8"))
+        identity = {
+            "backend": "codex", "run_id": "run-1", "task_id": 1,
+            "task_family": 1, "role": "operator",
+            "worktree": str(tmp / "repo"),
+            "requested_model": "m", "requested_effort": "medium",
+            "config_hash": "c" * 64,
+            "session_dir": str(tmp / "sessions"),
+        }
+        sessions.store_session(identity, {
+            "session_id": "sess-prior-1", "status": "completed",
+            "package": {
+                "prompt_sha256": sibling["prompt_sha256"],
+                "policy_sha256": sibling["policy_sha256"],
+                "upstream_revision": sibling["upstream_revision"],
+                "core_sha256_hex": sibling["core_sha256_hex"],
+                "instruction_envelope_hash":
+                    sibling["instruction_envelope_hash"]}})
+        runtime["resume"] = True
+        runtime["resume_session_id"] = "sess-prior-1"
+        result = module.run_dispatch(request, runtime)
+        self.assertEqual(result["terminal_status"], "completed")
+        attempt_dirs = list((tmp / "attempts").iterdir())
+        envelope = json.loads(
+            (attempt_dirs[0] / "envelope.json").read_text(encoding="utf-8"))
+        reconciliation = envelope["resume"]["reconciliation"]
+        self.assertEqual(reconciliation["reconciled"], "explicit")
+        self.assertFalse(reconciliation["policy_changed"])
 
     def test_tampered_prompt_fails_before_worker_start(self):
         module, request, runtime, tmp, package = self._dispatch(
@@ -434,6 +514,36 @@ class OpencodeShellDeliveryTests(unittest.TestCase):
         envelope = json.loads(pathlib.Path(str(log) + ".envelope.json").read_text(encoding="utf-8"))
         self.assertEqual(envelope["continued_from"], "sess-prior-3")
         self.assertEqual(envelope["session"], "sess-stub-9")
+
+    def test_tampered_shell_prompt_fails_before_worker_start(self):
+        require_prepare(self)
+        bash = _bash()
+        if not bash:
+            self.skipTest("Bash is required for shell dispatch delivery")
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="opencode-tamper-"))
+        out = tmp / "package"
+        out.mkdir()
+        package = prepare_prompt.prepare(
+            "operator", context(), skill_bundle("operator"),
+            policy_for("opencode"), out)
+        prompt_path = pathlib.Path(package["prompt_path"])
+        with prompt_path.open("ab") as handle:
+            handle.write(b"tampered")
+        stub = tmp / "opencode"
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        argv_log = tmp / "argv.log"
+        log = tmp / "task-1-coder.log"
+        env = dict(os.environ, OPENCODE_BIN=str(stub),
+                   STUB_ARGV=str(argv_log))
+        result = subprocess.run(
+            [bash, str(SCRIPTS / "dispatch-opencode"),
+             "--agent", "two-model-coder", "--task", "1",
+             "--prompt-file", package["prompt_path"], "--log", str(log)],
+            cwd=str(tmp), env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertFalse(argv_log.exists(), "worker must not start")
+        self.assertFalse(
+            (tmp / "task-1-two-model-coder-session.txt").exists())
 
 
 if __name__ == "__main__":

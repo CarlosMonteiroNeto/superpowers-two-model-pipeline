@@ -99,7 +99,7 @@ def _in_granted_areas(path: str, ownership: dict) -> bool:
 
 def _normal(path):
     if not isinstance(path, str) or not path.strip() or "\\" in path:
-        raise ValueError("invalid canonical relative path")
+        raise ValueError("invalid canonical relative path (use forward slashes)")
     path = path.strip()
     if path.startswith("/") or any(p in ("", ".", "..") for p in path.split("/")) or (len(path) > 1 and path[1] == ":"):
         raise ValueError("path escapes ownership root")

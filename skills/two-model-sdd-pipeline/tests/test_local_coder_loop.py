@@ -85,6 +85,20 @@ class RevisionChainTests(unittest.TestCase):
         self.assertIsNone(red_evidence.validate_revision_chain(
             [json.loads(line) for line in lines], identity()))
 
+    def test_append_rejects_forks_and_foreign_tasks(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="revisions-"))
+        chain = tmp / "task-7-revisions.jsonl"
+        first = record()
+        red_evidence.append_revision(str(chain), first)
+        fork = record(test="assert x == 9", prior=digest("unrelated"))
+        with self.assertRaises(ValueError):
+            red_evidence.append_revision(str(chain), fork)
+        foreign = record(task="8", prior=first["test_digest"])
+        with self.assertRaises(ValueError):
+            red_evidence.append_revision(str(chain), foreign)
+        lines = chain.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(1, len(lines))
+
     def test_loader_failures_cannot_pass(self):
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="revisions-"))
         with self.assertRaises(ValueError):

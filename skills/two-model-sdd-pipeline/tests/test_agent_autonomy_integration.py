@@ -179,7 +179,6 @@ class AreaSchedulingIntegrationTests(unittest.TestCase):
         self.assertFalse(working_areas.overlap(old, other, str(root)))
 
     def test_resume_replays_recorded_package_without_new_dispatches(self):
-        import dispatch_budget
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="autonomy-resume-"))
         first_dir, second_dir = tmp / "a", tmp / "b"
         first_dir.mkdir()
@@ -192,8 +191,6 @@ class AreaSchedulingIntegrationTests(unittest.TestCase):
             "BACKEND-POLICY-42", second_dir)
         self.assertEqual(first["instruction_envelope_hash"],
                          replay["instruction_envelope_hash"])
-        state = {}
-        self.assertEqual(state, {})
 
     def test_correction_family_retains_reservation_until_integration(self):
         _tmp, root = make_repo()

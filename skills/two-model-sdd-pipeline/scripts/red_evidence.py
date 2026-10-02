@@ -20,7 +20,7 @@ REVISION_FIELDS = (
 
 def _is_hex64(value) -> bool:
     return (isinstance(value, str) and len(value) == 64
-            and all(char in "0123456789abcdef" for char in value.lower()))
+            and all(char in "0123456789abcdef" for char in value))
 
 
 def _check_record(record) -> str | None:
@@ -91,12 +91,28 @@ def validate_revision_chain(records, identity) -> None:
 
 
 def append_revision(chain_path: str, record: dict) -> dict:
-    """Atomically append one revision record to a JSONL chain file."""
+    """Atomically append one revision record to a JSONL chain file.
+
+    Continuity is enforced at write time: a non-genesis record must link
+    to the current tail digest for the same task, so a buggy writer
+    cannot fork the chain file that later validation reads.
+    """
     reason = _check_record(record)
     if reason is not None:
         raise ValueError(reason)
     path = Path(chain_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file():
+        tail = read_chain(str(path))
+        if tail:
+            last = tail[-1]
+            if last["task_id"] != record["task_id"]:
+                raise ValueError("revision chain task is conflicting")
+            if record["prior_digest"] != last["test_digest"]:
+                raise ValueError(
+                    "revision does not continue the chain tail")
+    elif record["prior_digest"] is not None:
+        raise ValueError("revision chain genesis is missing")
     line = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
     with open(path, "ab") as handle:
         handle.write(line)

@@ -131,11 +131,19 @@ def build_settings(role, runtime, request):
         enforced = [entry for entry in enforced if entry not in unsupported]
     scope = request.get("scope")
     scope_record = None
-    if (isinstance(scope, dict) and scope.get("mode") == "areas"
-            and isinstance(scope.get("roots"), list)
-            and all(isinstance(item, str) for item in scope["roots"])):
+    if isinstance(scope, dict) and scope.get("mode") == "areas":
+        roots = scope.get("roots")
+        if (not isinstance(roots, list) or not roots
+                or not all(isinstance(item, str) for item in roots)):
+            raise ValueError("area scope roots must be a non-empty string list")
+        try:
+            import working_areas
+            canonical = [working_areas.check_area(
+                str(root), item) for item in roots]
+        except ValueError as exc:
+            raise ValueError("area scope root is invalid: %s" % exc) from exc
         enforced.append("directory-scoped edits")
-        scope_record = {"mode": "areas", "roots": list(scope["roots"])}
+        scope_record = {"mode": "areas", "roots": canonical}
     config = {"agent": {settings["agent"]: {"model": item["model"], "variant": settings["variant"],
                                              "prompt": request.get("developer_instructions", item.get("instruction", "")),
                                              "permission": permission}}}

@@ -58,6 +58,22 @@ class PromptAdaptationContractTests(unittest.TestCase):
                 "operator core must cover %r explicitly" % marker,
             )
 
+    def test_reviewer_covers_diff_inspection_and_director_covers_arbitration(self):
+        for core, markers in (
+                ("core-reviewer.md",
+                 ("complete diff", "test-quality", "evidence-backed")),
+                ("core-director.md",
+                 ("scope arbitration", "requirement", "bounded"))):
+            with self.subTest(core=core):
+                path = PROMPTS / core
+                self.assertTrue(path.is_file(), "role core must exist")
+                folded = path.read_text(encoding="utf-8").casefold()
+                for marker in markers:
+                    self.assertIn(
+                        marker, folded,
+                        "%s must cover %r explicitly" % (core, marker),
+                    )
+
     def test_all_adaptations_have_source_and_destination(self):
         path = PROMPTS / "adaptation-map.json"
         self.assertTrue(path.is_file(), "adaptation map must exist")

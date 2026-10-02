@@ -53,6 +53,11 @@ section named in its `destination` field:
   now cites the dispatch budget as authority. Budget enforcement is Task 5
   scope (`dispatch_budget.py` default `[5, 3, 3]`); existing
   `test_coder_gate.py` expectations were left untouched.
+- `codex/` role templates (`operator.md`, `reviewer.md`, `director.md`)
+  were inspected for duplicate active instructions: each carries only its
+  own role's dispatch mechanics (Codex CLI shaping per backend role), with
+  no shared upstream section repeated verbatim across roles and no second
+  copy of the adapted cores. No consolidation required.
 
 ## Structural check
 

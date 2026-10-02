@@ -267,6 +267,41 @@ def _bash():
     return bash
 
 
+class CliRoundTripTests(unittest.TestCase):
+    """reserve-for-task/release-for-task CLI through a full lifecycle."""
+
+    def test_release_frees_the_area_for_the_next_family(self):
+        import json as _json
+        import subprocess as _subprocess
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="areas-cli-"))
+        repo = tmp / "repo"
+        repo.mkdir()
+        ws = tmp / "ws"
+        ws.mkdir()
+        (ws / "plan.json").write_text(_json.dumps({"tasks": [
+            {"id": 1, "working_areas": ["src/a"]}]}), encoding="utf-8")
+        (ws / ".pipeline-identity.json").write_text(_json.dumps(
+            {"run_id": "run-cli", "repository_root": str(repo)}),
+            encoding="utf-8")
+        registry = str(tmp / "reservations.json")
+        cli = str(SCRIPTS / "working_areas.py")
+        first = _subprocess.run(
+            [sys.executable, cli, "reserve-for-task", registry, str(ws), "1"],
+            capture_output=True, text=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(_json.loads(first.stdout)["decision"], "granted")
+        released = _subprocess.run(
+            [sys.executable, cli, "release-for-task", registry, str(ws), "1"],
+            capture_output=True, text=True)
+        self.assertEqual(released.returncode, 0, released.stderr)
+        self.assertEqual(_json.loads(released.stdout)["decision"], "released")
+        again = _subprocess.run(
+            [sys.executable, cli, "release-for-task", registry, str(ws), "1"],
+            capture_output=True, text=True)
+        self.assertEqual(again.returncode, 1)
+        self.assertEqual(_json.loads(again.stdout)["decision"], "no_match")
+
+
 class DispatchRetryAreasTests(unittest.TestCase):
     """dispatch-retry reserves opted-in task areas before worker start."""
 

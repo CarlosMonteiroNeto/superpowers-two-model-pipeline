@@ -94,7 +94,7 @@ def _canonical(repo_root: str, value: str) -> str:
     Nonexistent descendants are allowed; traversal is not.
     """
     if not isinstance(value, str) or not value.strip() or "\\" in value:
-        raise ValueError("invalid working area: %r" % (value,))
+        raise ValueError("invalid working area (use forward slashes): %r" % (value,))
     cleaned = value.strip()
     if cleaned == ".":
         return "."
@@ -463,8 +463,8 @@ def release_for_task(registry_path: str, workspace: str, task_id) -> None:
     release(registry_path,
             {"run_id": run_id, "family_id": family,
              "task_id": int(str(task_id)), "completed": True})
-    if len(argv) < 2:
-        return 2
+
+
 def _cli(argv):
     if len(argv) < 2:
         return 2

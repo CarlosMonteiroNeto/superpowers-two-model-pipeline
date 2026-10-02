@@ -86,6 +86,27 @@ set +e
 envelope_file="$log.envelope.json"
 prompt_sha=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$prompt_file")
 prefix_sha=$(printf '%s' "$prompt" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')
+# Fail closed when the caller prepared this prompt: a present sidecar must
+# match the submitted bytes, or no worker starts.
+for _sidecar in "$prompt_file.envelope.json" "$(dirname "$prompt_file")/envelope.json"; do
+  if [ -f "$_sidecar" ]; then
+    python3 - "$_sidecar" "$prompt_sha" <<'PY'
+import hashlib, json, sys
+path, prompt_sha = sys.argv[1:]
+envelope = json.load(open(path, encoding="utf-8"))
+channels = envelope.get("channels")
+if not isinstance(envelope, dict) or envelope.get("prompt_sha256") != prompt_sha or not channels:
+    raise SystemExit("envelope does not match prompt bytes")
+canonical = {"role": envelope.get("role"), "prompt_sha256": envelope.get("prompt_sha256"),
+             "policy_sha256": envelope.get("policy_sha256"), "channels": channels}
+digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+if digest != envelope.get("instruction_envelope_hash"):
+    raise SystemExit("envelope hash mismatch")
+PY
+    [ $? -eq 0 ] || { echo "DISPATCH: prompt envelope mismatch - refusing worker start" >&2; exit 4; }
+    break
+  fi
+done
 python3 - "$envelope_file" "$prompt_file" "$prompt_sha" "$prefix_sha" "$cont" <<'PY'
 import json, sys
 _, path, prompt_file, prompt_sha, prefix_sha, cont = sys.argv
