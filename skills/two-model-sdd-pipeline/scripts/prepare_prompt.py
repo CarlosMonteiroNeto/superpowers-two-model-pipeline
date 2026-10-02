@@ -140,10 +140,13 @@ def record_envelope(prompt_path, role, channels, policy_sha256=None,
 
     Reviewer and director prompts are candidate-bound files, not
     ``prepare()`` packages; this binds their bytes plus declared channels
-    (package digest, role core digest) under the same hash contract that
-    dispatch verifies. Returns the envelope mapping.
+    under the same hash contract that dispatch verifies. The digest covers
+    the normalized UTF-8 text dispatch reads on Windows: raw bytes retain
+    CRLF after write_text and would fail validation. Returns the envelope
+    mapping.
     """
-    data = pathlib.Path(prompt_path).read_bytes()
+    data = pathlib.Path(prompt_path).read_text(
+        encoding="utf-8").encode("utf-8")
     prompt_hash = _hex(data)
     if not isinstance(channels, list) or not channels:
         raise PrepareError("envelope channels are required")

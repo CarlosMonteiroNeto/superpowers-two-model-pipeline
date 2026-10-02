@@ -111,8 +111,13 @@ def append_revision(chain_path: str, record: dict) -> dict:
             if record["prior_digest"] != last["test_digest"]:
                 raise ValueError(
                     "revision does not continue the chain tail")
-    elif record["prior_digest"] is not None:
+            return _store_record(path, record)
+    if record["prior_digest"] is not None:
         raise ValueError("revision chain genesis is missing")
+    return _store_record(path, record)
+
+
+def _store_record(path: Path, record: dict) -> dict:
     line = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
     with open(path, "ab") as handle:
         handle.write(line)

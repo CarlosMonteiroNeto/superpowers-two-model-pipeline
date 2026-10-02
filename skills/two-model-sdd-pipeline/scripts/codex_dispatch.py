@@ -91,10 +91,6 @@ def publish_operator_session_locator(workspace, task_id, agent, result):
     return target
 
 
-def _package_envelope_path(prompt_path):
-    return str(pathlib.Path(prompt_path).parent / "envelope.json")
-
-
 def _verify_package_envelope(prompt_path, prompt_hash):
     """Cross-check the prepare() envelope sibling when the caller used it.
 

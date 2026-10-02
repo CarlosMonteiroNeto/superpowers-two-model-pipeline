@@ -97,6 +97,19 @@ def build_request(workspace: str, task_id: int, mode: str, prompt_path: str, out
             "events_path":str(evidence/"events.jsonl"),"stderr_path":str(evidence/"stderr.log"),
             "final_path":str(evidence/"final.json"),"result_path":str(result_path)}}
     dispatch_contract.validate_request(request)
+    import prepare_prompt
+    director_core = pathlib.Path(__file__).resolve().parent.parent / "codex" / "director.md"
+    if not director_core.is_file():
+        raise ValueError("packaged director role instructions are missing")
+    prepare_prompt.record_envelope(
+        str(prompt),
+        "director",
+        [{"name": "director_package",
+          "sha256": hashlib.sha256(
+              prompt.read_bytes()).hexdigest()},
+         {"name": "director_role_core",
+          "sha256": hashlib.sha256(
+              director_core.read_bytes()).hexdigest()}])
     target = pathlib.Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, temp = tempfile.mkstemp(prefix="director-request-", dir=str(target.parent))

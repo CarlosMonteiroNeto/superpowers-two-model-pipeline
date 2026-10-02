@@ -101,3 +101,31 @@ class DirectorProposalTests(unittest.TestCase):
             self.assertIn("Current canonical plan snapshot",materialized)
             self.assertIn("Root task",materialized)
             self.assertEqual(request["prompt_hash"], hashlib.sha256(materialized.encode("utf-8")).hexdigest())
+
+    def test_request_records_dispatch_verifiable_envelope_sibling(self):
+        validator=load(self)
+        with tempfile.TemporaryDirectory() as temp:
+            root=pathlib.Path(temp)/"repo"; root.mkdir()
+            subprocess.run(["git","-C",str(root),"init","-q"],check=True)
+            subprocess.run(["git","-C",str(root),"config","user.email","test@example.invalid"],check=True)
+            subprocess.run(["git","-C",str(root),"config","user.name","test"],check=True)
+            (root/"tracked.txt").write_text("x",encoding="utf-8")
+            subprocess.run(["git","-C",str(root),"add","-A"],check=True)
+            subprocess.run(["git","-C",str(root),"commit","-qm","init"],check=True)
+            ws=root/".superpowers"/"workspace"; ws.mkdir(parents=True)
+            plan={"tasks":[{"id":1,"title":"Parent","summary":"Root task","spec_refs":[],"touches":[],"depends_on":[],"acceptance":["Done"],"interfaces":{},"verification":{} }]}
+            (ws/"plan.json").write_text(json.dumps(plan),encoding="utf-8")
+            (ws/".pipeline-identity.json").write_text(json.dumps({"repository_root":str(root),"repository_id":"repo-id","run_id":"run-id"}),encoding="utf-8")
+            prompt=root/"selected.md"; prompt.write_text("Plan path points to an earlier worker snapshot",encoding="utf-8")
+            runtime=root/"runtime.json"; runtime.write_text(json.dumps({"attempt_root":str(root/".superpowers"/"attempts"),"manifest":{"backend":"codex","config_hash":"a"*64,"roles":{"director":{"model":"gpt-6-luna","settings":{"model_reasoning_effort":"medium"}}}}}),encoding="utf-8")
+            request_path=ws/"request.json"
+            with mock.patch.dict("os.environ",{"CODEX_RUNTIME_JSON":str(runtime)}):
+                request=validator.build_request(str(ws),1,"correction",str(prompt),str(request_path))
+            sibling=pathlib.Path(request["evidence_paths"]["prompt_path"]+".envelope.json")
+            self.assertTrue(sibling.is_file(), "director prompt needs a verifiable envelope")
+            envelope=json.loads(sibling.read_text(encoding="utf-8"))
+            self.assertEqual(envelope["prompt_sha256"], request["prompt_hash"])
+            self.assertEqual(envelope["role"], "director")
+            names={channel["name"] for channel in envelope["channels"]}
+            self.assertIn("director_package", names)
+            self.assertIn("director_role_core", names)
