@@ -237,6 +237,17 @@ class ImpactGateEvidenceTests(unittest.TestCase):
             entries = [json.loads(line) for line in (workspace / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertTrue(any(row.get("type")=="suite_evidence" and row.get("phase")=="baseline" for row in entries))
 
+    def test_closing_rejects_passing_command_without_suite_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self._repository(root)
+            workspace = self._workspace(root, ["python"])
+            env = dict(os.environ, PIPELINE_GATE_PHASE="closing")
+            result = subprocess.run(["bash", str(RUN_GATES), str(workspace), "--toolchains", "python"],
+                                    cwd=root, env=env, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("refusing PASS", result.stderr)
+
     def _repository(self, root, files=None):
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
         subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=root, check=True)

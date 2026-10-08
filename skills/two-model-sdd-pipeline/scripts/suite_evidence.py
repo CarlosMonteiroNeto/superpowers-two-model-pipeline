@@ -57,7 +57,7 @@ def capture(workspace: str, toolchain_ids: list[str], root: str, output: str,
     from scoped_runner import _parse_unittest
     ws, repo = pathlib.Path(workspace), pathlib.Path(root)
     rows = [json.loads(line) for line in (ws / "ledger.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-    gates = {str(row.get("toolchain_id")): row for row in rows if row.get("type") == "gate"}
+    commands = {}
     multiple = len(toolchain_ids) > 1
     suites = []
     for tc in toolchain_ids:
@@ -71,6 +71,7 @@ def capture(workspace: str, toolchain_ids: list[str], root: str, output: str,
                 raise
             entry = legacy[0]
         descriptor = _descriptor(entry)
+        commands[tc] = descriptor
         adapter = descriptor.get("red_adapter")
         suffix = "-" + "".join(c if c.isalnum() or c in "-_." else "_" for c in tc) if multiple else ""
         log = ws / ("run-gates-test%s.txt" % suffix)
@@ -100,7 +101,6 @@ def capture(workspace: str, toolchain_ids: list[str], root: str, output: str,
         suites.append({"id": tc, "tests": executed, "failures": failure_rows,
                        "raw_result": {"status": "completed" if exit_code in (0, 1) else "interrupted",
                                       "exit_code": exit_code}})
-    commands = {tc: _descriptor(gates[tc]) for tc in toolchain_ids}
     commit_tree = subprocess_check(repo, "rev-parse", "HEAD^{tree}")
     evidence = {"source_hash": _hash(commit_tree),
                 "environment_hash": _hash({"python": sys.version, "platform": sys.platform, "path": os.environ.get("PATH", "")}),

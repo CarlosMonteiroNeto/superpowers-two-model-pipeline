@@ -144,7 +144,8 @@ result=subprocess.run(["bash",str(ledger_append),str(pathlib.Path(ws)/"ledger.js
 if result.returncode: raise ValueError("cannot ledger suite evidence: "+result.stderr)
 PY
     then
-      echo "RUN-GATES: structured suite evidence unavailable in $phase phase; waiver remains blocked" >&2
+      echo "RUN-GATES: structured suite evidence unavailable in $phase phase; refusing PASS" >&2
+      run_rc=3
     fi
   fi
 fi
