@@ -28,6 +28,9 @@ else
   out="$dir/task-${n}-brief.md"
 fi
 
+if [[ "$plan" == *.json ]]; then
+  python3 "$(dirname "$0")/json_task_brief.py" "$plan" "$n" "$out"
+else
 awk -v n="$n" '
   /^```/ { infence = !infence }
   !infence && /^#+[ \t]+Task[ \t]+[0-9]+/ {
@@ -35,6 +38,7 @@ awk -v n="$n" '
   }
   intask { print }
 ' "$plan" > "$out"
+fi
 
 if [ ! -s "$out" ]; then
   echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
