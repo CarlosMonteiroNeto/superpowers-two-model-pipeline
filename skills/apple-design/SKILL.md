@@ -17,6 +17,16 @@ An interface is fluid when it behaves like the physical world: things respond in
 
 Apple frames design as serving four human needs: **safety/predictability, understanding, achievement, and joy.** Every rule here serves one of them.
 
+## 0. Additive structural input — apple-design stays authoritative
+
+`apple-design` governs all interface decisions. Nothing below is replaced or weakened.
+When a `design-oo-ux` domain skill is installed, its outputs are ingested as additive
+input only: class boundaries (composition over inheritance), one UML diagram choice with
+justification, UP conception vs elaboration gate, fidelity ladder position. Apply §§1–17
+on top of that input unchanged. On any conflict between structural suggestion and feel/craft
+(motion, materials, typography, eight principles), `apple-design` wins; record the structural
+input in the plan tasks' `acceptance` alongside the feel requirements — addition, not substitution.
+
 ## 1. Response — kill latency
 
 The moment lag appears, the feeling of directness "falls off a cliff." Response is the foundation everything else is built on.

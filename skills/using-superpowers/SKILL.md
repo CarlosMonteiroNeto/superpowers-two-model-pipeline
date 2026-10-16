@@ -34,8 +34,12 @@ Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it h
 
 When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.
 
+**Process x domain (two axes, always compose).** The process axis decides HOW (brainstorming / systematic-debugging / requesting-code-review / executing-plans). The domain axis decides WHAT checklist applies (requirements, design-oo-ux, coding-standards, verification-test, cloud-deploy + overlays quality-gate, agile-loop, a11y-ethics). When both apply, load both and announce both: `Using systematic-debugging + cloud-deploy to ...`. Never substitute one axis for the other.
+
 - "Let's build X" → superpowers:brainstorming first, then implementation skills.
 - "Fix this bug" → superpowers:systematic-debugging first, then domain skills.
+- "Fix this bug in area X" → systematic-debugging (root cause) + domain skill X (area checklist).
+- "Review this in area Y" → requesting-code-review (verdict contract) + domain skill Y (acceptance criteria).
 
 ## Red Flags
 

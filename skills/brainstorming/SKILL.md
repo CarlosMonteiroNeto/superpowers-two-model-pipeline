@@ -53,7 +53,23 @@ the approval gate never does.
   typography), invoke the vendored `apple-design` skill
   (`skills/apple-design/SKILL.md`) before making design decisions, and encode the
   resulting requirements into the plan tasks' `acceptance` — not prose. This is
-  the concrete case of the `flutter-app-pipeline` §1c mandate.
+  the concrete case of the `flutter-app-pipeline` §1c mandate. `apple-design` has
+  priority and is only augmented: structural OO/UML/UP input from `design-oo-ux`
+  (when installed) feeds into it, and on conflict feel/craft wins (see Domain routing below).
+- **Domain routing is parallel, not alternative.** After classifying spike/bounded/architectural,
+  check for a domain routing table at `docs/superpowers/skills-routing.md` in the
+  current project. If present, grep the intent against its `| Keyword | Skill |` table
+  and load the single matching stage skill + applicable overlays alongside this skill
+  (e.g. bug in deploy area = `systematic-debugging` + `cloud-deploy`; review in design
+  area = `requesting-code-review` + `design-oo-ux`). Never load all domain skills at once;
+  progressive disclosure: 1 stage + overlays. If no table exists, continue with process skills only.
+- **Greenfield sweep (new project from zero).** When the request is a new project/subsystem
+  with no existing flow (architectural path, empty repo), do not guess the scope per area.
+  Enumerate the installed domain skills (requirements, design-oo-ux/apple-design,
+  coding-standards, verification-test, cloud-deploy + overlays quality-gate, agile-loop,
+  a11y-ethics) one by one, ask what the user wants in each area, record the decision
+  (in-scope / out-of-scope + acceptance hint) to `CONTEXT.md`, and only then propose
+  approaches. Each in-scope area becomes plan tasks with `spec_refs` to that skill.
 - **Artifacts are English-only.** The spec document, `README.md` glossary
   entries, and any
   ADRs this phase produces are written in English regardless of the
