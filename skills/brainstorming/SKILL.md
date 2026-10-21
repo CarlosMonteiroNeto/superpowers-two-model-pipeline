@@ -126,10 +126,16 @@ they haven't seen the visual companion offer yet, send the offer instead
 (its own message, below) and hold the chunk for the next message. Once
 they've accepted, put a mockup next to the description.
 
-## Size the Work
+## Classify the Work
 
-Once you understand what they want, pick a size and say it in plain
-words. They can override it.
+Before your first clarifying question, classify the request on two axes
+and say both in one plain line: "this is a small change, in the UI area,
+so I'll load design-oo-ux". They can override either axis. If the work
+grows mid-task, stop and reclassify.
+
+### Axis 1: size
+
+Pick a size and say it in plain words. They can override it.
 
 | Size | The full description | Then |
 |------|----------------------|------|
@@ -138,6 +144,68 @@ words. They can override it.
 | A project with a written design | a written design document | a full plan (for software: superpowers:writing-plans) |
 
 If it grows mid-task, stop, say so, and step up a size.
+
+### Axis 2: area
+
+After the size, identify every area the work touches and load the matching
+overlay skill with the `skill` tool **before** asking design questions.
+Progressive disclosure: one stage skill plus at most two overlays. Never
+load every overlay at once.
+
+| Area | Load |
+|------|------|
+| OO/UML/UP modeling, UX prototypes, interface, gestures, motion, materials, typography | `design-oo-ux` |
+| Modularity, types, scope, input validation, pure functions | `coding-standards` |
+| Test strategy, black/white-box cases, automation, regression | `verification-test` (plus `test-driven-development` when implementing) |
+| Done criteria, SQA/SQC, ISO/maturity models | `quality-gate` |
+| IaaS/PaaS/SaaS choice, cloud services, IaC, resilience | `cloud-deploy` |
+| Scrum roles, ceremonies, backlog refinement, DoR/DoD | `agile-loop` |
+| WCAG/POUR accessibility, usability heuristics, ethics | `a11y-ethics` |
+
+- A matched overlay is never skipped. If the request touches that area,
+  load it and use it; do not just mention it.
+- `design-oo-ux` holds both structure and interface; inside it, interface
+  rules win on conflict. Do not load a separate UI skill.
+- If two areas are plausible and the request does not decide, ask one
+  short question instead of guessing.
+- If no area matches, continue with the process skills only. Do not invent
+  a domain.
+
+### Greenfield sweep
+
+When the work is a project with a written design and the repo has no
+existing flow, do not guess the scope per area. Walk the installed
+overlays one by one (`design-oo-ux`, `coding-standards`,
+`verification-test`, `cloud-deploy`, `quality-gate`, `agile-loop`,
+`a11y-ethics`), ask what the human partner wants in each, record
+in-scope/out-of-scope plus an acceptance hint in `CONTEXT.md`, and only
+then propose approaches. Each in-scope area becomes a section of the
+written design.
+
+### Overlay requirements gate
+
+Every loaded overlay carries mandatory requirements in its
+`Checklist`/`Output` sections. Run this gate twice: before writing the
+design document, and again before creating the plan.
+
+1. Re-read each loaded overlay's checklist.
+2. Turn every item into either a spec section / plan task with acceptance
+   criteria, or an explicit out-of-scope decision the human partner
+   approved. Silence is not a decision.
+3. Never drop an overlay requirement because the work is "mostly" another
+   area.
+
+| Overlay | Must appear in the spec and plan |
+|---------|----------------------------------|
+| `design-oo-ux` | class/object boundaries, one justified UML diagram, UP gate, fidelity ladder, POUR checks, plus interface acceptance (response, 1:1 tracking, interruptibility, springs, momentum, reduced motion) |
+| `coding-standards` | module boundaries, types, scope, input validation, purity/global-state rules |
+| `verification-test` | test plan, case design, RED scaffold, automation/regression scope |
+| `quality-gate` | Definition of Done, SQA/SQC split, cost/metrics |
+| `cloud-deploy` | IaaS/PaaS/SaaS decision, service mapping, resilience, IaC |
+| `agile-loop` | roles, ceremonies, backlog/INVEST, DoR/DoD |
+| `a11y-ethics` | WCAG/POUR criteria, heuristic audit, ethics risks |
+
+The plan is not complete while any loaded overlay row is unanswered.
 
 If this is really several independent projects, say so, agree on an
 order, and brainstorm them one at a time.
@@ -201,6 +269,10 @@ software, invoke superpowers:writing-plans and no other skill.
 | "I should explain the process first" | Ask your question. The process shows itself. |
 | "They said 'sounds good' to the idea" | Approval covers what you showed them. A description you haven't written isn't approved. |
 | "The spike works, I'll keep building on it" | Keeping it is a new request. Back through the gate. |
+| "It's obviously a quick task, so I'll skip the area check" | Size and area are separate axes. A quick UI task still loads `design-oo-ux`. |
+| "I'll write the spec now and fold in the overlay requirements later" | The gate runs before the spec, not after. Unanswered overlay requirements block the plan. |
+| "I'll mention the overlay and move on" | Mentioning is not loading. If the area matches, invoke the skill with the `skill` tool. |
+| "It's mostly backend, so accessibility doesn't apply" | Any user-facing surface has accessibility and ethics implications. Check the area instead of assuming. |
 
 ## Visual Companion
 
