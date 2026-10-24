@@ -119,6 +119,11 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
 
 - Select `Install Plugin`.
 
+For design work in Codex, use `design-oo-ux` as the single entry point. Its
+bundled `references/apple-design.md` adds the interface and motion guidance,
+which takes precedence over structural guidance when they conflict. Do not
+load a separate Apple Design skill alongside it.
+
 ### Cursor
 
 - In Cursor Agent chat, install from marketplace:
@@ -398,3 +403,4 @@ MIT License - see LICENSE file for details
 ## Visual companion telemetry
 
 Because skills and plugins don't provide any feedback to creators, we have no idea how many of you are using Superpowers. By default, the Prime Radiant logo on brainstorming's optional visual companion feature is loaded from our website. It includes the version of Superpowers in use. It does not include any details about your project, prompt, or coding agent. We don't see your clicks or anything about what you're building. This helps us have a rough idea of how many folks are using Superpowers and which version of Superpowers they're using. It's 100% optional. To disable this, set the environment variable `SUPERPOWERS_DISABLE_TELEMETRY` to any true value. Superpowers also honors Claude Code's `DISABLE_TELEMETRY` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` opt-outs.
+
