@@ -18,14 +18,16 @@ disagree.
   `spawn_agent {fork_turns: "none"}`; the default `"all"` copies your
   entire transcript into the child. On Codex 0.145+, role files under
   `~/.codex/agents/` attach to isolated forks via `agent_type`.
-  Full-history forks accept `model` and `reasoning_effort` overrides
-  (only `agent_type` is refused there) — isolated forks are the SDD
-  default for context hygiene, not because overrides require them.
+  Follow the live tool contract for model/effort overrides; if overrides
+  require `fork_turns: "none"`, use it. Do not assume full-history forks
+  accept overrides.
 - **Fix rounds:** resume the implementer with `followup_task` — it
   delivers your message, triggers a turn, and transparently reloads a
   child the harness evicted. Never dispatch a fresh implementer on the
   theory that a spawned agent cannot be messaged again; on V2 it
   always can.
+  Fresh workers are still required when the confirmed role settings differ
+  or the workflow explicitly calls for fresh context (such as rounds 4-5).
 - **Lifecycle:** V2 has no `close_agent`. Finished children are
   evicted automatically when slots are needed; leaving them unclosed
   costs nothing. Only V1 sessions have `close_agent` — there, close
@@ -61,22 +63,13 @@ two-thirds of all wait calls were short polls that timed out.
 
 ## Model routing on spawns
 
-Every `spawn_agent` you issue — including when you are yourself a
-spawned child running a fan-out — sets `model` AND `reasoning_effort`
-explicitly, per the Model Selection rules of the skill you are
-executing. Setting `model` alone is a trap: the child's effort
-silently resets to that model's default, not to yours.
-
-Ask your human partner to add a machine-level backstop to
-`~/.codex/config.toml` so any spawn that slips through still routes to
-a deliberate tier instead of silently inheriting the session's most
-expensive model:
-
-```toml
-[agents]
-default_subagent_model = "<a mid-tier model from your spawn allowlist>"
-default_subagent_reasoning_effort = "medium"
-```
+Follow [the shared protocol](subagent-models.md) and
+[persistent registry](subagent-models.json). Set `model` AND
+`reasoning_effort` explicitly from this run's confirmed role snapshot on
+every spawn, including nested orchestration. Confirm once for the run;
+propagate its receipt to children. Check IDs and efforts against the live
+tool's supported values. Do not edit machine-level model defaults as a
+substitute for the user's per-role choices.
 
 ## Environment Detection
 

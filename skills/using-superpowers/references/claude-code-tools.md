@@ -17,7 +17,8 @@ adjusts it), so the whole loop can run one layer down.
 
 When your human partner asks for it — or has said the session model is
 too expensive to spend on coordination — dispatch ONE orchestrator
-subagent on a mid-tier model with the plan path and the instruction to
+subagent with the run-confirmed `orchestrator` model and effort, the
+confirmed receipt and role snapshot, the plan path, and the instruction to
 use superpowers:subagent-driven-development end to end. The orchestrator
 dispatches its own implementers and reviewers per that skill's Model
 Selection; the workspace and ledger live on disk, so nothing is lost to
@@ -27,3 +28,8 @@ you relay it, not summarize it.
 
 Do this only for a whole plan. Nesting a single task's dispatch buys
 nothing and adds a seat.
+
+Confirm the complete run role table through [the shared protocol](subagent-models.md)
+before delegation. Nested controllers reuse that receipt without asking again.
+If the harness cannot express the confirmed settings, report the limitation
+instead of silently substituting its default.
