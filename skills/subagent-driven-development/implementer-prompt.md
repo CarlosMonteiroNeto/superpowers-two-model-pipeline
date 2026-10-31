@@ -5,8 +5,8 @@ Use this template when dispatching an implementer subagent.
 ```
 Subagent (general-purpose):
   description: "Implement Task N: [task name]"
-  model: [MODEL — REQUIRED: choose per SKILL.md Model Selection; an omitted
-         model silently inherits the session's most expensive one]
+  model: [MODEL — REQUIRED: confirmed implementer model from the run receipt]
+  reasoning_effort: [EFFORT — REQUIRED: confirmed implementer effort from the run receipt]
   prompt: |
     You are implementing Task N: [task name]
 
@@ -47,6 +47,20 @@ Subagent (general-purpose):
     While iterating, run the focused test for what you're changing; run the
     full suite once before committing, not after every edit.
 
+    ## Terminal Execution and Recovery
+
+    - Use the available native tools and actual shell; reuse confirmed environment facts.
+    - Batch independent reads, then inspect results before taking dependent actions.
+    - Interpret exit codes according to the command's semantics before classifying a failure.
+    - Use failure evidence to identify the cause; when ambiguous, run the smallest
+      diagnostic that distinguishes plausible causes before changing code.
+    - Retry after relevant state changes, new evidence, or a justified transient
+      failure. If attempts stop producing progress, revise the hypothesis and approach.
+    - Monitor an existing process/session handle until it finishes or needs input
+      instead of launching a duplicate command because output has not arrived.
+    - When RTK is configured, follow the applicable RTK.md. Condensed output alone
+      does not justify a bypass; preserve its hooks and configuration.
+
     ## You Do Not Dispatch Subagents
 
     Do all of this task's work yourself. Never spawn a subagent to
@@ -86,7 +100,7 @@ Subagent (general-purpose):
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
+    The controller can provide more context, re-dispatch with confirmed role settings,
     or break the task into smaller pieces.
 
     ## Before Reporting Back: Self-Review

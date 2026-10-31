@@ -3,6 +3,13 @@ name: executing-plans
 description: Use when executing an implementation plan in the current session as the implementer yourself — your human partner chose inline execution, or no subagent tool is available
 ---
 
+## Subagent models
+
+Before delegation, follow [the shared model confirmation protocol](../using-superpowers/references/subagent-models.md).
+Use `final-reviewer` for the final review. Fixes remain in the main session in this workflow. Reuse this run's confirmed receipt;
+do not repeat model confirmation on entering this skill.
+
+
 # Executing Plans
 
 Execute the plan yourself, task by task, in this session: no implementer
@@ -53,9 +60,8 @@ those, stop and ask.
   superpowers:subagent-driven-development.
 
 A fully specified plan makes inline execution transcription plus testing:
-it runs well on a mid-tier session model, and the one place the most
-capable model earns its cost is the final review, which this skill
-dispatches separately. Tell your human partner so when they choose inline.
+the implementation stays in the main session, and this skill dispatches
+the final review separately with the user-confirmed `final-reviewer` settings.
 
 Prefer superpowers:subagent-driven-development when your human partner
 wants a review gate on every task, or when the plan is long enough that
@@ -237,17 +243,15 @@ Run `../subagent-driven-development/scripts/review-package PLAN_FILE MERGE_BASE 
 (MERGE_BASE = the commit the branch started from, e.g.
 `git merge-base main HEAD`) and review from the file it prints.
 
-**With a subagent tool:** dispatch the reviewer on the most capable
-available model — the whole-branch review is a judgment task — using
+**With a subagent tool:** dispatch the reviewer with the run's confirmed
+`final-reviewer` model and effort, using
 superpowers:requesting-code-review's
 [code-reviewer.md](../requesting-code-review/code-reviewer.md), with the
 package path, the plan and spec paths, the plan's Review Focus section
 verbatim if it has one (the input classes and failure modes the plan's
 tests do not exercise — the reviewer checks each deliberately), and a
 pointer to the ledger's `Ruling:` lines so it can weigh the calls you
-made. Specify the model
-explicitly; an omitted model inherits the session's, which may not be the
-most capable. This is the one fresh context the whole run buys. Do not
+made. Specify both model and effort explicitly from the run receipt. This is the one fresh context the whole run buys. Do not
 skip it, and do not replace it with your own read of the diff.
 
 **Without a subagent tool:** read code-reviewer.md and perform that review

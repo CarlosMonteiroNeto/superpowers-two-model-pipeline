@@ -3,6 +3,11 @@
 Part of superpowers:subagent-driven-development. This plan's workspace
 already has a ledger at `<workspace>/progress.md`.
 
+Recover this run's confirmed model/effort snapshot and confirmation evidence
+from that ledger before any dispatch. Follow the shared
+[model protocol](../../using-superpowers/references/subagent-models.md);
+resumption does not require another confirmation when the receipt is intact.
+
 If the ledger's first line names your plan file, tasks with a `Task <N>:
 complete` line are DONE — do not re-dispatch them; resume at the first
 task without one. A task whose last line is a fix round is mid-loop:
