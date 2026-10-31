@@ -3,6 +3,13 @@ name: brainstorming
 description: "You MUST use this before any creative work - creating features, building components, adding functionality, modifying behavior, or planning anything new, in software or out of it (a talk, a business, a renovation)."
 ---
 
+## Subagent models
+
+Before delegation, follow [the shared model confirmation protocol](../using-superpowers/references/subagent-models.md).
+Use `design-reviewer` for the builder check. Reuse this run's confirmed receipt;
+do not repeat model confirmation on entering this skill.
+
+
 # Brainstorming
 
 You are very good at building. You build what you believe your human

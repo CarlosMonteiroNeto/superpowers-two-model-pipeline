@@ -23,6 +23,13 @@ This is not negotiable. You cannot rationalize your way out of this.
 
 Then announce "Using [skill] to [purpose]" and follow the skill exactly. If it has a checklist, create a todo per item.
 
+## Subagent model preferences
+
+Before the first Superpowers subagent dispatch in a run, read and follow
+[the model confirmation protocol](references/subagent-models.md). It loads
+the package registry, confirms all foreseeable roles once, and preserves the
+confirmed choices through skill transitions, fixes, and resumption.
+
 ## Skill Priority
 
 When multiple skills apply, process skills come first — they set the approach, then implementation skills (frontend-design, etc.) carry it out. Brainstorming and systematic-debugging are Superpowers' most common process skills, but the rule holds for any of them.

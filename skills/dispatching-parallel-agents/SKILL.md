@@ -3,6 +3,13 @@ name: dispatching-parallel-agents
 description: Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies
 ---
 
+## Subagent models
+
+Before delegation, follow [the shared model confirmation protocol](../using-superpowers/references/subagent-models.md).
+Use `parallel-investigator` for independent investigations; use the actual assigned role for other work. Reuse this run's confirmed receipt;
+do not repeat model confirmation on entering this skill.
+
+
 # Dispatching Parallel Agents
 
 ## Overview

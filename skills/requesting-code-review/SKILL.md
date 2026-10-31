@@ -3,6 +3,13 @@ name: requesting-code-review
 description: Use when completing tasks, implementing major features, or before merging to verify work meets requirements
 ---
 
+## Subagent models
+
+Before delegation, follow [the shared model confirmation protocol](../using-superpowers/references/subagent-models.md).
+Use `final-reviewer` for a broad review, `task-reviewer` for a task review, or `fix-reviewer` for a scoped re-review. Reuse this run's confirmed receipt;
+do not repeat model confirmation on entering this skill.
+
+
 # Requesting Code Review
 
 Dispatch a code reviewer subagent to catch issues before they cascade. The reviewer gets precisely crafted context for evaluation — never your session's history.

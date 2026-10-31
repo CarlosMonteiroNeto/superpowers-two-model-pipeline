@@ -3,6 +3,13 @@ name: writing-skills
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment
 ---
 
+## Subagent models
+
+Before delegation, follow [the shared model confirmation protocol](../using-superpowers/references/subagent-models.md).
+Use `skill-evaluator` for behavioral tests and independent skill evaluations. Reuse this run's confirmed receipt;
+do not repeat model confirmation on entering this skill.
+
+
 # Writing Skills
 
 ## Overview

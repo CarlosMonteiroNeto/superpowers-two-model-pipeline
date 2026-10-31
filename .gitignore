@@ -12,6 +12,9 @@ triage/
 # plugin, so the whole directory is ignored here.
 evals/
 
+# Runtime sidecar for the subagent model registry (created on first save)
+skills/using-superpowers/references/subagent-models.json.lock
+
 # Python
 __pycache__/
 *.pyc
